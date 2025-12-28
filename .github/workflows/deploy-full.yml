@@ -5,6 +5,23 @@ on:
     branches:
       - main
 
+      - name: 📂 Upload Backend via SFTP
+        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+        with:
+          server: ${{ secrets.CPANEL_HOST }}
+          username: ${{ secrets.CPANEL_FTP_USER }}
+          password: ${{ secrets.CPANEL_FTP_PASS }}
+          
+          # Perhatikan syntax ini berbeda dengan plugin sebelumnya!
+          local_path: './deploy-package/*'  # Tanda * artinya upload isinya
+          remote_path: '/backendkokurikuler.smpn6pekalongan.org/'
+          
+          # --- GANTI ANGKA INI DENGAN PORT SSH ANDA ---
+          port: 22   
+          # --------------------------------------------
+          
+          sftp_only: true
+
 jobs:
   # --------------------------------------------------------
   # TUGAS 1: DEPLOY FRONTEND (REACT)
@@ -57,51 +74,4 @@ jobs:
           protocol: ftp
           port: 21
           security: loose
-          
-  # --------------------------------------------------------
-  # TUGAS 2: DEPLOY BACKEND (EXPRESS)
-  # --------------------------------------------------------
-  server-deploy:
-    name: 🚀 Deploy Backend
-    needs: web-deploy # Jalan setelah frontend selesai
-    runs-on: ubuntu-latest
-    steps:
-      - name: 🚚 Get latest code
-        uses: actions/checkout@v4
-
-      - name: 🔧 Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: 📦 Install Dependencies (Server)
-        working-directory: ./backend
-        run: npm install
-
-      - name: 🏗️ Build TypeScript
-        working-directory: ./backend
-        run: npm run build
-
-      - name: 🛠️ Prepare Production Files
-        run: |
-          mkdir deploy-package
-          # Copy hasil build JS
-          cp -r backend/dist deploy-package/dist
-          # Copy package.json agar cPanel bisa install library
-          cp backend/package.json deploy-package/
-          cp backend/package-lock.json deploy-package/
-          # Buat trigger restart untuk cPanel
-          mkdir -p deploy-package/tmp
-          touch deploy-package/tmp/restart.txt
-
-      - name: 📂 Upload Backend Files
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.CPANEL_HOST }}
-          username: ${{ secrets.CPANEL_FTP_USER }}
-          password: ${{ secrets.CPANEL_FTP_PASS }}
-          local-dir: ./deploy-package/
-          server-dir: ./backendkokurikuler.smpn6pekalongan.org/
-          # --- TAMBAHAN PENTING DI BAWAH INI ---
-          protocol: sftp
-          port: 21
+        

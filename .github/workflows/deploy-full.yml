@@ -62,7 +62,7 @@ jobs:
   # TUGAS 2: DEPLOY BACKEND (EXPRESS)
   # --------------------------------------------------------
   server-deploy:
-    name: 🚀 Deploy Backend (Fixed)
+    name: 🚀 Deploy Backend (Final Fix)
     needs: web-deploy
     runs-on: ubuntu-latest
     steps:
@@ -79,31 +79,36 @@ jobs:
         run: |
           npm install
           npm run build
+          # Pastikan install dependencies production saja
           rm -rf node_modules
           npm install --production
 
-      - name: 🗜️ Bungkus & Isolasi File
+      # --- BAGIAN DEBUGGING BARU ---
+      - name: 🔍 CEK ISI FOLDER DIST (Debug)
+        working-directory: ./backend
         run: |
-          # 1. Buat folder sementara untuk nge-zip
-          mkdir temp_zip_area
-          cp -r backend/dist temp_zip_area/
-          cp backend/package.json temp_zip_area/
-          cp backend/package-lock.json temp_zip_area/
+          echo "=========================================="
+          echo "APA ISI FOLDER DIST SEBELUM DI-ZIP?"
+          echo "=========================================="
+          ls -R dist/
+          echo "=========================================="
+          # Jika di sini kosong, berarti masalahnya di build script (npm run build)
+
+      - name: 🗜️ Bungkus ZIP (Cara Lebih Aman)
+        working-directory: ./backend
+        run: |
+          # Kita zip langsung di tempat, jangan dipindah-pindah dulu
+          # Zip folder 'dist', 'package.json', dll
+          zip -r backend_update.zip dist package.json package-lock.json
           
-          # 2. Zip isinya
-          cd temp_zip_area
-          zip -r ../backend_update.zip .
-          cd ..
+          # Buat folder isolasi di luar folder backend (di root workspace)
+          mkdir ../final_upload
           
-          # 3. BUAT FOLDER ISOLASI (KUNCI SUKSESNYA DISINI)
-          mkdir final_upload
+          # Pindahkan hasil zip ke folder isolasi
+          mv backend_update.zip ../final_upload/
           
-          # 4. Pindahkan HANYA 2 file penting ke folder isolasi
-          mv backend_update.zip final_upload/
-          cp backend/unzip_backend.php final_upload/
-          
-          # Cek isi folder untuk memastikan cuma ada 2 file
-          ls -l final_upload/
+          # Copy script PHP ke folder isolasi
+          cp unzip_backend.php ../final_upload/
 
       - name: 📂 Upload Folder Isolasi
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
@@ -111,19 +116,13 @@ jobs:
           server: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_FTP_USER }}
           password: ${{ secrets.CPANEL_FTP_PASS }}
-          
-          # --- PERUBAHAN PENTING ---
-          # Kita arahkan local-dir ke folder isolasi
           local-dir: ./final_upload/
-          
           server-dir: ./backendkokurikuler.smpn6pekalongan.org/
           protocol: ftp
           port: 21
           security: loose
-          # Kita tidak perlu 'exclude' atau 'include' lagi 
-          # karena folder final_upload isinya cuma 2 file itu.
           
-      - name: 🔓 Eksekusi Unzip di Server
+      - name: 🔓 Eksekusi Unzip
         run: |
           echo "Memanggil script unzip..."
           curl -L https://backendkokurikuler.smpn6pekalongan.org/unzip_backend.php

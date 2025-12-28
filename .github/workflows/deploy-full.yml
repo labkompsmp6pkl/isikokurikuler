@@ -37,6 +37,11 @@ jobs:
           password: ${{ secrets.CPANEL_FTP_PASS }}
           local-dir: ./backend/ # Upload semua isi folder backend (termasuk dist)
           server-dir: /backendkokurikuler.smpn6pekalongan.org/     # Folder tujuan di cPanel (Sesuai App Root Node.js)
+
+          protocol: ftps      # Memaksa menggunakan enkripsi aman
+          port: 21            # Port standar FTP
+          security: loose
+          
           exclude: |
             **/.git*
             **/.env*

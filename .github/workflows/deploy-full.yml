@@ -40,8 +40,7 @@ jobs:
 
           protocol: ftps      # Memaksa menggunakan enkripsi aman
           port: 21            # Port standar FTP
-          security: loose
-          
+
           exclude: |
             **/.git*
             **/.env*

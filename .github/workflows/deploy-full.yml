@@ -103,6 +103,5 @@ jobs:
           local-dir: ./deploy-package/
           server-dir: ./backendkokurikuler.smpn6pekalongan.org/
           # --- TAMBAHAN PENTING DI BAWAH INI ---
-          protocol: ftp
+          protocol: sftp
           port: 21
-          security: loose

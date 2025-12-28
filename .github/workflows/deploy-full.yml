@@ -62,7 +62,7 @@ jobs:
   # TUGAS 2: DEPLOY BACKEND (EXPRESS)
   # --------------------------------------------------------
   server-deploy:
-    name: 🚀 Deploy Backend (ZIP Mode)
+    name: 🚀 Deploy Backend (Fixed)
     needs: web-deploy
     runs-on: ubuntu-latest
     steps:
@@ -79,44 +79,51 @@ jobs:
         run: |
           npm install
           npm run build
-          # Hapus node_modules dev, install yang production saja (biar enteng)
           rm -rf node_modules
           npm install --production
 
-      - name: 🗜️ Bungkus jadi ZIP
+      - name: 🗜️ Bungkus & Isolasi File
         run: |
-          # Buat folder sementara
-          mkdir paket_siap_kirim
+          # 1. Buat folder sementara untuk nge-zip
+          mkdir temp_zip_area
+          cp -r backend/dist temp_zip_area/
+          cp backend/package.json temp_zip_area/
+          cp backend/package-lock.json temp_zip_area/
           
-          # Masukkan file penting ke folder sementara
-          cp -r backend/dist paket_siap_kirim/
-          cp backend/package.json paket_siap_kirim/
-          cp backend/package-lock.json paket_siap_kirim/
-          cp backend/unzip_backend.php paket_siap_kirim/
-          
-          # Masuk dan ZIP isinya
-          cd paket_siap_kirim
+          # 2. Zip isinya
+          cd temp_zip_area
           zip -r ../backend_update.zip .
           cd ..
+          
+          # 3. BUAT FOLDER ISOLASI (KUNCI SUKSESNYA DISINI)
+          mkdir final_upload
+          
+          # 4. Pindahkan HANYA 2 file penting ke folder isolasi
+          mv backend_update.zip final_upload/
+          cp backend/unzip_backend.php final_upload/
+          
+          # Cek isi folder untuk memastikan cuma ada 2 file
+          ls -l final_upload/
 
-      - name: 📂 Upload 1 File ZIP (Firewall Friendly)
+      - name: 📂 Upload Folder Isolasi
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_FTP_USER }}
           password: ${{ secrets.CPANEL_FTP_PASS }}
-          # Kita upload dari root (tempat file zip berada)
-          local-dir: ./
-          # Upload ke folder backend
+          
+          # --- PERUBAHAN PENTING ---
+          # Kita arahkan local-dir ke folder isolasi
+          local-dir: ./final_upload/
+          
           server-dir: ./backendkokurikuler.smpn6pekalongan.org/
-          # HANYA upload file zip dan script php
-          include: "backend_update.zip" 
           protocol: ftp
           port: 21
           security: loose
+          # Kita tidak perlu 'exclude' atau 'include' lagi 
+          # karena folder final_upload isinya cuma 2 file itu.
           
-      - name: 🔓 Perintahkan Server Buka ZIP
+      - name: 🔓 Eksekusi Unzip di Server
         run: |
-          # Panggil URL script PHP tadi untuk mengekstrak
-          # Ganti URL di bawah sesuai domain backend Anda!
+          echo "Memanggil script unzip..."
           curl -L https://backendkokurikuler.smpn6pekalongan.org/unzip_backend.php

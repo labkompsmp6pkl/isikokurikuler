@@ -22,16 +22,16 @@ jobs:
           node-version: '20'
 
       - name: 📦 Install Dependencies (Client)
-        working-directory: ./client
+        working-directory: ./frontend
         run: npm install
 
       - name: 🏗️ Build Frontend
-        working-directory: ./client
+        working-directory: ./frontend
         run: npm run build
       
       - name: 📄 Create .htaccess manually
         run: |
-          cd client/dist
+          cd frontend/dist
           echo "<IfModule mod_rewrite.c>" > .htaccess
           echo "  RewriteEngine On" >> .htaccess
           echo "  RewriteBase /" >> .htaccess
@@ -49,7 +49,7 @@ jobs:
           username: ${{ secrets.CPANEL_FTP_USER }}
           password: ${{ secrets.CPANEL_FTP_PASS }}
           # Upload isi folder dist (hasil build React)
-          local-dir: ./client/dist/
+          local-dir: ./frontend/dist/
           # Masukkan ke public_html (folder website utama)
           server-dir: ./kokurikuler.smpn6pekalongan.org/ 
           # PENTING: dangerous-clean-slate: true akan MENGHAPUS file lama di public_html agar bersih
@@ -75,21 +75,21 @@ jobs:
           node-version: '20'
 
       - name: 📦 Install Dependencies (Server)
-        working-directory: ./server
+        working-directory: ./backend
         run: npm install
 
       - name: 🏗️ Build TypeScript
-        working-directory: ./server
+        working-directory: ./backend
         run: npm run build
 
       - name: 🛠️ Prepare Production Files
         run: |
           mkdir deploy-package
           # Copy hasil build JS
-          cp -r server/dist deploy-package/dist
+          cp -r backend/dist deploy-package/dist
           # Copy package.json agar cPanel bisa install library
-          cp server/package.json deploy-package/
-          cp server/package-lock.json deploy-package/
+          cp backend/package.json deploy-package/
+          cp backend/package-lock.json deploy-package/
           # Buat trigger restart untuk cPanel
           mkdir -p deploy-package/tmp
           touch deploy-package/tmp/restart.txt

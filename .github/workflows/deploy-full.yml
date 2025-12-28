@@ -6,61 +6,7 @@ on:
       - main
 
 jobs:
-  # --------------------------------------------------------
-  # TUGAS 1: DEPLOY FRONTEND (REACT)
-  # --------------------------------------------------------
-  web-deploy:
-    name: 🚀 Deploy Frontend
-    runs-on: ubuntu-latest
-    steps:
-      - name: 🚚 Get latest code
-        uses: actions/checkout@v4
-
-      - name: 🔧 Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: 📦 Install Dependencies (Client)
-        working-directory: ./frontend
-        run: npm install
-
-      - name: 🏗️ Build Frontend
-        working-directory: ./frontend
-        run: npm run build
-      
-      - name: 📄 Create .htaccess manually
-        run: |
-          cd frontend/dist
-          echo "<IfModule mod_rewrite.c>" > .htaccess
-          echo "  RewriteEngine On" >> .htaccess
-          echo "  RewriteBase /" >> .htaccess
-          echo "  RewriteRule ^index\.html$ - [L]" >> .htaccess
-          echo "  RewriteCond %{REQUEST_FILENAME} !-f" >> .htaccess
-          echo "  RewriteCond %{REQUEST_FILENAME} !-d" >> .htaccess
-          echo "  RewriteCond %{REQUEST_FILENAME} !-l" >> .htaccess
-          echo "  RewriteRule . /index.html [L]" >> .htaccess
-          echo "</IfModule>" >> .htaccess
-
-      - name: 📂 Upload to Public HTML
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.CPANEL_HOST }}
-          username: ${{ secrets.CPANEL_FTP_USER }}
-          password: ${{ secrets.CPANEL_FTP_PASS }}
-          # Upload isi folder dist (hasil build React)
-          local-dir: ./frontend/dist/
-          # Masukkan ke public_html (folder website utama)
-          server-dir: ./kokurikuler.smpn6pekalongan.org/ 
-          # PENTING: dangerous-clean-slate: true akan MENGHAPUS file lama di public_html agar bersih
-          dangerous-clean-slate: true 
-          protocol: ftp
-          port: 21
-          security: loose
-          
-  # --------------------------------------------------------
-  # TUGAS 2: DEPLOY BACKEND (EXPRESS)
-  # --------------------------------------------------------
+  
   server-deploy:
     name: 🚀 Deploy Backend
     needs: web-deploy # Jalan setelah frontend selesai
@@ -94,19 +40,15 @@ jobs:
           mkdir -p deploy-package/tmp
           touch deploy-package/tmp/restart.txt
 
-      - name: 📂 Upload Backend via SFTP
-        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+      - name: 📂 Upload Backend Files
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_FTP_USER }}
           password: ${{ secrets.CPANEL_FTP_PASS }}
-          
-          # Perhatikan syntax ini berbeda dengan plugin sebelumnya!
-          local_path: './deploy-package/*'  # Tanda * artinya upload isinya
-          remote_path: '/backendkokurikuler.smpn6pekalongan.org/'
-          
-          # --- GANTI ANGKA INI DENGAN PORT SSH ANDA ---
-          port: 22   
-          # --------------------------------------------
-          
-          sftp_only: true
+          local-dir: ./deploy-package/
+          server-dir: ./backend/kurikule/
+          # --- TAMBAHAN PENTING DI BAWAH INI ---
+          protocol: ftp
+          port: 21
+          security: loose

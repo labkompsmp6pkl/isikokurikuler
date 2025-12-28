@@ -42,15 +42,19 @@ const AdminDashboard: React.FC = () => {
   // Handler untuk pengiriman formulir
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isEditing) {
-      // Logika pembaruan
-      await adminService.updateStudent(form.id!, { name: form.name, email: form.email });
-    } else {
-      // Logika pembuatan
-      await adminService.createStudent({ name: form.name, email: form.email, password: form.password });
+    try {
+      if (isEditing) {
+        // Logika pembaruan
+        await adminService.updateStudent(form.id!, { name: form.name, email: form.email });
+      } else {
+        // Logika pembuatan
+        await adminService.createStudent({ name: form.name, email: form.email, password: form.password });
+      }
+      resetForm();
+      fetchStudents(); // Muat ulang daftar
+    } catch (err) {
+      setError(isEditing ? 'Gagal memperbarui siswa.' : 'Gagal membuat siswa.');
     }
-    resetForm();
-    fetchStudents(); // Muat ulang daftar
   };
 
   // Mengisi formulir untuk diedit
@@ -62,8 +66,12 @@ const AdminDashboard: React.FC = () => {
   // Handler untuk penghapusan
   const handleDelete = async (id: number) => {
     if (window.confirm('Apakah Anda yakin ingin menghapus siswa ini?')) {
-      await adminService.deleteStudent(id);
-      fetchStudents(); // Muat ulang daftar
+      try {
+        await adminService.deleteStudent(id);
+        fetchStudents(); // Muat ulang daftar
+      } catch (err) {
+        setError('Gagal menghapus siswa.');
+      }
     }
   };
 
@@ -71,74 +79,94 @@ const AdminDashboard: React.FC = () => {
   const resetForm = () => {
     setIsEditing(false);
     setForm({ id: null, name: '', email: '', password: '' });
+    setError(null);
   };
 
   return (
-    <div style={{ fontFamily: 'Arial, sans-serif', padding: '20px' }}>
-      <h2>Dasbor Admin</h2>
+    <div className="min-h-screen bg-gray-100 p-8 font-sans">
+      <div className="container mx-auto">
+        <h2 className="text-3xl font-bold text-gray-800 mb-6">Dasbor Admin</h2>
 
-      {/* Formulir Tambah/Edit */}
-      <form onSubmit={handleFormSubmit} style={{ marginBottom: '20px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
-        <h3>{isEditing ? 'Edit Siswa' : 'Tambah Siswa Baru'}</h3>
-        <input
-          type="text"
-          name="name"
-          placeholder="Nama"
-          value={form.name}
-          onChange={handleFormChange}
-          required
-          style={{ padding: '8px', marginRight: '10px' }}
-        />
-        <input
-          type="email"
-          name="email"
-          placeholder="Email"
-          value={form.email}
-          onChange={handleFormChange}
-          required
-          style={{ padding: '8px', marginRight: '10px' }}
-        />
-        {!isEditing && (
-          <input
-            type="password"
-            name="password"
-            placeholder="Password"
-            value={form.password}
-            onChange={handleFormChange}
-            required
-            style={{ padding: '8px', marginRight: '10px' }}
-          />
-        )}
-        <button type="submit" style={{ padding: '8px 12px', cursor: 'pointer' }}>{isEditing ? 'Perbarui' : 'Simpan'}</button>
-        {isEditing && <button type="button" onClick={resetForm} style={{ padding: '8px 12px', marginLeft: '10px' }}>Batal</button>}
-      </form>
+        {/* Formulir Tambah/Edit */}
+        <div className="mb-8 p-6 bg-white rounded-xl shadow-md">
+          <h3 className="text-2xl font-semibold text-gray-700 mb-4">{isEditing ? 'Edit Siswa' : 'Tambah Siswa Baru'}</h3>
+          <form onSubmit={handleFormSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <input
+                type="text"
+                name="name"
+                placeholder="Nama Lengkap"
+                value={form.name}
+                onChange={handleFormChange}
+                required
+                className="p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="email"
+                name="email"
+                placeholder="Alamat Email"
+                value={form.email}
+                onChange={handleFormChange}
+                required
+                className="p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {!isEditing && (
+                <input
+                  type="password"
+                  name="password"
+                  placeholder="Password"
+                  value={form.password}
+                  onChange={handleFormChange}
+                  required
+                  className="p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+            </div>
+            <div className="flex items-center">
+              <button type="submit" className="py-2 px-6 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75">
+                {isEditing ? 'Perbarui Siswa' : 'Simpan Siswa'}
+              </button>
+              {isEditing && (
+                <button type="button" onClick={resetForm} className="py-2 px-6 ml-4 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 focus:outline-none">
+                  Batal
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
 
-      <h3>Daftar Siswa</h3>
-      {isLoading && <p>Memuat siswa...</p>}
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {!isLoading && !error && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#f2f2f2' }}>
-              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Nama</th>
-              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Email</th>
-              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Tindakan</th>
-            </tr>
-          </thead>
-          <tbody>
-            {students.map((student) => (
-              <tr key={student.id}>
-                <td style={{ padding: '10px', border: '1px solid #ddd' }}>{student.name}</td>
-                <td style={{ padding: '10px', border: '1px solid #ddd' }}>{student.email}</td>
-                <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>
-                  <button onClick={() => handleEdit(student)} style={{ marginRight: '5px' }}>Edit</button>
-                  <button onClick={() => handleDelete(student.id)}>Hapus</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+        {/* Daftar Siswa */}
+        <div className="bg-white rounded-xl shadow-md overflow-hidden">
+          <h3 className="text-2xl font-semibold text-gray-700 p-6">Daftar Siswa</h3>
+          {isLoading && <p className="p-6">Memuat siswa...</p>}
+          {error && <p className="p-6 text-red-500 bg-red-100">{error}</p>}
+          {!isLoading && !error && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="p-4 font-semibold text-gray-600">Nama</th>
+                    <th className="p-4 font-semibold text-gray-600">Email</th>
+                    <th className="p-4 font-semibold text-gray-600 text-center">Tindakan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {students.map((student) => (
+                    <tr key={student.id} className="border-t border-gray-200 hover:bg-gray-50">
+                      <td className="p-4 text-gray-800">{student.name}</td>
+                      <td className="p-4 text-gray-800">{student.email}</td>
+                      <td className="p-4 text-center space-x-2">
+                        <button onClick={() => handleEdit(student)} className="py-1 px-4 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600">Edit</button>
+                        <button onClick={() => handleDelete(student.id)} className="py-1 px-4 bg-red-600 text-white rounded-lg hover:bg-red-700">Hapus</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

@@ -39,7 +39,7 @@ jobs:
           server-dir: /backendkokurikuler.smpn6pekalongan.org/     # Folder tujuan di cPanel (Sesuai App Root Node.js)
 
           protocol: ftps      # Memaksa menggunakan enkripsi aman
-          port: 21            # Port standar FTP
+          port: 21           
 
           exclude: |
             **/.git*

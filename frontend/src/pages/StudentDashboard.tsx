@@ -26,33 +26,48 @@ const StudentDashboard: React.FC = () => {
   };
 
   return (
-    <div style={{ fontFamily: 'Arial, sans-serif', maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
-      <h2>Dasbor Siswa</h2>
-      <p>Tulis entri jurnal Anda di bawah ini dan kirimkan untuk menerima umpan balik dari pelatih AI kami.</p>
-      
-      <form onSubmit={handleSubmit}>
-        <textarea
-          value={journalText}
-          onChange={(e) => setJournalText(e.target.value)}
-          placeholder="Mulai menulis jurnal Anda di sini..."
-          rows={15}
-          required
-          style={{ width: '100%', padding: '10px', fontSize: '16px', borderRadius: '5px', border: '1px solid #ccc' }}
-        />
-        <br />
-        <button type="submit" disabled={isLoading} style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer', marginTop: '10px' }}>
-          {isLoading ? 'Mengirim...' : 'Kirim untuk Umpan Balik'}
-        </button>
-      </form>
-
-      {error && <p style={{ color: 'red', marginTop: '20px' }}>{error}</p>}
-
-      {feedback && (
-        <div style={{ marginTop: '30px', padding: '20px', border: '1px solid #eee', borderRadius: '5px', backgroundColor: '#f9f9f9' }}>
-          <h3>Umpan Balik AI:</h3>
-          <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>{feedback}</p>
+    <div className="min-h-screen bg-gray-100 font-sans p-4 sm:p-8">
+      <div className="max-w-4xl mx-auto">
+        <header className="mb-8">
+          <h2 className="text-3xl font-bold text-gray-800">Dasbor Siswa</h2>
+          <p className="text-gray-600 mt-2">Tulis entri jurnal Anda di bawah ini dan kirimkan untuk menerima umpan balik dari pelatih AI kami.</p>
+        </header>
+        
+        <div className="bg-white p-6 rounded-xl shadow-md">
+          <form onSubmit={handleSubmit}>
+            <textarea
+              value={journalText}
+              onChange={(e) => setJournalText(e.target.value)}
+              placeholder="Mulai menulis jurnal Anda di sini..."
+              rows={15}
+              required
+              className="w-full p-4 text-base text-gray-700 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <div className="mt-4">
+              <button 
+                type="submit" 
+                disabled={isLoading} 
+                className="py-2 px-6 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {isLoading ? 'Mengirim...' : 'Kirim untuk Umpan Balik'}
+              </button>
+            </div>
+          </form>
         </div>
-      )}
+
+        {error && 
+          <div className="mt-6 p-4 bg-red-100 text-red-700 border border-red-200 rounded-lg">
+            {error}
+          </div>
+        }
+
+        {feedback && (
+          <div className="mt-8 p-6 bg-green-50 border border-green-200 rounded-xl">
+            <h3 className="text-2xl font-semibold text-gray-800 mb-4">Umpan Balik AI:</h3>
+            <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{feedback}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

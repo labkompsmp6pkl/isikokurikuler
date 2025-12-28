@@ -1,4 +1,4 @@
-name: Deploy Fullstack to FTP
+name: Deploy SMPN 6 App
 
 on:
   push:
@@ -6,55 +6,103 @@ on:
       - main
 
 jobs:
-  deploy-frontend:
-    name: Deploy Frontend
+  # --------------------------------------------------------
+  # TUGAS 1: DEPLOY FRONTEND (REACT)
+  # --------------------------------------------------------
+  web-deploy:
+    name: 🚀 Deploy Frontend
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v4
 
-      - name: Use Node.js
-        uses: actions/setup-node@v2
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install dependencies and build
-        run: |
-          npm install --prefix frontend
-          npm run build --prefix frontend
+      - name: 📦 Install Dependencies (Client)
+        working-directory: ./client
+        run: npm install
 
-      - name: Deploy to FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      - name: 🏗️ Build Frontend
+        working-directory: ./client
+        run: npm run build
+      
+      - name: 📄 Create .htaccess manually
+        run: |
+          cd client/dist
+          echo "<IfModule mod_rewrite.c>" > .htaccess
+          echo "  RewriteEngine On" >> .htaccess
+          echo "  RewriteBase /" >> .htaccess
+          echo "  RewriteRule ^index\.html$ - [L]" >> .htaccess
+          echo "  RewriteCond %{REQUEST_FILENAME} !-f" >> .htaccess
+          echo "  RewriteCond %{REQUEST_FILENAME} !-d" >> .htaccess
+          echo "  RewriteCond %{REQUEST_FILENAME} !-l" >> .htaccess
+          echo "  RewriteRule . /index.html [L]" >> .htaccess
+          echo "</IfModule>" >> .htaccess
+
+      - name: 📂 Upload to Public HTML
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_FTP_USER }}
           password: ${{ secrets.CPANEL_FTP_PASS }}
-          local-dir: ./frontend/dist/
-          server-dir: /kokurikuler.smpn6pekalongan.org/
-
-  deploy-backend:
-    name: Deploy Backend
+          # Upload isi folder dist (hasil build React)
+          local-dir: ./client/dist/
+          # Masukkan ke public_html (folder website utama)
+          server-dir: ./kokurikuler.smpn6pekalongan.org/ 
+          # PENTING: dangerous-clean-slate: true akan MENGHAPUS file lama di public_html agar bersih
+          dangerous-clean-slate: true 
+          protocol: ftp
+          port: 21
+          security: loose
+          
+  # --------------------------------------------------------
+  # TUGAS 2: DEPLOY BACKEND (EXPRESS)
+  # --------------------------------------------------------
+  server-deploy:
+    name: 🚀 Deploy Backend
+    needs: web-deploy # Jalan setelah frontend selesai
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v4
 
-      - name: Use Node.js
-        uses: actions/setup-node@v2
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install dependencies and build
-        run: |
-          npm install --prefix backend
-          npm run build --prefix backend
+      - name: 📦 Install Dependencies (Server)
+        working-directory: ./server
+        run: npm install
 
-      - name: Deploy to FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      - name: 🏗️ Build TypeScript
+        working-directory: ./server
+        run: npm run build
+
+      - name: 🛠️ Prepare Production Files
+        run: |
+          mkdir deploy-package
+          # Copy hasil build JS
+          cp -r server/dist deploy-package/dist
+          # Copy package.json agar cPanel bisa install library
+          cp server/package.json deploy-package/
+          cp server/package-lock.json deploy-package/
+          # Buat trigger restart untuk cPanel
+          mkdir -p deploy-package/tmp
+          touch deploy-package/tmp/restart.txt
+
+      - name: 📂 Upload Backend Files
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_FTP_USER }}
           password: ${{ secrets.CPANEL_FTP_PASS }}
-          local-dir: ./backend/dist/
-          server-dir: /backendkokurikuler.smpn6pekalongan.org/
-          ftp-args: --disable-epsv
+          local-dir: ./deploy-package/
+          server-dir: ./backendkokurikuler.smpn6pekalongan.org/
+          # --- TAMBAHAN PENTING DI BAWAH INI ---
+          protocol: ftp
+          port: 21
+          security: loose

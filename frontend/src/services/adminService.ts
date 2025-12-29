@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const API_URL = 'https://backendkokurikuler.smpn6pekalongan.org/api/admin';
+// Menggunakan variabel lingkungan yang disuntikkan oleh Vite
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+const adminApi = axios.create({
+  baseURL: `${API_BASE_URL}/admin`
+});
 
 // Definisikan tipe untuk data siswa
 interface StudentData {
@@ -11,22 +16,22 @@ interface StudentData {
 
 // Fungsi untuk mendapatkan semua siswa
 const getStudents = () => {
-  return axios.get(`${API_URL}/students`);
+  return adminApi.get('/students');
 };
 
 // Fungsi untuk membuat siswa baru
 const createStudent = (studentData: StudentData) => {
-  return axios.post(`${API_URL}/students`, studentData);
+  return adminApi.post('/students', studentData);
 };
 
 // Fungsi untuk memperbarui siswa
 const updateStudent = (id: number | string, studentData: StudentData) => {
-  return axios.put(`${API_URL}/students/${id}`, studentData);
+  return adminApi.put(`/students/${id}`, studentData);
 };
 
 // Fungsi untuk menghapus siswa
 const deleteStudent = (id: number | string) => {
-  return axios.delete(`${API_URL}/students/${id}`);
+  return adminApi.delete(`/students/${id}`);
 };
 
 export default {

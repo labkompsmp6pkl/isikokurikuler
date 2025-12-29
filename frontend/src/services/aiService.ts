@@ -1,9 +1,14 @@
 import axios from 'axios';
 
-const API_URL = 'https://backendkokurikuler.smpn6pekalongan.org/api/ai';
+// Menggunakan variabel lingkungan yang disuntikkan oleh Vite
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+const aiApi = axios.create({
+  baseURL: `${API_BASE_URL}/ai`
+});
 
 const getFeedback = (journalText: string) => {
-  return axios.post(`${API_URL}/feedback`, { journalText });
+  return aiApi.post('/feedback', { journalText });
 };
 
 export default {

@@ -24,6 +24,16 @@ jobs:
       - name: 📦 Install Dependencies (Client)
         working-directory: ./frontend
         run: npm install
+      
+      # --- [BAGIAN BARU] MEMBUAT .ENV.PRODUCTION OTOMATIS ---
+      - name: ⚙️ Create .env.production
+        working-directory: ./frontend
+        run: |
+          # Kita buat file .env.production yang berisi URL Backend cPanel
+          echo "VITE_API_BASE_URL=${{ secrets.VITE_API_URL_PROD }}" > .env.production
+          
+          # Cek isinya (Opsional, untuk debug)
+          cat .env.production
 
       - name: 🏗️ Build Frontend
         working-directory: ./frontend

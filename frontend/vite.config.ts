@@ -7,7 +7,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://backendkokurikuler.smpn6pekalongan.org',
+        // Gunakan localhost untuk komunikasi internal yang lebih andal di lingkungan dev
+        target: 'http://localhost:5000',
         changeOrigin: true,
       },
     }

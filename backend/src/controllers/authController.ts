@@ -6,70 +6,103 @@ import jwt from 'jsonwebtoken';
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
-  console.log('\n--- New Login Attempt ---');
-  console.log('Attempting to log in with email:', email);
-
   try {
     const [rows]: any[] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
     const user = rows[0];
 
     if (!user) {
-      console.log('Login Error: User not found in database.');
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'Kredensial tidak valid' });
     }
 
-    console.log('User found in database. Role:', user.role);
-    console.log('Hash stored in database:', user.password);
-    console.log('Password provided by user:', password);
-
-    // Comparing the provided password with the stored hash
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
-    console.log('Password validation result (isPasswordValid):', isPasswordValid);
-
     if (!isPasswordValid) {
-      console.log('Login Error: Password comparison failed.');
-      return res.status(401).json({ message: 'Login failed: Password does not match.' });
+      return res.status(401).json({ message: 'Login gagal: Password tidak cocok.' });
     }
 
-    console.log('Password is valid. Generating JWT.');
     const token = jwt.sign(
       { id: user.id, role: user.role },
       process.env.JWT_SECRET as string,
       { expiresIn: '1h' }
     );
 
-    console.log('Login successful. Sending token and user data.');
+    // Mengirim data pengguna dalam objek 'user' agar konsisten dengan frontend
     res.json({
       token,
-      id: user.id,
-      email: user.email,
-      fullName: user.full_name,
-      role: user.role
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.full_name,
+        role: user.role
+      }
     });
 
   } catch (error) {
-    console.error('An unexpected error occurred during login:', error);
-    res.status(500).json({ message: 'Error logging in', error });
+    console.error('Terjadi kesalahan saat login:', error);
+    res.status(500).json({ message: 'Kesalahan saat login', error });
   }
 };
 
 export const register = async (req: Request, res: Response) => {
-  const { name, email, password } = req.body;
+  const {
+    fullName,
+    email,
+    password,
+    role,
+    nisn,
+    nip,
+    class: userClass, // Menggunakan alias karena 'class' adalah kata kunci yang dilindungi
+    whatsappNumber
+  } = req.body;
+
+  // Validasi dasar
+  if (!fullName || !password || !role) {
+    return res.status(400).json({ message: 'Bidang yang diperlukan tidak lengkap' });
+  }
+  
+  // Untuk orang tua, gunakan nomor WhatsApp sebagai pengenal login
+  const loginIdentifier = role === 'parent' ? whatsappNumber : email;
+
+  if (!loginIdentifier) {
+      return res.status(400).json({ message: 'Pengenal login (email atau nomor WhatsApp) diperlukan.' });
+  }
 
   try {
+    // Periksa apakah pengguna sudah ada
+    const [existingUser]: any[] = await pool.query('SELECT id FROM users WHERE email = ?', [loginIdentifier]);
+    if (existingUser.length > 0) {
+      return res.status(409).json({ message: 'Pengguna dengan email atau nomor ini sudah ada.' });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
-    console.log(`Registering new user. Email: ${email}, Hashed Password: ${hashedPassword}`);
 
-    const [result]: any[] = await pool.query(
-      'INSERT INTO users (full_name, email, password, role) VALUES (?, ?, ?, ?)',
-      [name, email, hashedPassword, 'student']
-    );
+    const query = `
+      INSERT INTO users (full_name, email, password, role, nisn, nip, class, whatsapp_number)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
 
-    res.status(201).json({ message: 'User created successfully', userId: result.insertId });
+    // Siapkan parameter, gunakan null untuk nilai opsional yang tidak disediakan
+    const params = [
+      fullName,
+      loginIdentifier,
+      hashedPassword,
+      role,
+      nisn || null,
+      nip || null,
+      userClass || null,
+      whatsappNumber || null
+    ];
+
+    const [result]: any[] = await pool.query(query, params);
+
+    res.status(201).json({ message: 'Pengguna berhasil dibuat', userId: result.insertId });
 
   } catch (error) {
-    console.error('An unexpected error occurred during registration:', error);
-    res.status(500).json({ message: 'Error registering user', error });
+    console.error('Terjadi kesalahan saat pendaftaran:', error);
+    // Memberikan pesan kesalahan yang lebih spesifik jika terjadi duplikat
+    if ((error as any).code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ message: 'Email atau pengenal sudah ada.' });
+    }
+    res.status(500).json({ message: 'Kesalahan saat mendaftarkan pengguna', error });
   }
 };

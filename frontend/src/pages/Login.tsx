@@ -10,18 +10,31 @@ const Login: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null); // Reset error pada setiap percobaan login
+    setError(null);
 
     try {
       const response = await authService.login(email, password);
-      const { role } = response.data;
+      const { role } = response.data.user;
 
-      if (role === 'admin') {
-        navigate('/admin/dashboard');
-      } else if (role === 'student') {
-        navigate('/student/dashboard');
-      } else {
-        setError('Peran pengguna tidak dikenali.');
+      // Logika pengalihan berdasarkan peran pengguna
+      switch (role) {
+        case 'admin':
+          navigate('/admin/dashboard');
+          break;
+        case 'student':
+          navigate('/student/dashboard');
+          break;
+        case 'teacher':
+          navigate('/teacher/dashboard');
+          break;
+        case 'contributor':
+          navigate('/contributor/dashboard');
+          break;
+        case 'parent':
+          navigate('/parent/dashboard');
+          break;
+        default:
+          setError('Peran pengguna tidak dikenali.');
       }
     } catch (err) {
       setError('Email atau password salah. Silakan coba lagi.');
@@ -32,6 +45,11 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 font-sans">
       <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg">
+        
+        <div className="flex justify-center mb-6">
+          <img src="/logo-smpn6.png" alt="Logo SMPN 6 Pekalongan" className="h-24" />
+        </div>
+
         <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Selamat Datang!</h2>
         
         <form onSubmit={handleLogin}>

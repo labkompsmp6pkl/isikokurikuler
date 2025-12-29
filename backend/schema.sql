@@ -22,7 +22,7 @@ SET time_zone = "+00:00";
 --
 CREATE TABLE `users` (
   `id` INT(11) NOT NULL AUTO_INCREMENT,
-  `username` VARCHAR(50) NOT NULL,
+  `email` VARCHAR(50) NOT NULL,
   `password` VARCHAR(255) NOT NULL,
   `full_name` VARCHAR(100) NOT NULL,
   `role` ENUM('admin', 'teacher', 'student', 'parent', 'contributor') NOT NULL,
@@ -30,7 +30,7 @@ CREATE TABLE `users` (
   `whatsapp_number` VARCHAR(20) DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `username` (`username`),
+  UNIQUE KEY `email` (`email`),
   FOREIGN KEY (`parent_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -78,8 +78,8 @@ INSERT INTO `settings` (`setting_key`, `setting_value`, `description`) VALUES
 -- Initial admin user (password: admin123)
 -- Please change the password in a production environment
 --
-INSERT INTO `users` (`username`, `password`, `full_name`, `role`, `whatsapp_number`) VALUES
-('admin', '$2b$10$E9p9h.2bE4rK/Q.L.P4z9.I.E5yG5Q6Xj3J5A2bB7C3D9F1G3H5I6', 'Administrator', 'admin', '6281234567890');
+INSERT INTO `users` (`email`, `password`, `full_name`, `role`, `whatsapp_number`) VALUES
+('admin@example.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Administrator', 'admin', '6281234567890');
 
 
 COMMIT;

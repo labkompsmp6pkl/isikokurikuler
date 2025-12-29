@@ -8,8 +8,8 @@ const login = (email: string, password: string) => {
 };
 
 // Fungsi untuk mendaftar (jika diperlukan)
-const register = (username: string, email: string, password: string) => {
-  return axios.post(API_URL + 'register', { username, email, password });
+const register = ({ name, email, password }: { name: string, email: string, password: string }) => {
+  return axios.post(API_URL + 'register', { name, email, password });
 };
 
 // Fungsi untuk logout

@@ -55,11 +55,11 @@ jobs:
           port: 21
           security: loose
           
-  # --------------------------------------------------------
-  # TUGAS 2: DEPLOY BACKEND (EXPRESS)
+# --------------------------------------------------------
+  # TUGAS 2: DEPLOY BACKEND (DENGAN AUTO-GENERATE HTACCESS)
   # --------------------------------------------------------
   server-deploy:
-    name: 🚀 Deploy Backend (Final Fix)
+    name: 🚀 Deploy Backend (Final & Complete)
     needs: web-deploy
     runs-on: ubuntu-latest
     steps:
@@ -79,37 +79,33 @@ jobs:
           rm -rf node_modules
           npm install --production
 
-      # --- [BARU] STEP MEMBUAT .HTACCESS BACKEND ---
-      - name: 📄 Create .htaccess (Backend)
+      # --- [BAGIAN PENTING] MEMBUAT .HTACCESS OTOMATIS ---
+      - name: 📄 Create .htaccess from Secret Config
         working-directory: ./backend
         run: |
-          # 1. Force HTTPS (Aman untuk ditambahkan)
-          echo "RewriteEngine On" > .htaccess
-          echo "RewriteCond %{HTTPS} off" >> .htaccess
-          echo "RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]" >> .htaccess
-          
-          # 2. KONFIGURASI NODE.JS (PENTING!)
-          # Ganti 'dist/index.js' sesuai dengan file hasil build utama Anda
-          echo "PassengerAppRoot %{DOCUMENT_ROOT}" >> .htaccess
-          echo "PassengerAppType node" >> .htaccess
-          echo "PassengerStartupFile dist/index.js" >> .htaccess
-          
-          # CATATAN: Jika cPanel Anda menggunakan path absolut (misal /home/u1234/...),
-          # Sebaiknya COPY isi .htaccess asli dari File Manager cPanel 
-          # dan paste di sini menggantikan baris-baris di atas.
+          # Kita gunakan 'cat <<EOF' agar rapi untuk banyak baris
+          cat <<EOF > .htaccess
+          # DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
+          PassengerAppRoot "/home/smpnpeka/backendkokurikuler.smpn6pekalongan.org"
+          PassengerBaseURI "/"
+          PassengerNodejs "/home/smpnpeka/nodevenv/backendkokurikuler.smpn6pekalongan.org/20/bin/node"
+          PassengerAppType node
+          PassengerStartupFile dist/index.js
+          # DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END
 
-      - name: 🔍 CEK ISI FOLDER DIST (Debug)
+          RewriteEngine On
+          RewriteCond %{HTTPS} off
+          RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+          EOF
+          
+          # ⚠️ PENTING: 
+          # Pastikan path "/home/smpnpeka/..." di atas SESUAI dengan 
+          # yang ada di file .htaccess cPanel Anda saat ini.
+          
+      - name: 🗜️ Bungkus ZIP (Sertakan .htaccess)
         working-directory: ./backend
         run: |
-          echo "=== CEK ISI FOLDER ==="
-          ls -la
-          ls -R dist/
-          echo "======================"
-
-      - name: 🗜️ Bungkus ZIP (Cara Lebih Aman)
-        working-directory: ./backend
-        run: |
-          # Perhatikan: kita menambahkan .htaccess ke dalam perintah zip
+          # Perhatikan: Kita MENAMBAHKAN .htaccess ke dalam perintah zip
           zip -r backend_update.zip dist package.json package-lock.json .htaccess
           
           mkdir ../final_upload
@@ -131,5 +127,5 @@ jobs:
       - name: 🔓 Eksekusi Unzip
         run: |
           echo "Memanggil script unzip..."
-          # Pastikan protokol HTTPS jika Anda sudah memaksa HTTPS di .htaccess
+          # Gunakan HTTPS agar aman
           curl -L https://backendkokurikuler.smpn6pekalongan.org/unzip_backend.php

@@ -4,10 +4,10 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 export const login = async (req: Request, res: Response) => {
-  const { username, password } = req.body;
+  const { email, password } = req.body;
 
   try {
-    const [rows]: any[] = await pool.query('SELECT * FROM users WHERE username = ?', [username]);
+    const [rows]: any[] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
     const user = rows[0];
 
     if (!user) {
@@ -26,9 +26,26 @@ export const login = async (req: Request, res: Response) => {
       { expiresIn: '1h' } 
     );
 
-    res.json({ token, user: { id: user.id, username: user.username, fullName: user.full_name, role: user.role } });
+    res.json({ token, user: { id: user.id, email: user.email, fullName: user.full_name, role: user.role } });
 
   } catch (error) {
     res.status(500).json({ message: 'Error logging in', error });
+  }
+};
+
+export const register = async (req: Request, res: Response) => {
+  const { name, email, password } = req.body;
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const [result]: any[] = await pool.query(
+      'INSERT INTO users (full_name, email, password, role) VALUES (?, ?, ?, ?)', 
+      [name, email, hashedPassword, 'student']
+    );
+
+    res.status(201).json({ message: 'User created successfully', userId: result.insertId });
+
+  } catch (error) {
+    res.status(500).json({ message: 'Error registering user', error });
   }
 };

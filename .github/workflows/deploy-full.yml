@@ -48,11 +48,8 @@ jobs:
           server: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_FTP_USER }}
           password: ${{ secrets.CPANEL_FTP_PASS }}
-          # Upload isi folder dist (hasil build React)
           local-dir: ./frontend/dist/
-          # Masukkan ke public_html (folder website utama)
           server-dir: ./kokurikuler.smpn6pekalongan.org/ 
-          # PENTING: dangerous-clean-slate: true akan MENGHAPUS file lama di public_html agar bersih
           dangerous-clean-slate: true 
           protocol: ftp
           port: 21
@@ -79,35 +76,44 @@ jobs:
         run: |
           npm install
           npm run build
-          # Pastikan install dependencies production saja
           rm -rf node_modules
           npm install --production
 
-      # --- BAGIAN DEBUGGING BARU ---
+      # --- [BARU] STEP MEMBUAT .HTACCESS BACKEND ---
+      - name: 📄 Create .htaccess (Backend)
+        working-directory: ./backend
+        run: |
+          # 1. Force HTTPS (Aman untuk ditambahkan)
+          echo "RewriteEngine On" > .htaccess
+          echo "RewriteCond %{HTTPS} off" >> .htaccess
+          echo "RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]" >> .htaccess
+          
+          # 2. KONFIGURASI NODE.JS (PENTING!)
+          # Ganti 'dist/index.js' sesuai dengan file hasil build utama Anda
+          echo "PassengerAppRoot %{DOCUMENT_ROOT}" >> .htaccess
+          echo "PassengerAppType node" >> .htaccess
+          echo "PassengerStartupFile dist/index.js" >> .htaccess
+          
+          # CATATAN: Jika cPanel Anda menggunakan path absolut (misal /home/u1234/...),
+          # Sebaiknya COPY isi .htaccess asli dari File Manager cPanel 
+          # dan paste di sini menggantikan baris-baris di atas.
+
       - name: 🔍 CEK ISI FOLDER DIST (Debug)
         working-directory: ./backend
         run: |
-          echo "=========================================="
-          echo "APA ISI FOLDER DIST SEBELUM DI-ZIP?"
-          echo "=========================================="
+          echo "=== CEK ISI FOLDER ==="
+          ls -la
           ls -R dist/
-          echo "=========================================="
-          # Jika di sini kosong, berarti masalahnya di build script (npm run build)
+          echo "======================"
 
       - name: 🗜️ Bungkus ZIP (Cara Lebih Aman)
         working-directory: ./backend
         run: |
-          # Kita zip langsung di tempat, jangan dipindah-pindah dulu
-          # Zip folder 'dist', 'package.json', dll
-          zip -r backend_update.zip dist package.json package-lock.json
+          # Perhatikan: kita menambahkan .htaccess ke dalam perintah zip
+          zip -r backend_update.zip dist package.json package-lock.json .htaccess
           
-          # Buat folder isolasi di luar folder backend (di root workspace)
           mkdir ../final_upload
-          
-          # Pindahkan hasil zip ke folder isolasi
           mv backend_update.zip ../final_upload/
-          
-          # Copy script PHP ke folder isolasi
           cp unzip_backend.php ../final_upload/
 
       - name: 📂 Upload Folder Isolasi
@@ -125,4 +131,5 @@ jobs:
       - name: 🔓 Eksekusi Unzip
         run: |
           echo "Memanggil script unzip..."
+          # Pastikan protokol HTTPS jika Anda sudah memaksa HTTPS di .htaccess
           curl -L https://backendkokurikuler.smpn6pekalongan.org/unzip_backend.php

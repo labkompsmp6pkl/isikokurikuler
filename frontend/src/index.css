@@ -1,3 +1,15 @@
+/* Import Google Font: Plus Jakarta Sans */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+/* Aturan dasar Tailwind */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Menerapkan font dan gaya dasar ke body */
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f8fafc; /* Warna latar belakang abu-abu muda */
+}

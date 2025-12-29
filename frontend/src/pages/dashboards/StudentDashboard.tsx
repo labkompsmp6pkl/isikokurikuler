@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import aiService from '../services/aiService'; // Diperbaiki: Menggunakan aiService
+import aiService from '../../services/aiService'; // Diperbaiki: Menggunakan aiService
 
 const StudentDashboard: React.FC = () => {
   const [journalText, setJournalText] = useState('');

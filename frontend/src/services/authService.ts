@@ -3,9 +3,8 @@ import axios from 'axios';
 // Tentukan tipe data yang lebih detail untuk registrasi
 interface RegistrationData {
   fullName: string;
-  email?: string; // Email bersifat opsional karena Orang Tua menggunakan nomor WhatsApp
   password: string;
-  role: 'student' | 'teacher' | 'contributor' | 'parent' | 'admin';
+  role: 'student' | 'teacher' | 'contributor' | 'parent';
   nisn?: string;
   nip?: string;
   class?: string;
@@ -18,21 +17,20 @@ const authApi = axios.create({
   baseURL: `${API_BASE_URL}/auth`
 });
 
-// Fungsi untuk login
-const login = (email: string, password: string) => {
-  return authApi.post('/login', { email, password });
+// --- PERBAIKAN DI SINI ---
+// Fungsi login diperbarui untuk mengirim 'loginIdentifier' agar sesuai dengan backend.
+const login = (loginIdentifier: string, password: string) => {
+  return authApi.post('/login', { loginIdentifier, password });
 };
 
-// Fungsi untuk mendaftar (diperbarui)
+// Fungsi untuk mendaftar (sudah benar, tidak ada perubahan)
 const register = (data: RegistrationData) => {
-  // Mengirimkan objek data lengkap ke backend
   return authApi.post('/register', data);
 };
 
 // Fungsi untuk logout
 const logout = () => {
-  // Implementasi logout, misalnya menghapus token dari local storage
-  localStorage.removeItem('user'); // Sebaiknya hapus token JWT jika disimpan
+  localStorage.removeItem('user');
   localStorage.removeItem('token');
 };
 

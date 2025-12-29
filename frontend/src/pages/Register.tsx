@@ -1,22 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import authService from '../services/authService';
 
-// Definisikan tipe untuk peran
-type Role = 'student' | 'teacher' | 'contributor' | 'parent' | 'admin';
-
 const Register: React.FC = () => {
+  const [role, setRole] = useState<'student' | 'teacher' | 'parent' | 'contributor'>('student');
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
     fullName: '',
-    role: 'student' as Role,
+    password: '',
     nisn: '',
     nip: '',
-    class: '',
     whatsappNumber: '',
+    class: ''
   });
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
   const navigate = useNavigate();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -24,134 +22,131 @@ const Register: React.FC = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleRoleChange = (selectedRole: 'student' | 'teacher' | 'parent' | 'contributor') => {
+    setRole(selectedRole);
+    setFormData({ fullName: formData.fullName, password: formData.password, nisn: '', nip: '', whatsappNumber: '', class: '' });
+    setError('');
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setLoading(true);
+    setError('');
+    const loadingToast = toast.loading('Membuat akun Anda...');
+
+    const registrationData = {
+      role,
+      fullName: formData.fullName,
+      password: formData.password,
+      nisn: role === 'student' ? formData.nisn : undefined,
+      nip: (role === 'teacher' || role === 'contributor') ? formData.nip : undefined,
+      whatsappNumber: role === 'parent' ? formData.whatsappNumber : undefined,
+      class: role === 'student' ? formData.class : undefined,
+    };
 
     try {
-      await authService.register(formData);
-      // Arahkan ke halaman login setelah berhasil mendaftar
+      await authService.register(registrationData);
+      toast.dismiss(loadingToast);
+      toast.success('Pendaftaran berhasil! Silakan masuk.');
       navigate('/login');
-    } catch (err) {
-      setError('Gagal mendaftar. Email mungkin sudah digunakan atau data tidak valid.');
-      console.error(err);
+    } catch (err: any) {
+      toast.dismiss(loadingToast);
+      const errorMessage = err.response?.data?.message || 'Pendaftaran gagal. Silakan coba lagi.';
+      toast.error(errorMessage);
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const renderRoleSpecificFields = () => {
-    const { role } = formData;
-
-    switch (role) {
-      case 'student':
-        return (
-          <>
-            <div className="mb-4">
-              <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="nisn">NISN</label>
-              <input id="nisn" name="nisn" type="text" onChange={handleInputChange} required className="w-full p-3 border border-gray-300 rounded-lg" placeholder="NISN Anda" />
-            </div>
-            <div className="mb-4">
-              <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="whatsappNumber">Nomor WhatsApp</label>
-              <input id="whatsappNumber" name="whatsappNumber" type="text" onChange={handleInputChange} required className="w-full p-3 border border-gray-300 rounded-lg" placeholder="08xxxx" />
-            </div>
-            <div className="mb-4">
-              <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="class">Kelas</label>
-              <select id="class" name="class" onChange={handleInputChange} required className="w-full p-3 border border-gray-300 rounded-lg">
-                <option value="">Pilih Kelas</option>
-                {['7A', '7B', '7C', '7D'].map(c => <option key={c} value={c}>{c}</option>)}
-                {['8A', '8B', '8C', '8D'].map(c => <option key={c} value={c}>{c}</option>)}
-                {['9A', '9B', '9C', '9D'].map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </>
-        );
-      case 'teacher': // Wali Kelas
-        return (
-          <>
-            <div className="mb-4">
-              <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="nip">NIP</label>
-              <input id="nip" name="nip" type="text" onChange={handleInputChange} required className="w-full p-3 border border-gray-300 rounded-lg" placeholder="NIP Anda" />
-            </div>
-            <div className="mb-4">
-              <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="class">Wali Kelas</label>
-              <select id="class" name="class" onChange={handleInputChange} required className="w-full p-3 border border-gray-300 rounded-lg">
-                <option value="">Pilih Kelas</option>
-                {['7A', '7B', '7C', '7D'].map(c => <option key={c} value={c}>{c}</option>)}
-                {['8A', '8B', '8C', '8D'].map(c => <option key={c} value={c}>{c}</option>)}
-                {['9A', '9B', '9C', '9D'].map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </>
-        );
-      case 'contributor': // Guru Mapel / Ekskul
-        return (
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="nip">NIP</label>
-            <input id="nip" name="nip" type="text" onChange={handleInputChange} required className="w-full p-3 border border-gray-300 rounded-lg" placeholder="NIP Anda" />
-          </div>
-        );
-      case 'parent':
-        return (
-            <div className="mb-4">
-              <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="whatsappNumber">Nomor WhatsApp</label>
-              <input id="whatsappNumber" name="whatsappNumber" type="text" onChange={handleInputChange} required className="w-full p-3 border border-gray-300 rounded-lg" placeholder="Nomor WhatsApp Anda" />
-            </div>
-        );
-      default:
-        return null;
-    }
-  };
+  const renderRoleSpecificFields = () => (
+    <div className="space-y-4">
+      {role === 'student' && (
+        <>
+          <InputField name="nisn" placeholder="NISN" value={formData.nisn} onChange={handleInputChange} required />
+          <InputField name="class" placeholder="Kelas (Contoh: 7A, 8B)" value={formData.class} onChange={handleInputChange} required />
+        </>
+      )}
+      {(role === 'teacher' || role === 'contributor') && (
+        <InputField name="nip" placeholder="NIP" value={formData.nip} onChange={handleInputChange} required />
+      )}
+      {role === 'parent' && (
+        <InputField name="whatsappNumber" placeholder="Nomor WhatsApp" value={formData.whatsappNumber} onChange={handleInputChange} required />
+      )}
+    </div>
+  );
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 font-sans">
-      <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg">
-        <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Buat Akun Baru</h2>
-        
-        <form onSubmit={handleRegister}>
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="role">Saya adalah seorang...</label>
-            <select id="role" name="role" value={formData.role} onChange={handleInputChange} className="w-full p-3 border border-gray-300 rounded-lg">
-              <option value="student">Siswa</option>
-              <option value="teacher">Guru (Wali Kelas)</option>
-              <option value="contributor">Kontributor (Guru Mapel / Ekskul)</option>
-              <option value="parent">Orang Tua</option>
-              <option value="admin">Administrator</option>
-            </select>
+    <div className="min-h-screen w-full bg-gray-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <img 
+            className="mx-auto h-24 w-auto" 
+            src="/logo-smpn6.png"
+            alt="Logo SMPN 6 Pekalongan"
+          />
+          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+            Buat Akun Baru
+          </h2>
+          <p className="mt-2 text-sm text-gray-600">
+            ISOKURIKULER SMPN 6 PEKALONGAN
+          </p>
+        </div>
+
+        <div className="bg-white shadow-xl rounded-2xl p-8 space-y-6">
+          <div className="flex justify-center bg-gray-100 rounded-lg p-1">
+            {['student', 'teacher', 'parent'].map((r) => (
+              <button
+                key={r}
+                onClick={() => handleRoleChange(r as any)}
+                className={`w-full py-2.5 text-sm font-medium rounded-md transition-all duration-300 ${role === r ? 'bg-white text-blue-700 shadow' : 'text-gray-500 hover:text-gray-800'}`}>
+                {r.charAt(0).toUpperCase() + r.slice(1)}
+              </button>
+            ))}
           </div>
 
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="fullName">Nama Lengkap</label>
-            <input id="fullName" name="fullName" type="text" onChange={handleInputChange} required className="w-full p-3 border border-gray-300 rounded-lg" placeholder="Nama Lengkap Anda" />
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <InputField name="fullName" placeholder="Nama Lengkap" value={formData.fullName} onChange={handleInputChange} required />
+            <InputField name="password" type="password" placeholder="Password" value={formData.password} onChange={handleInputChange} required />
+            {renderRoleSpecificFields()}
+            
+            {error && <p className="text-sm text-red-600 text-center">{error}</p>}
 
-          {formData.role !== 'parent' && (
-            <div className="mb-4">
-              <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="email">Alamat Email</label>
-              <input id="email" name="email" type="email" onChange={handleInputChange} required className="w-full p-3 border border-gray-300 rounded-lg" placeholder="email@contoh.com" />
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 disabled:cursor-not-allowed"
+              >
+                {loading ? 'MEMPROSES...' : 'DAFTAR'}
+              </button>
             </div>
-          )}
+          </form>
           
-          {renderRoleSpecificFields()}
-
-          <div className="mb-6">
-            <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="password">Password</label>
-            <input id="password" name="password" type="password" onChange={handleInputChange} required className="w-full p-3 border border-ray-300 rounded-lg" placeholder="••••••••" />
+          <div className="text-sm text-center text-gray-600">
+            <p>
+              Sudah punya akun?{' '}
+              <Link to="/login" className="font-medium text-blue-700 hover:text-blue-600 hover:underline">
+                Masuk di sini
+              </Link>
+            </p>
           </div>
-
-          {error && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">{error}</div>}
-          
-          <div>
-            <button type="submit" className="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">
-              Daftar
-            </button>
-          </div>
-        </form>
-
-        <p className="text-center text-gray-600 mt-4">
-          Sudah punya akun? <Link to="/login" className="text-blue-600 hover:underline">Login di sini</Link>
-        </p>
+        </div>
       </div>
     </div>
   );
-};
+}
+
+const InputField: React.FC<any> = ({ name, placeholder, value, onChange, type = 'text', required = false }) => (
+  <input
+    name={name}
+    type={type}
+    placeholder={placeholder}
+    value={value}
+    onChange={onChange}
+    required={required}
+    className="block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent sm:text-sm"
+  />
+);
 
 export default Register;

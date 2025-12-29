@@ -1,5 +1,5 @@
 import React, { useState, useEffect, ChangeEvent } from 'react';
-import adminService from '../services/adminService';
+import adminService from '../../services/adminService';
 
 // Definisikan tipe untuk objek siswa
 interface Student {

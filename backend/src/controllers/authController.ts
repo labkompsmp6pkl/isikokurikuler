@@ -4,17 +4,23 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 export const login = async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+  const { loginIdentifier, password } = req.body;
 
   try {
-    const [rows]: any[] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+    const query = `
+      SELECT * FROM users 
+      WHERE email = ? OR nisn = ? OR nip = ? OR whatsapp_number = ?
+    `;
+    const params = [loginIdentifier, loginIdentifier, loginIdentifier, loginIdentifier];
+    const [rows]: any[] = await pool.query(query, params);
     const user = rows[0];
 
     if (!user) {
-      return res.status(401).json({ message: 'Kredensial tidak valid' });
+      return res.status(401).json({ message: 'Kredensial tidak valid. Pengguna tidak ditemukan.' });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const userPasswordHash = user.password.replace('$2y$', '$2a$');
+    const isPasswordValid = await bcrypt.compare(password, userPasswordHash);
 
     if (!isPasswordValid) {
       return res.status(401).json({ message: 'Login gagal: Password tidak cocok.' });
@@ -26,7 +32,6 @@ export const login = async (req: Request, res: Response) => {
       { expiresIn: '1h' }
     );
 
-    // Mengirim data pengguna dalam objek 'user' agar konsisten dengan frontend
     res.json({
       token,
       user: {
@@ -38,71 +43,67 @@ export const login = async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    console.error('Terjadi kesalahan saat login:', error);
-    res.status(500).json({ message: 'Kesalahan saat login', error });
+    console.error('Terjadi kesalahan fatal saat login:', error);
+    res.status(500).json({ message: 'Kesalahan server saat login', error });
   }
 };
 
 export const register = async (req: Request, res: Response) => {
-  const {
-    fullName,
-    email,
-    password,
-    role,
-    nisn,
-    nip,
-    class: userClass, // Menggunakan alias karena 'class' adalah kata kunci yang dilindungi
-    whatsappNumber
-  } = req.body;
+  const { fullName, password, role, nisn, nip, class: userClass, whatsappNumber } = req.body;
 
-  // Validasi dasar
   if (!fullName || !password || !role) {
-    return res.status(400).json({ message: 'Bidang yang diperlukan tidak lengkap' });
+    return res.status(400).json({ message: 'Bidang wajib tidak boleh kosong.' });
   }
-  
-  // Untuk orang tua, gunakan nomor WhatsApp sebagai pengenal login
-  const loginIdentifier = role === 'parent' ? whatsappNumber : email;
 
-  if (!loginIdentifier) {
-      return res.status(400).json({ message: 'Pengenal login (email atau nomor WhatsApp) diperlukan.' });
-  }
+  let dbEmail: string;
 
   try {
-    // Periksa apakah pengguna sudah ada
-    const [existingUser]: any[] = await pool.query('SELECT id FROM users WHERE email = ?', [loginIdentifier]);
-    if (existingUser.length > 0) {
-      return res.status(409).json({ message: 'Pengguna dengan email atau nomor ini sudah ada.' });
+    // --- PERBAIKAN DI SINI: Logika pengecekan duplikasi dibuat spesifik per peran ---
+    let conflictCheckQuery: string;
+    let conflictCheckParams: any[];
+
+    switch(role) {
+      case 'student':
+        if (!nisn) return res.status(400).json({ message: 'NISN diperlukan untuk siswa.' });
+        dbEmail = `${nisn}@student.isokul`;
+        conflictCheckQuery = 'SELECT id FROM users WHERE nisn = ?';
+        conflictCheckParams = [nisn];
+        break;
+      case 'teacher':
+      case 'contributor':
+        if (!nip) return res.status(400).json({ message: 'NIP diperlukan untuk guru/kontributor.' });
+        dbEmail = `${nip}@teacher.isokul`;
+        conflictCheckQuery = 'SELECT id FROM users WHERE nip = ?';
+        conflictCheckParams = [nip];
+        break;
+      case 'parent':
+        if (!whatsappNumber) return res.status(400).json({ message: 'Nomor WhatsApp diperlukan untuk orang tua.' });
+        dbEmail = `${whatsappNumber}@parent.isokul`;
+        conflictCheckQuery = 'SELECT id FROM users WHERE whatsapp_number = ?';
+        conflictCheckParams = [whatsappNumber];
+        break;
+      default:
+        return res.status(400).json({ message: 'Peran tidak valid.' });
     }
+
+    const [existingUsers]: any[] = await pool.query(conflictCheckQuery, conflictCheckParams);
+
+    if (existingUsers.length > 0) {
+      return res.status(409).json({ message: 'Pengguna dengan pengenal tersebut sudah ada.' });
+    }
+    // --- AKHIR PERBAIKAN ---
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const query = `
-      INSERT INTO users (full_name, email, password, role, nisn, nip, class, whatsapp_number)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    // Siapkan parameter, gunakan null untuk nilai opsional yang tidak disediakan
-    const params = [
-      fullName,
-      loginIdentifier,
-      hashedPassword,
-      role,
-      nisn || null,
-      nip || null,
-      userClass || null,
-      whatsappNumber || null
-    ];
-
-    const [result]: any[] = await pool.query(query, params);
+    const insertQuery = `INSERT INTO users (full_name, email, password, role, nisn, nip, class, whatsapp_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+    const insertParams = [fullName, dbEmail, hashedPassword, role, nisn || null, nip || null, userClass || null, whatsappNumber || null];
+    
+    const [result]: any[] = await pool.query(insertQuery, insertParams);
 
     res.status(201).json({ message: 'Pengguna berhasil dibuat', userId: result.insertId });
 
   } catch (error) {
     console.error('Terjadi kesalahan saat pendaftaran:', error);
-    // Memberikan pesan kesalahan yang lebih spesifik jika terjadi duplikat
-    if ((error as any).code === 'ER_DUP_ENTRY') {
-        return res.status(409).json({ message: 'Email atau pengenal sudah ada.' });
-    }
     res.status(500).json({ message: 'Kesalahan saat mendaftarkan pengguna', error });
   }
 };

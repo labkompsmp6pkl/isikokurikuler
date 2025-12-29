@@ -1,110 +1,135 @@
-import React, { useState } from 'react';
+import React, { useState, FormEvent } from 'react';
+import { Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import authService from '../services/authService';
-import { useNavigate, Link } from 'react-router-dom';
 
 const Login: React.FC = () => {
-  const [email, setEmail] = useState('');
+  const [loginIdentifier, setLoginIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setLoading(true);
+    setError('');
+    const loadingToast = toast.loading('Mencoba masuk...');
 
     try {
-      const response = await authService.login(email, password);
-      const { role } = response.data.user;
+      const response = await authService.login(loginIdentifier, password);
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      
+      const user = response.data.user;
 
-      // Logika pengalihan berdasarkan peran pengguna
-      switch (role) {
-        case 'admin':
-          navigate('/admin/dashboard');
-          break;
-        case 'student':
-          navigate('/student/dashboard');
-          break;
-        case 'teacher':
-          navigate('/teacher/dashboard');
-          break;
-        case 'contributor':
-          navigate('/contributor/dashboard');
-          break;
-        case 'parent':
-          navigate('/parent/dashboard');
-          break;
-        default:
-          setError('Peran pengguna tidak dikenali.');
+      toast.dismiss(loadingToast);
+      toast.success(`Halo, selamat datang ${user.fullName}!`);
+
+      // --- PERBAIKAN DI SINI ---
+      // Menggunakan window.location.href untuk memaksa pemuatan ulang halaman.
+      // Ini memastikan seluruh aplikasi me-reset state-nya dan membaca data user yang baru dari localStorage.
+      let targetPath = '/login'; // Default fallback
+      switch (user.role) {
+        case 'admin': targetPath = '/admin/dashboard'; break;
+        case 'student': targetPath = '/student/dashboard'; break;
+        case 'teacher': targetPath = '/teacher/dashboard'; break;
+        case 'parent': targetPath = '/parent/dashboard'; break;
+        case 'contributor': targetPath = '/contributor/dashboard'; break;
       }
-    } catch (err) {
-      setError('Email atau password salah. Silakan coba lagi.');
-      console.error(err);
+      
+      // Delay singkat untuk memastikan pengguna melihat toast sebelum halaman dimuat ulang
+      setTimeout(() => {
+        window.location.href = targetPath;
+      }, 500); // 0.5 detik
+
+    } catch (err: any) {
+      toast.dismiss(loadingToast);
+      const errorMessage = err.response?.data?.message || 'Login gagal. Periksa kredensial Anda.';
+      toast.error(errorMessage);
+      setError(errorMessage);
+      setLoading(false); // Pastikan loading berhenti pada error
     }
+    // Jangan set loading ke false di sini pada kasus sukses, karena halaman akan dimuat ulang
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 font-sans">
-      <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg">
-        
-        <div className="flex justify-center mb-6">
-          <img src="/logo-smpn6.png" alt="Logo SMPN 6 Pekalongan" className="h-24" />
+    <div className="min-h-screen w-full bg-gray-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <img 
+            className="mx-auto h-24 w-auto" 
+            src="/logo-smpn6.png"
+            alt="Logo SMPN 6 Pekalongan"
+          />
+          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+            ISOKURIKULER
+          </h2>
+          <p className="mt-2 text-sm text-gray-600">
+            SMPN 6 PEKALONGAN
+          </p>
         </div>
 
-        <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Selamat Datang!</h2>
-        
-        <form onSubmit={handleLogin}>
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="email">
-              Alamat Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="contoh@email.com"
-            />
-          </div>
-          
-          <div className="mb-6">
-            <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="password">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="••••••••"
-            />
-          </div>
-
-          {error && (
-            <div className="mb-4 p-3 bg-red-100 text-red-700 border border-red-200 rounded-lg text-sm">
-              {error}
+        <div className="bg-white shadow-xl rounded-2xl p-8 space-y-6">
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div>
+              <label htmlFor="loginIdentifier" className="text-sm font-medium text-gray-700">
+                Email / NISN / NIP / No. WhatsApp
+              </label>
+              <input
+                id="loginIdentifier"
+                name="loginIdentifier"
+                type="text"
+                autoComplete="username"
+                required
+                className="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent sm:text-sm"
+                placeholder="Masukkan pengenal Anda"
+                value={loginIdentifier}
+                onChange={(e) => setLoginIdentifier(e.target.value)}
+              />
             </div>
-          )}
-          
-          <div>
-            <button 
-              type="submit"
-              className="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75"
-            >
-              Login
-            </button>
-          </div>
-        </form>
 
-        <p className="text-center text-gray-600 mt-4">
-          Belum punya akun? <Link to="/register" className="text-blue-600 hover:underline">Daftar di sini</Link>
-        </p>
+            <div>
+              <label htmlFor="password" className="text-sm font-medium text-gray-700">
+                Password
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                className="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent sm:text-sm"
+                placeholder="Masukkan password Anda"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            
+            {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 disabled:cursor-not-allowed"
+              >
+                {loading ? 'MEMPROSES...' : 'MASUK'}
+              </button>
+            </div>
+          </form>
+          
+          <div className="text-sm text-center text-gray-600">
+            <p>
+              Belum punya akun?{' '}
+              <Link to="/register" className="font-medium text-blue-700 hover:text-blue-600 hover:underline">
+                Daftar di sini
+              </Link>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
-};
+}
 
 export default Login;

@@ -32,13 +32,16 @@ export const login = async (req: Request, res: Response) => {
       { expiresIn: '1h' }
     );
 
+    // --- PERBAIKAN DI SINI ---
+    // Menambahkan field `class` ke dalam objek user yang dikembalikan
     res.json({
       token,
       user: {
         id: user.id,
         email: user.email,
         fullName: user.full_name,
-        role: user.role
+        role: user.role,
+        class: user.class // <-- Tambahkan ini
       }
     });
 

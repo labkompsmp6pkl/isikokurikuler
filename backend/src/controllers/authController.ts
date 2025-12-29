@@ -15,25 +15,26 @@ export const login = async (req: Request, res: Response) => {
     const [rows]: any[] = await pool.query(query, params);
     const user = rows[0];
 
+    // Jika pengguna tidak ditemukan, langsung kembalikan error.
     if (!user) {
-      return res.status(401).json({ message: 'Kredensial tidak valid. Pengguna tidak ditemukan.' });
+      return res.status(401).json({ message: 'Username atau password salah' });
     }
 
     const userPasswordHash = user.password.replace('$2y$', '$2a$');
     const isPasswordValid = await bcrypt.compare(password, userPasswordHash);
 
+    // Jika password tidak cocok, kembalikan error yang sama.
     if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Login gagal: Password tidak cocok.' });
+      return res.status(401).json({ message: 'Username atau password salah' });
     }
 
+    // Jika lolos, buat token dan kirim data pengguna
     const token = jwt.sign(
       { id: user.id, role: user.role },
       process.env.JWT_SECRET as string,
       { expiresIn: '1h' }
     );
 
-    // --- PERBAIKAN DI SINI ---
-    // Menambahkan field `class` ke dalam objek user yang dikembalikan
     res.json({
       token,
       user: {
@@ -41,13 +42,14 @@ export const login = async (req: Request, res: Response) => {
         email: user.email,
         fullName: user.full_name,
         role: user.role,
-        class: user.class // <-- Tambahkan ini
+        class: user.class
       }
     });
 
   } catch (error) {
     console.error('Terjadi kesalahan fatal saat login:', error);
-    res.status(500).json({ message: 'Kesalahan server saat login', error });
+    // Jika ada error server, kirim pesan yang sesuai
+    res.status(500).json({ message: 'Server sedang down' });
   }
 };
 
@@ -61,7 +63,6 @@ export const register = async (req: Request, res: Response) => {
   let dbEmail: string;
 
   try {
-    // --- PERBAIKAN DI SINI: Logika pengecekan duplikasi dibuat spesifik per peran ---
     let conflictCheckQuery: string;
     let conflictCheckParams: any[];
 
@@ -94,7 +95,6 @@ export const register = async (req: Request, res: Response) => {
     if (existingUsers.length > 0) {
       return res.status(409).json({ message: 'Pengguna dengan pengenal tersebut sudah ada.' });
     }
-    // --- AKHIR PERBAIKAN ---
 
     const hashedPassword = await bcrypt.hash(password, 10);
 

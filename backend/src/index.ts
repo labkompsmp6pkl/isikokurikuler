@@ -1,4 +1,4 @@
-import 'dotenv/config'; // Memuat variabel lingkungan dari .env
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import authRoutes from './routes/authRoutes';
@@ -10,38 +10,45 @@ import characterRoutes from './routes/characterRoutes';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// --- Konfigurasi CORS Berdasarkan Lingkungan (Development/Production) ---
+// --- KONFIGURASI CORS BERBASIS LINGKUNGAN ---
 
-// Daftar origin yang diizinkan di lingkungan produksi
-const productionOrigins = [
-  'https://isikokurikuler.vercel.app',
-  'https://kokurikuler.smpn6pekalongan.org'
-];
+let corsOptions: cors.CorsOptions;
 
-let corsOptions;
+if (process.env.NODE_ENV === 'production') {
+  // UNTUK PRODUCTION: Daftar origin yang di-hardcode sesuai permintaan
+  const productionOrigins = [
+    'https://isikokurikuler.vercel.app',
+    'https://kokurikuler.smpn6pekalongan.org'
+  ];
+  console.log('CORS running in PRODUCTION mode. Allowed origins:', productionOrigins);
 
-// Periksa apakah lingkungan saat ini adalah 'development'
-if (process.env.NODE_ENV === 'development') {
-  console.log('CORS berjalan dalam mode DEVELOPMENT: Mengizinkan semua origin.');
-  // Untuk development, izinkan semua origin untuk menghindari masalah proxy/redirect.
   corsOptions = {
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-  };
-} else {
-  console.log('CORS berjalan dalam mode PRODUCTION: Menerapkan kebijakan origin yang ketat.');
-  // Untuk produksi, terapkan daftar origin yang ketat.
-  corsOptions = {
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      if (!origin || productionOrigins.indexOf(origin) !== -1) {
+    origin: (origin, callback) => {
+      if (!origin || productionOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.error(`Origin ditolak oleh CORS: ${origin}`);
         callback(new Error('Not allowed by CORS'));
       }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true, // WAJIB untuk login
+  };
+
+} else {
+  // UNTUK DEVELOPMENT: Izinkan semua origin dengan memantulkan origin yang masuk
+  // Ini adalah cara yang benar untuk mengizinkan semua origin saat credentials: true
+  console.log('CORS running in DEVELOPMENT mode. Allowing all origins.');
+  
+  corsOptions = {
+    origin: (origin, callback) => {
+      // Selalu izinkan origin yang masuk saat dalam mode development
+      callback(null, true);
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true, // WAJIB untuk login
   };
 }
 

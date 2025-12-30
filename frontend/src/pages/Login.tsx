@@ -1,12 +1,57 @@
-import React, { useState, FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, FormEvent, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import authService from '../services/authService';
+
+// Opsional: Jika Anda ingin mendecode token untuk tahu role user (npm install jwt-decode)
+// import { jwtDecode } from "jwt-decode"; 
 
 const Login: React.FC = () => {
   const [formData, setFormData] = useState({ loginIdentifier: '', password: '' });
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // --- [BAGIAN BARU] MENANGKAP HASIL LOGIN GOOGLE ---
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const token = params.get('token');
+    const errorMsg = params.get('error');
+
+    // Jika ada token di URL (Berarti login Google sukses)
+    if (token) {
+      localStorage.setItem('token', token);
+      
+      // Simpan notifikasi sukses
+      toast.success('Login Google Berhasil!');
+
+      // Redirect Logic:
+      // Karena kita hanya dapat token, kita default ke dashboard siswa dulu.
+      // Idealnya: Gunakan endpoint /me atau decode JWT untuk tahu role user.
+      // Contoh decoding sederhana (jika payload token mengandung role):
+      /*
+        try {
+          const decoded: any = jwtDecode(token);
+          if (decoded.role === 'admin') window.location.href = '/admin/dashboard';
+          else if (decoded.role === 'teacher') window.location.href = '/teacher/dashboard';
+          else window.location.href = '/student/dashboard';
+        } catch (e) { window.location.href = '/student/dashboard'; }
+      */
+      
+      // Default Redirect sementara
+      window.location.href = '/student/dashboard'; 
+    }
+
+    // Jika ada error di URL
+    if (errorMsg) {
+      toast.error('Gagal login dengan Google. Silakan coba lagi.');
+      // Bersihkan URL tanpa refresh halaman
+      navigate('/login', { replace: true });
+    }
+  }, [location, navigate]);
+  // ---------------------------------------------------
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -33,7 +78,7 @@ const Login: React.FC = () => {
         case 'contributor': targetPath = '/contributor/dashboard'; break;
       }
 
-      // Menggunakan window.location.href untuk full page reload
+      // Gunakan window.location.href agar state aplikasi bersih (full reload)
       window.location.href = targetPath;
 
     } catch (err: any) {
@@ -51,11 +96,8 @@ const Login: React.FC = () => {
   };
 
   const handleGoogleLogin = () => {
-    // Dapatkan origin saat ini (misal: https://isikokurikuler.vercel.app)
-    const origin = window.location.origin;
-    // Bangun URL dengan menyertakan origin sebagai query parameter
-    const googleLoginUrl = `${import.meta.env.VITE_API_URL}/api/auth/google?origin=${encodeURIComponent(origin)}`;
-    window.location.href = googleLoginUrl;
+    // Panggil fungsi redirect dari service yang sudah diperbaiki
+    authService.googleLoginRedirect();
   };
 
   return (
@@ -76,11 +118,13 @@ const Login: React.FC = () => {
         </div>
 
         <form className="mt-8 space-y-6 bg-white shadow-xl rounded-2xl p-8" onSubmit={handleLogin}>
+          
+          {/* Tombol Google Login */}
           <div>
             <button
               onClick={handleGoogleLogin}
               type="button"
-              className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
             >
               <img className="h-5 w-5 mr-3" src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google logo" />
               Masuk dengan Google
@@ -96,18 +140,40 @@ const Login: React.FC = () => {
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
               <label htmlFor="loginIdentifier" className="sr-only">NISN/NIP/No.Telp</label>
-              <input id="loginIdentifier" name="loginIdentifier" type="text" required value={formData.loginIdentifier} onChange={handleInputChange} className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm" placeholder="NISN/NIP/No.Telp" />
+              <input 
+                id="loginIdentifier" 
+                name="loginIdentifier" 
+                type="text" 
+                required 
+                value={formData.loginIdentifier} 
+                onChange={handleInputChange} 
+                className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm" 
+                placeholder="NISN/NIP/No.Telp" 
+              />
             </div>
             <div>
               <label htmlFor="password" className="sr-only">Password</label>
-              <input id="password" name="password" type="password" required value={formData.password} onChange={handleInputChange} className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm" placeholder="Password" />
+              <input 
+                id="password" 
+                name="password" 
+                type="password" 
+                required 
+                value={formData.password} 
+                onChange={handleInputChange} 
+                className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm" 
+                placeholder="Password" 
+              />
             </div>
           </div>
 
           {error && <p className="text-xs text-red-600 text-center">{error}</p>}
 
           <div>
-            <button type="submit" disabled={loading} className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400">
+            <button 
+              type="submit" 
+              disabled={loading} 
+              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 transition-colors"
+            >
               {loading ? 'MEMPROSES...' : 'MASUK'}
             </button>
           </div>

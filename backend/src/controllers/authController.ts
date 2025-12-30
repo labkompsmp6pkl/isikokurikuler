@@ -14,8 +14,9 @@ const client = new OAuth2Client(
 // --- Daftar URL Frontend yang Diizinkan ---
 const ALLOWED_ORIGINS = [
   'https://isikokurikuler.vercel.app',
-  'https://kokurikuler.smpn6pekalongan.org'
-];
+  'https://kokurikuler.smpn6pekalongan.org',
+  "https://5173-firebase-isikokurikuler-1766918315867.cluster-bqwaigqtxbeautecnatk4o6ynk.cloudworkstations.dev",
+].filter(Boolean); // Hapus nilai undefined/null
 
 // 1. MENGALIHKAN PENGGUNA KE HALAMAN PERSETUJUAN GOOGLE
 export const googleLogin = (req: Request, res: Response) => {
@@ -33,8 +34,12 @@ export const googleLogin = (req: Request, res: Response) => {
 
   const url = client.generateAuthUrl({
     access_type: 'offline',
-    scope: ['https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/userinfo.email'],
-    state: state // Teruskan origin yang valid sebagai state
+    scope: [
+      'https://www.googleapis.com/auth/userinfo.profile', 
+      'https://www.googleapis.com/auth/userinfo.email'
+    ],
+    state: state, // Kita simpan URL Frontend asal di state
+    prompt: 'consent' // Memaksa user memilih akun agar refresh token bisa didapat (opsional)
   });
 
   res.redirect(url);

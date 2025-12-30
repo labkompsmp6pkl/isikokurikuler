@@ -1,46 +1,55 @@
 import axios from 'axios';
 
-// Tipe data diperbarui untuk mengakomodasi pendaftaran via Google dan diekspor
+// Tipe data diekspor untuk digunakan di komponen lain
 export interface RegistrationData {
   fullName: string;
   role: 'student' | 'teacher' | 'contributor' | 'parent';
-  password?: string; // Dijadikan opsional karena tidak ada saat daftar dengan Google
+  password?: string;
   nisn?: string;
   nip?: string;
   class?: string;
   whatsappNumber?: string;
-  provider?: 'google'; // Opsional, untuk menandakan pendaftaran via Google
-  google_id?: string;   // Opsional, ID Google pengguna
-  email?: string;       // Opsional, email dari Google
+  provider?: 'google';
+  google_id?: string;
+  email?: string;
 }
 
-// Menggunakan VITE_API_URL yang konsisten dari file .env
-const API_URL = import.meta.env.VITE_API_URL;
+// Menggunakan variabel lingkungan yang konsisten dengan layanan lain
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+// Membuat instance axios dengan baseURL yang benar dan lengkap untuk otentikasi
 const authApi = axios.create({
-  // Mengatur base URL yang benar untuk endpoint otentikasi
-  baseURL: API_URL
+  baseURL: `${API_BASE_URL}/api`
 });
 
-// Fungsi untuk mengarahkan ke halaman login Google
+/**
+ * Mengarahkan pengguna ke halaman login Google.
+ * URL dibangun secara eksplisit untuk memastikan tidak ada kesalahan path.
+ */
 const googleLoginRedirect = () => {
   const origin = window.location.origin;
-  // Langsung arahkan pengguna ke endpoint backend untuk otentikasi Google
-  window.location.href = `${API_URL}/auth/google?origin=${encodeURIComponent(origin)}`;
+  // Pastikan URL redirect sama persis dengan yang diharapkan oleh backend
+  window.location.href = `${API_BASE_URL}/api/auth/google?origin=${encodeURIComponent(origin)}`;
 };
 
-
-// Fungsi login tetap sama
+/**
+ * Melakukan login dengan kredensial lokal (email/NISN/NIP/WA + password).
+ */
 const login = (loginIdentifier: string, password: string) => {
+  // Path '/login' sudah benar karena baseURL sudah mengandung '/api/auth'
   return authApi.post('/auth/login', { loginIdentifier, password });
 };
 
-// Fungsi register sekarang menerima data yang lebih fleksibel
+/**
+ * Mendaftarkan pengguna baru, baik secara manual maupun dari data Google.
+ */
 const register = (data: RegistrationData) => {
   return authApi.post('/auth/register', data);
 };
 
-// Fungsi untuk logout
+/**
+ * Menghapus token dari local storage untuk logout.
+ */
 const logout = () => {
   localStorage.removeItem('user');
   localStorage.removeItem('token');
@@ -50,5 +59,5 @@ export default {
   login,
   register,
   logout,
-  googleLoginRedirect // Ekspor fungsi baru
+  googleLoginRedirect
 };

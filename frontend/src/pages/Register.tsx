@@ -73,7 +73,7 @@ const Register: React.FC = () => {
   
   const handleGoogleRegister = () => {
     const origin = window.location.origin;
-    const googleLoginUrl = `${import.meta.env.VITE_API_URL}/api/auth/google?origin=${encodeURIComponent(origin)}`;
+    const googleLoginUrl = `${import.meta.env.VITE_BASE_API_URL}/api/auth/google?origin=${encodeURIComponent(origin)}`;
     window.location.href = googleLoginUrl;
   };
 

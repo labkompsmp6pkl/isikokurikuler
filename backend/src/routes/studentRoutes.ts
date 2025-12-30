@@ -1,13 +1,25 @@
+
 import { Router } from 'express';
-import { getJournals, createJournal } from '../controllers/studentController';
-import { authMiddleware } from '../middleware/authMiddleware';
+// [PERBAIKAN] Mengimpor fungsi yang benar dari controller
+import { getCharacterLogs, upsertCharacterLog } from '../controllers/studentController';
+import { authMiddleware, roleMiddleware } from '../middleware/authMiddleware';
 
 const router = Router();
 
-// Semua rute di sini dilindungi dan hanya dapat diakses oleh pengguna yang login
+// Semua rute siswa memerlukan login sebagai 'student'
 router.use(authMiddleware);
+router.use(roleMiddleware(['student']));
 
-router.get('/journals', getJournals);
-router.post('/journals', createJournal);
+// [PERBAIKAN] Menggunakan fungsi getCharacterLogs untuk GET
+router.get(
+    '/',
+    getCharacterLogs
+);
+
+// [PERBAIKAN] Menggunakan fungsi upsertCharacterLog untuk POST (membuat/memperbarui)
+router.post(
+    '/',
+    upsertCharacterLog
+);
 
 export default router;

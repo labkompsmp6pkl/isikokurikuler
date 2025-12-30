@@ -14,22 +14,30 @@ export interface RegistrationData {
   email?: string;       // Opsional, email dari Google
 }
 
-// Menggunakan VITE_API_URL yang konsisten
-const API_URL = import.meta.env.VITE_API_BASE_URL;
+// Menggunakan VITE_API_URL yang konsisten dari file .env
+const API_URL = import.meta.env.VITE_API_URL;
 
 const authApi = axios.create({
   // Mengatur base URL yang benar untuk endpoint otentikasi
-  baseURL: `${API_URL}/auth`
+  baseURL: API_URL
 });
+
+// Fungsi untuk mengarahkan ke halaman login Google
+const googleLoginRedirect = () => {
+  const origin = window.location.origin;
+  // Langsung arahkan pengguna ke endpoint backend untuk otentikasi Google
+  window.location.href = `${API_URL}/auth/google?origin=${encodeURIComponent(origin)}`;
+};
+
 
 // Fungsi login tetap sama
 const login = (loginIdentifier: string, password: string) => {
-  return authApi.post('/login', { loginIdentifier, password });
+  return authApi.post('/auth/login', { loginIdentifier, password });
 };
 
 // Fungsi register sekarang menerima data yang lebih fleksibel
 const register = (data: RegistrationData) => {
-  return authApi.post('/register', data);
+  return authApi.post('/auth/register', data);
 };
 
 // Fungsi untuk logout
@@ -42,4 +50,5 @@ export default {
   login,
   register,
   logout,
+  googleLoginRedirect // Ekspor fungsi baru
 };

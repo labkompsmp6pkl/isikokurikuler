@@ -27,8 +27,8 @@ export const googleLogin = (req: Request, res: Response) => {
   if (origin && ALLOWED_ORIGINS.includes(origin as string)) {
     state = origin as string;
   } else {
-    // Jika origin tidak valid atau tidak ada, gunakan URL default dari .env atau localhost
-    state = process.env.FRONTEND_URL || 'http://localhost:5173';
+    // Jika origin tidak valid atau tidak ada, gunakan URL default dari .env
+    state = process.env.FRONTEND_URL as string;
   }
 
   const url = client.generateAuthUrl({
@@ -44,10 +44,10 @@ export const googleLogin = (req: Request, res: Response) => {
 export const googleCallback = async (req: Request, res: Response) => {
   const { code, state } = req.query; // Dapatkan 'state' yang berisi URL origin
 
-  // Tentukan URL dasar untuk pengalihan. Validasi lagi untuk keamanan.
+  // Tentukan URL dasar untuk pengalihan. Gunakan state jika valid, jika tidak, fallback ke env.
   const redirectBaseUrl = (state && ALLOWED_ORIGINS.includes(state as string)) 
     ? state as string 
-    : (process.env.FRONTEND_URL || 'http://localhost:5173');
+    : (process.env.FRONTEND_URL as string);
 
   try {
     const { tokens } = await client.getToken(code as string);

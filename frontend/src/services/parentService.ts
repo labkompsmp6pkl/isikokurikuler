@@ -23,49 +23,53 @@ apiClient.interceptors.request.use(
   }
 );
 
+// --- [PERBAIKAN] Definisi Tipe Data yang Benar --- //
+
 export interface StudentInfo {
-  id: number;
-  fullName: string;
-  class: string;
+    id: number;
+    fullName: string;
+    class: string;
 }
 
 export interface CharacterLog {
-  id: number;
-  log_date: string;
-  status: 'Tersimpan' | 'Disetujui';
-  wake_up_time: string;
-  worship_activities: string[];
-  worship_notes: string;
-  exercise_type: string;
-  exercise_details: string;
-  healthy_food_notes: string;
-  learning_subject: string;
-  learning_details: string;
-  social_activity_notes: string;
-  sleep_time: string;
+    id: number;
+    student_id: number;
+    log_date: string; // Tanggal dalam format string (misal: "2023-10-27T00:00:00.000Z")
+    status: 'Tersimpan' | 'Disetujui';
+    wake_up_time: string;
+    sleep_time: string;
+    worship_activities: string[]; // Ini adalah array of strings
+    worship_notes?: string;
+    exercise_type?: string;
+    exercise_details?: string;
+    healthy_food_notes?: string;
+    learning_subject?: string;
+    learning_details?: string;
+    social_activity_notes?: string;
 }
 
 export interface ParentDashboardData {
-  student: StudentInfo;
-  logs: CharacterLog[];
+    student: StudentInfo;
+    logs: CharacterLog[];
 }
 
-// [PERBAIKAN] Mengembalikan path ke '/api/parent' (singular) agar cocok dengan backend
+// --- Definisi Layanan API --- //
+
 const getDashboardData = async (): Promise<ParentDashboardData> => {
   try {
     const response = await apiClient.get<ParentDashboardData>('/api/parent/dashboard');
     return response.data;
   } catch (error) {
     if (axios.isAxiosError(error) && error.response) {
-        throw error; // Lempar error agar komponen bisa menangani status 404
+        throw error;
     } else {
-        throw new Error('Terjadi kesalahan yang tidak terduga.');
+        throw new Error('Kesalahan tak terduga saat mengambil data dasbor.');
     }
   }
 };
 
-// [PERBAIKAN] Mengembalikan path ke '/api/parent' (singular)
-const approveLog = async (logId: number): Promise<{ message: string }> => {
+// [PERBAIKAN] Tipe kembalian yang benar untuk approveLog
+const approveLog = async (logId: number): Promise<{ message: string; log: CharacterLog }> => {
     try {
         const response = await apiClient.patch(`/api/parent/approve/${logId}`);
         return response.data;
@@ -73,12 +77,11 @@ const approveLog = async (logId: number): Promise<{ message: string }> => {
         if (axios.isAxiosError(error) && error.response) {
             throw error;
         } else {
-            throw new Error('Terjadi kesalahan yang tidak terduga saat menyetujui log.');
+            throw new Error('Kesalahan tak terduga saat menyetujui log.');
         }
     }
 };
 
-// [PERBAIKAN] Mengembalikan path ke '/api/parent' (singular)
 const linkStudent = async (nisn: string): Promise<{ message: string; student: StudentInfo }> => {
     try {
         const response = await apiClient.post('/api/parent/link-student', { nisn });
@@ -87,16 +90,29 @@ const linkStudent = async (nisn: string): Promise<{ message: string; student: St
         if (axios.isAxiosError(error) && error.response) {
             throw error; 
         } else {
-            throw new Error('Terjadi kesalahan yang tidak terduga saat menautkan siswa.');
+            throw new Error('Kesalahan tak terduga saat menautkan siswa.');
         }
     }
 };
 
+const getLogHistory = async (): Promise<CharacterLog[]> => {
+    try {
+        const response = await apiClient.get<CharacterLog[]>('/api/parent/log-history');
+        return response.data;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response) {
+            throw error;
+        } else {
+            throw new Error('Gagal mengambil riwayat log dari server.');
+        }
+    }
+};
 
 const parentService = {
   getDashboardData,
   approveLog,
   linkStudent,
+  getLogHistory,
 };
 
 export default parentService;

@@ -1,118 +1,70 @@
 
 import React from 'react';
 import { CharacterLog } from '../../../services/parentService';
-import { FaTimes, FaBed, FaSun, FaDumbbell, FaBook, FaUsers, FaPrayingHands, FaUtensils, FaCheck } from 'react-icons/fa';
+import { X, ThumbsUp, Loader } from 'lucide-react';
 
 interface ApprovalModalProps {
   isOpen: boolean;
   log: CharacterLog | null;
   onClose: () => void;
   onApprove: (logId: number) => void;
-  isApproving: boolean; // <-- [PERBAIKAN] Menambahkan prop isApproving
+  isApproving: boolean;
 }
 
-const DetailItem: React.FC<{ icon: React.ElementType, label: string, value: React.ReactNode }> = ({ icon: Icon, label, value }) => (
-    <div className="flex items-start py-3">
-        <Icon className="text-blue-500 mt-1 mr-4 flex-shrink-0" size={20} />
-        <div>
-            <p className="font-semibold text-gray-700">{label}</p>
-            <div className="text-gray-600 text-md">{value}</div>
-        </div>
-    </div>
-);
+// Perbaikan: Fungsi ini sekarang menerima tipe `string | Date` untuk lebih aman.
+const formatDate = (dateInput: string | Date) => {
+    if (!dateInput) return "Tanggal tidak valid";
+    // Menggunakan new Date() untuk menangani string atau objek Date.
+    return new Date(dateInput).toLocaleDateString('id-ID', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    });
+};
 
 const ApprovalModal: React.FC<ApprovalModalProps> = ({ isOpen, log, onClose, onApprove, isApproving }) => {
   if (!isOpen || !log) return null;
 
-  const worshipDisplay = Array.isArray(log.worship_activities) ? log.worship_activities.join(', ') : 'Tidak ada data';
+  // Perbaikan: Logika untuk menampilkan worship_activities dibuat lebih kuat.
+  // Ini memastikan kita hanya memanggil .join() pada sebuah array.
+  const worshipActivitiesText = (Array.isArray(log.worship_activities) && log.worship_activities.length > 0)
+      ? log.worship_activities.join(', ')
+      : 'Tidak ada';
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4 transition-opacity duration-300">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col transform transition-all duration-300 scale-95 animate-modal-pop-in">
-            
-            <div className="flex justify-between items-center p-5 border-b border-gray-200 sticky top-0 bg-white rounded-t-2xl z-10">
-                <div>
-                    <h2 className="text-2xl font-bold text-gray-800">Detail Catatan Harian</h2>
-                    <p className="text-gray-500">Tanggal: {new Date(log.log_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-                </div>
-                <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-2 rounded-full transition">
-                    <FaTimes size={24} />
-                </button>
-            </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 relative animate-fade-in-up">
+        <button onClick={onClose} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600">
+          <X size={24} />
+        </button>
+        
+        <h2 className="text-xl font-bold text-gray-800">Tinjau dan Setujui</h2>
+        <p className="text-sm text-gray-500 mb-4">{formatDate(log.log_date)}</p>
 
-            <div className="p-6 overflow-y-auto flex-grow">
-              {/* ... (Detail items tidak berubah) ... */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                    
-                    <DetailItem icon={FaSun} label="Jam Bangun Tidur" value={`${log.wake_up_time} WIB`} />
-                    
-                    <DetailItem icon={FaBed} label="Jam Tidur Malam" value={`${log.sleep_time} WIB`} />
-
-                    <DetailItem 
-                        icon={FaPrayingHands} 
-                        label="Aktivitas Ibadah" 
-                        value={worshipDisplay}
-                    />
-
-                    <DetailItem 
-                        icon={FaUtensils} 
-                        label="Makan Makanan Sehat" 
-                        value={log.healthy_food_notes || 'Tidak ada catatan khusus'}
-                    />
-
-                    <div className="md:col-span-2 border-t pt-4 mt-2">
-                        <DetailItem 
-                            icon={FaDumbbell} 
-                            label={`Olahraga (${log.exercise_type})`} 
-                            value={log.exercise_details || 'Tidak ada detail tambahan'}
-                        />
-                    </div>
-
-                    <div className="md:col-span-2 border-t pt-4 mt-2">
-                        <DetailItem 
-                            icon={FaBook} 
-                            label={`Belajar Mandiri (${log.learning_subject})`}
-                            value={log.learning_details || 'Tidak ada detail tambahan'}
-                        />
-                    </div>
-
-                     <div className="md:col-span-2 border-t pt-4 mt-2">
-                        <DetailItem 
-                            icon={FaUsers} 
-                            label="Aktivitas Sosial / Membantu Orang Tua"
-                            value={log.social_activity_notes || 'Tidak ada catatan khusus'}
-                        />
-                    </div>
-                </div>
-            </div>
-
-            <div className="flex justify-end items-center p-5 border-t border-gray-200 sticky bottom-0 bg-white rounded-b-2xl z-10">
-                <button 
-                    onClick={onClose} 
-                    className="px-6 py-2 mr-3 text-gray-700 bg-gray-100 font-semibold rounded-lg hover:bg-gray-200 transition"
-                >
-                    Tutup
-                </button>
-                {/* [PERBAIKAN] Tombol sekarang akan dinonaktifkan saat isApproving true */}
-                <button 
-                    onClick={() => onApprove(log.id)} 
-                    disabled={isApproving} // Menonaktifkan tombol
-                    className={`px-6 py-2 text-white font-semibold rounded-lg shadow-md transition flex items-center ${isApproving ? 'bg-green-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
-                >
-                    <FaCheck className="mr-2"/>
-                    {isApproving ? 'Memproses...' : 'Setujui Log Ini'} 
-                </button>
-            </div>
+        <div className="space-y-2 text-sm text-gray-700 mb-6">
+          <p><strong>Bangun Pagi:</strong> {log.wake_up_time || '-'}</p>
+          <p><strong>Tidur Malam:</strong> {log.sleep_time || '-'}</p>
+          <p><strong>Aktivitas Ibadah:</strong> {worshipActivitiesText}</p>
+          <p><strong>Belajar:</strong> {log.learning_details || '-'}</p>
+          <p><strong>Olahraga:</strong> {log.exercise_details || '-'}</p>
         </div>
-         <style>{`
-            @keyframes modal-pop-in {
-                from { transform: scale(0.95); opacity: 0; }
-                to { transform: scale(1); opacity: 1; }
-            }
-            .animate-modal-pop-in {
-                animation: modal-pop-in 0.3s ease-out forwards;
-            }
-        `}</style>
+
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 font-semibold"
+            disabled={isApproving}
+          >
+            Batal
+          </button>
+          <button
+            onClick={() => onApprove(log.id)}
+            className="px-4 py-2 rounded-md text-white bg-green-600 hover:bg-green-700 font-semibold flex items-center justify-center disabled:bg-green-400"
+            disabled={isApproving}
+          >
+            {isApproving ? <Loader className="animate-spin mr-2" size={20} /> : <ThumbsUp className="mr-2" size={20} />}
+            {isApproving ? 'Memproses...' : 'Setujui'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

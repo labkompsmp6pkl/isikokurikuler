@@ -1,11 +1,16 @@
 
 import { Router } from 'express';
-import { getDashboardData, approveCharacterLog, linkStudent } from '../controllers/parentController';
+import { 
+    getDashboardData, 
+    approveCharacterLog, 
+    linkStudent, 
+    getLogHistory // [FITUR BARU] Impor controller baru
+} from '../controllers/parentController';
 import { authMiddleware, roleMiddleware } from '../middleware/authMiddleware'; 
 
 const router = Router();
 
-// Rute yang ada untuk mengambil data dasbor
+// Mengambil data dasbor utama (log terbatas)
 router.get(
     '/dashboard',
     authMiddleware, 
@@ -13,7 +18,15 @@ router.get(
     getDashboardData 
 );
 
-// Rute yang ada untuk menyetujui log karakter
+// [FITUR BARU] Mengambil seluruh riwayat log untuk kalender
+router.get(
+    '/log-history',
+    authMiddleware,
+    roleMiddleware(['parent']),
+    getLogHistory
+);
+
+// Menyetujui sebuah log karakter
 router.patch(
     '/approve/:logId',
     authMiddleware,
@@ -21,12 +34,12 @@ router.patch(
     approveCharacterLog
 );
 
-// [FITUR BARU] Rute untuk menautkan akun orang tua ke siswa
+// Menautkan akun orang tua ke siswa via NISN
 router.post(
     '/link-student',
-    authMiddleware, // Memastikan pengguna sudah login
-    roleMiddleware(['parent']), // Memastikan hanya orang tua yang bisa mengakses
-    linkStudent // Menghubungkan ke fungsi controller yang baru
+    authMiddleware,
+    roleMiddleware(['parent']),
+    linkStudent
 );
 
 export default router;

@@ -1,9 +1,12 @@
+
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import parentService, { ParentDashboardData, CharacterLog } from '../../services/parentService';
 import Spinner from './student/components/Spinner';
 import ApprovalPanel from './parent/ApprovalPanel';
 import Navbar from '../../components/Navbar';
+import HistoryCalendar from './parent/HistoryCalendar';
+import WeeklyAnalyticsChart from './parent/WeeklyAnalyticsChart';
 
 // Komponen Form untuk Menautkan Akun Siswa
 const LinkStudentForm: React.FC<{ onLinkSuccess: (data: ParentDashboardData) => void }> = ({ onLinkSuccess }) => {
@@ -22,9 +25,10 @@ const LinkStudentForm: React.FC<{ onLinkSuccess: (data: ParentDashboardData) => 
         const toastId = toast.loading('Menghubungkan dengan data siswa...');
 
         try {
-            const result = await parentService.linkStudent(nisn);
-            toast.success(result.message || 'Siswa berhasil ditautkan!', { id: toastId });
-            onLinkSuccess({ student: result.student, logs: [] }); 
+            await parentService.linkStudent(nisn);
+            toast.success('Siswa berhasil ditautkan!', { id: toastId });
+            const initialData = await parentService.getDashboardData();
+            onLinkSuccess(initialData);
         } catch (err: any) {
             const message = err.response?.data?.message || 'Gagal menautkan siswa.';
             setLinkError(message);
@@ -101,16 +105,18 @@ const ParentDashboard: React.FC = () => {
     const handleApprovalSuccess = (updatedLog: CharacterLog) => {
         setDashboardData(prevData => {
             if (!prevData) return null;
+
+            // [PERBAIKAN] Hapus tipe yang salah dan biarkan TypeScript menyimpulkan tipe `log`
             const updatedLogs = prevData.logs.map(log => 
                 log.id === updatedLog.id ? updatedLog : log
             );
+            
             return { ...prevData, logs: updatedLogs };
         });
     };
-
-    const handleLinkSuccess = async (linkedData: ParentDashboardData) => {
-        setDashboardData(linkedData);
-        await fetchData(); 
+    
+    const handleLinkSuccess = (data: ParentDashboardData) => {
+        setDashboardData(data);
     };
     
     if (isLoading) {
@@ -162,13 +168,10 @@ const ParentDashboard: React.FC = () => {
                         <div className="space-y-8">
                              <div className="bg-white p-6 rounded-xl shadow-lg">
                                 <h2 className="text-2xl font-semibold mb-4 text-gray-700">Analisis Mingguan</h2>
-                                <p className='text-gray-500'>Segera hadir: Grafik visual untuk memantau konsistensi kebiasaan.</p>
+                                <WeeklyAnalyticsChart />
                             </div>
 
-                            <div className="bg-white p-6 rounded-xl shadow-lg">
-                                <h2 className="text-2xl font-semibold mb-4 text-gray-700">Riwayat Lengkap</h2>
-                                <p className='text-gray-500'>Segera hadir: Kalender interaktif untuk melihat riwayat log.</p>
-                            </div>
+                            <HistoryCalendar />
                         </div>
                     </div>
                 </div>

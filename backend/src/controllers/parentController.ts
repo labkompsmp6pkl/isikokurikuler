@@ -1,4 +1,3 @@
-
 import { Request, Response } from 'express';
 import db from '../config/db'; 
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
@@ -11,114 +10,145 @@ interface CharacterLog {
     worship_activities?: string[] | string;
 }
 
+// --- Helper untuk memproses log --- //
+const processLogs = (logs: any[]): CharacterLog[] => {
+    return logs.map((log: CharacterLog) => {
+        if (log.worship_activities && typeof log.worship_activities === 'string') {
+            try {
+                log.worship_activities = JSON.parse(log.worship_activities);
+            } catch (e) {
+                log.worship_activities = [];
+            }
+        } else if (!log.worship_activities) {
+            log.worship_activities = [];
+        }
+        return log;
+    });
+};
+
+
+// --- Controller untuk Dasbor Utama (data terbatas) --- //
 export const getDashboardData = async (req: AuthenticatedRequest, res: Response) => {
     const parentId = req.user?.id;
-
-    if (!parentId) {
-        return res.status(401).json({ message: 'Akses ditolak. Token tidak valid.' });
-    }
+    if (!parentId) return res.status(401).json({ message: 'Akses ditolak.' });
 
     try {
-        // [PERBAIKAN] Mengganti 'fullName' menjadi 'full_name' agar sesuai dengan skema database
         const [studentRows]: any = await db.execute(
             'SELECT id, full_name, class FROM users WHERE parent_id = ? AND role = \'student\' LIMIT 1',
             [parentId]
         );
 
         if (studentRows.length === 0) {
-            return res.status(404).json({ message: 'Tidak ada data siswa yang terhubung dengan akun orang tua ini.' });
+            return res.status(404).json({ message: 'Tidak ada siswa terhubung.' });
         }
 
         const student = studentRows[0];
-        const studentId = student.id;
-
         const [logRows]: any = await db.execute(
-            'SELECT * FROM character_logs WHERE student_id = ? ORDER BY log_date DESC',
-            [studentId]
+            'SELECT * FROM character_logs WHERE student_id = ? ORDER BY log_date DESC LIMIT 15', // Ambil 15 log terbaru
+            [student.id]
         );
 
-        const processedLogs = logRows.map((log: CharacterLog) => {
-            if (log.worship_activities && typeof log.worship_activities === 'string') {
-                try {
-                    log.worship_activities = JSON.parse(log.worship_activities);
-                } catch (e) {
-                    log.worship_activities = [];
-                }
-            } else if (!log.worship_activities) {
-                log.worship_activities = [];
-            }
-            return log;
-        });
-
-        // [PERBAIKAN] Mengirim data siswa dengan nama properti yang konsisten (camelCase) ke frontend
         res.json({
             student: {
                 id: student.id,
-                fullName: student.full_name, // Mengubah snake_case ke camelCase
+                fullName: student.full_name,
                 class: student.class
             },
-            logs: processedLogs,
+            logs: processLogs(logRows),
         });
 
     } catch (error) {
         console.error('Error in getDashboardData (Parent):', error);
-        res.status(500).json({ message: 'Kesalahan Server Internal', error: (error as Error).message });
+        res.status(500).json({ message: 'Kesalahan Server Internal' });
     }
 };
 
-export const approveCharacterLog = async (req: AuthenticatedRequest, res: Response) => {
+// --- [FITUR BARU] Controller untuk mengambil SEMUA riwayat log --- //
+export const getLogHistory = async (req: AuthenticatedRequest, res: Response) => {
     const parentId = req.user?.id;
-    const { logId } = req.params;
-
-    if (!parentId) {
-        return res.status(401).json({ message: 'Akses ditolak.' });
-    }
+    if (!parentId) return res.status(401).json({ message: 'Akses ditolak.' });
 
     try {
-        const [verificationRows]: any = await db.execute(`
-            SELECT cl.id
-            FROM character_logs cl
-            JOIN users s ON cl.student_id = s.id
-            WHERE cl.id = ? AND s.parent_id = ?
-        `, [logId, parentId]);
+        // 1. Dapatkan ID siswa yang terhubung dengan orang tua
+        const [studentRows]: any = await db.execute(
+            'SELECT id FROM users WHERE parent_id = ? AND role = \'student\' LIMIT 1',
+            [parentId]
+        );
 
-        if (verificationRows.length === 0) {
-            return res.status(404).json({ message: 'Log tidak ditemukan atau Anda tidak memiliki izin untuk menyetujui log ini.' });
+        if (studentRows.length === 0) {
+            return res.status(404).json({ message: 'Tidak ada siswa terhubung.' });
+        }
+
+        const studentId = studentRows[0].id;
+
+        // 2. Ambil semua log untuk siswa tersebut
+        const [logRows]: any = await db.execute(
+            'SELECT * FROM character_logs WHERE student_id = ? ORDER BY log_date DESC',
+            [studentId]
+        );
+        
+        // 3. Proses dan kirim data
+        res.json(processLogs(logRows));
+
+    } catch (error) {
+        console.error('Error fetching log history:', error);
+        res.status(500).json({ message: 'Gagal mengambil riwayat log.' });
+    }
+};
+
+
+// --- Controller untuk menyetujui log (tidak berubah) --- //
+export const approveCharacterLog = async (req: AuthenticatedRequest, res: Response) => {
+    const { logId } = req.params;
+    const parentId = req.user?.id;
+
+    try {
+        // Verifikasi bahwa log milik siswa dari orang tua ini
+        const [logRows]: any = await db.execute(
+            `SELECT cl.id FROM character_logs cl
+             JOIN users s ON cl.student_id = s.id
+             WHERE cl.id = ? AND s.parent_id = ?`,
+            [logId, parentId]
+        );
+
+        if (logRows.length === 0) {
+            return res.status(403).json({ message: 'Akses ditolak untuk log ini.' });
         }
 
         const [updateResult]: any = await db.execute(
-            'UPDATE character_logs SET status = ? WHERE id = ?',
-            ['Disetujui', logId]
+            "UPDATE character_logs SET status = 'Disetujui' WHERE id = ?",
+            [logId]
         );
 
         if (updateResult.affectedRows === 0) {
-            return res.status(404).json({ message: 'Gagal memperbarui log. Log tidak ditemukan.' });
+            return res.status(404).json({ message: 'Log tidak ditemukan.' });
         }
+        
+        const [updatedLogRows]: any = await db.execute('SELECT * FROM character_logs WHERE id = ?', [logId]);
 
-        res.status(200).json({ message: 'Log berhasil disetujui.' });
+        res.json({ 
+            message: 'Log berhasil disetujui.',
+            log: processLogs(updatedLogRows)[0] 
+        });
 
     } catch (error) {
-        console.error('Error in approveCharacterLog:', error);
-        res.status(500).json({ message: 'Kesalahan Server Internal', error: (error as Error).message });
+        console.error('Error approving log:', error);
+        res.status(500).json({ message: 'Gagal menyetujui log.' });
     }
 };
 
+// --- Controller untuk menautkan siswa (tidak berubah) --- //
 export const linkStudent = async (req: AuthenticatedRequest, res: Response) => {
     const parentId = req.user?.id;
-    const { nisn } = req.body; // Mengambil NISN dari body permintaan
-
-    if (!parentId) {
-        return res.status(401).json({ message: 'Akses ditolak. Anda harus masuk sebagai orang tua.' });
-    }
+    const { nisn } = req.body;
 
     if (!nisn) {
-        return res.status(400).json({ message: 'NISN siswa diperlukan untuk menautkan akun.' });
+        return res.status(400).json({ message: 'NISN diperlukan.' });
     }
 
     try {
-        // 1. Cari siswa di database berdasarkan NISN dan pastikan perannya adalah 'student'
         const [studentRows]: any = await db.execute(
-            'SELECT * FROM users WHERE nisn = ? AND role = \'student\'',
+            'SELECT id, full_name, class, parent_id FROM users WHERE nisn = ? AND role = \'student\' LIMIT 1',
             [nisn]
         );
 
@@ -128,39 +158,33 @@ export const linkStudent = async (req: AuthenticatedRequest, res: Response) => {
 
         const student = studentRows[0];
 
-        // 2. Periksa apakah siswa sudah memiliki orang tua yang tertaut
-        if (student.parent_id) {
-            if (student.parent_id === parentId) {
-                 return res.status(200).json({ 
-                    message: 'Akun Anda sudah terhubung dengan siswa ini.',
-                    student: {
-                        id: student.id,
-                        fullName: student.full_name,
-                        class: student.class,
-                    }
-                });
-            }
+        if (student.parent_id && student.parent_id !== parentId) {
             return res.status(409).json({ message: 'Siswa ini sudah terhubung dengan akun orang tua lain.' });
         }
+        
+        if (student.parent_id === parentId) {
+             return res.status(200).json({ 
+                message: 'Akun Anda sudah terhubung dengan siswa ini.',
+                student: { id: student.id, fullName: student.full_name, class: student.class }
+            });
+        }
 
-        // 3. Jika belum, perbarui kolom parent_id siswa dengan id orang tua
         await db.execute(
             'UPDATE users SET parent_id = ? WHERE id = ?',
             [parentId, student.id]
         );
 
-        // 4. Kirim respons sukses beserta data siswa yang baru ditautkan
         res.status(200).json({
-            message: 'Akun siswa berhasil ditautkan!',
+            message: 'Akun berhasil ditautkan dengan siswa.',
             student: {
                 id: student.id,
                 fullName: student.full_name,
-                class: student.class,
+                class: student.class
             }
         });
 
     } catch (error) {
-        console.error('Error in linkStudent:', error);
-        res.status(500).json({ message: 'Terjadi kesalahan pada server saat mencoba menautkan siswa.' });
+        console.error('Error linking student:', error);
+        res.status(500).json({ message: 'Kesalahan server saat mencoba menautkan siswa.' });
     }
 };

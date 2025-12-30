@@ -7,11 +7,9 @@ import { FaRegCalendarAlt, FaCheckCircle, FaHourglassHalf } from 'react-icons/fa
 
 interface ApprovalPanelProps {
   logs: CharacterLog[];
-  // [PERUBAHAN] onApprove sekarang menerima log yang diperbarui dan memperbarui state induk
   onApproveSuccess: (updatedLog: CharacterLog) => void; 
 }
 
-// ... (Komponen LogItem tidak berubah) ...
 const LogItem: React.FC<{ log: CharacterLog, onSelect: (log: CharacterLog) => void }> = ({ log, onSelect }) => {
     const isApproved = log.status === 'Disetujui';
     const statusIcon = isApproved ? 
@@ -53,20 +51,19 @@ const ApprovalPanel: React.FC<ApprovalPanelProps> = ({ logs, onApproveSuccess })
   const handleCloseModal = () => setSelectedLog(null);
 
   const handleApproveLog = async (logId: number) => {
-    if (isApproving || !selectedLog) return;
+    if (isApproving) return;
 
     setIsApproving(true);
     const toastId = toast.loading('Menyetujui log...');
 
     try {
-        await parentService.approveLog(logId);
+        // Panggil API, dapatkan log yang sudah diupdate dari respons
+        const response = await parentService.approveLog(logId);
         
-        // Membuat objek log yang diperbarui secara lokal
-        const updatedLog = { ...selectedLog, status: 'Disetujui' as const };
-
-        onApproveSuccess(updatedLog);
+        // Teruskan log yang sudah diperbarui dari API ke fungsi state induk
+        onApproveSuccess(response.log); 
+        
         toast.success('Log berhasil disetujui!', { id: toastId });
-
         handleCloseModal();
     } catch (error: any) {
         toast.error(error.message || 'Gagal menyetujui log.', { id: toastId });
@@ -75,20 +72,22 @@ const ApprovalPanel: React.FC<ApprovalPanelProps> = ({ logs, onApproveSuccess })
     }
   };
 
-  if (logs.length === 0) {
+  const pendingLogs = logs.filter(log => log.status !== 'Disetujui');
+
+  if (pendingLogs.length === 0) {
     return (
         <div className="text-center py-12 px-6 bg-gray-50 rounded-lg">
             <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
             <h3 className="mt-2 text-xl font-semibold text-gray-800">Semua Sudah Beres!</h3>
-            <p className="mt-1 text-gray-500">Anak Anda belum mengisi catatan baru yang perlu ditinjau.</p>
+            <p className="mt-1 text-gray-500">Tidak ada catatan baru yang perlu Anda tinjau saat ini.</p>
         </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-semibold text-gray-800 mb-4">Catatan Harian Perlu Tinjauan</h2>
-      {logs.map(log => (
+      <h2 className="text-2xl font-semibold text-gray-800 mb-4">Catatan Perlu Tinjauan</h2>
+      {pendingLogs.map(log => (
         <LogItem key={log.id} log={log} onSelect={handleSelectLog} />
       ))}
 
@@ -97,7 +96,6 @@ const ApprovalPanel: React.FC<ApprovalPanelProps> = ({ logs, onApproveSuccess })
         log={selectedLog}
         onClose={handleCloseModal}
         onApprove={handleApproveLog}
-        // [PENAMBAHAN] Melewatkan state isApproving untuk menonaktifkan tombol saat sedang proses
         isApproving={isApproving} 
       />
     </div>

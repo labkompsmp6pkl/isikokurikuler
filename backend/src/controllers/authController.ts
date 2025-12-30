@@ -4,22 +4,52 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 
+// --- Konfigurasi Klien Google OAuth ---
 const client = new OAuth2Client(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
   process.env.GOOGLE_CALLBACK_URL
 );
 
+// --- Daftar URL Frontend yang Diizinkan ---
+const ALLOWED_ORIGINS = [
+  'https://isikokurikuler.vercel.app',
+  'https://kokurikuler.smpn6pekalongan.org',
+  'http://localhost:5173' // Tambahkan localhost untuk development
+];
+
+// 1. MENGALIHKAN PENGGUNA KE HALAMAN PERSETUJUAN GOOGLE
 export const googleLogin = (req: Request, res: Response) => {
+  const { origin } = req.query;
+
+  // Validasi origin yang dikirim dari frontend
+  // 'state' akan digunakan untuk menyimpan origin selama proses OAuth
+  let state: string;
+  if (origin && ALLOWED_ORIGINS.includes(origin as string)) {
+    state = origin as string;
+  } else {
+    // Jika origin tidak valid atau tidak ada, gunakan URL default dari .env atau localhost
+    state = process.env.FRONTEND_URL || 'http://localhost:5173';
+  }
+
   const url = client.generateAuthUrl({
     access_type: 'offline',
     scope: ['https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/userinfo.email'],
+    state: state // Teruskan origin yang valid sebagai state
   });
+
   res.redirect(url);
 };
 
+// 2. MENANGANI CALLBACK SETELAH AUTENTIKASI GOOGLE
 export const googleCallback = async (req: Request, res: Response) => {
-  const { code } = req.query;
+  const { code, state } = req.query; // Dapatkan 'state' yang berisi URL origin
+
+  // Tentukan URL dasar untuk pengalihan. Validasi lagi untuk keamanan.
+  const redirectBaseUrl = (state && ALLOWED_ORIGINS.includes(state as string)) 
+    ? state as string 
+    : (process.env.FRONTEND_URL || 'http://localhost:5173');
+
   try {
     const { tokens } = await client.getToken(code as string);
     client.setCredentials(tokens);
@@ -30,35 +60,28 @@ export const googleCallback = async (req: Request, res: Response) => {
     });
 
     const payload = ticket.getPayload();
-    if (!payload) {
-        throw new Error('Gagal mendapatkan informasi pengguna dari Google.');
-    }
+    if (!payload) throw new Error('Gagal mendapatkan informasi pengguna dari Google.');
 
     const { sub: google_id, email, name: full_name } = payload;
-
     const [rows]: any[] = await pool.query('SELECT * FROM users WHERE google_id = ?', [google_id]);
-    let user = rows[0];
+    const user = rows[0];
 
     if (user) {
-      // Jika pengguna ada, buat token dan kirim
       const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET as string, { expiresIn: '1h' });
-      // Redirect ke halaman login sukses di frontend dengan token
-      res.redirect(`http://localhost:5173/login/success?token=${token}`);
+      res.redirect(`${redirectBaseUrl}/login/success?token=${token}`);
     } else {
-      // Jika pengguna tidak ada, redirect ke halaman registrasi lanjutan
-      const queryParams = new URLSearchParams({
-          google_id,
-          email: email!,
-          full_name: full_name!
-      }).toString();
-      res.redirect(`http://localhost:5173/register/google?${queryParams}`);
+      const queryParams = new URLSearchParams({ google_id, email: email!, full_name: full_name! }).toString();
+      res.redirect(`${redirectBaseUrl}/register/google?${queryParams}`);
     }
+
   } catch (error) {
     console.error('Error during Google OAuth callback:', error);
-    res.status(500).redirect('/login?error=google-auth-failed');
+    res.redirect(`${redirectBaseUrl}/login?error=google-auth-failed`);
   }
 };
 
+
+// 3. LOGIN MANUAL (DENGAN USERNAME/PASSWORD)
 export const login = async (req: Request, res: Response) => {
   const { loginIdentifier, password } = req.body;
 
@@ -105,10 +128,11 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
+// 4. REGISTRASI (MANUAL DAN LANJUTAN DARI GOOGLE)
 export const register = async (req: Request, res: Response) => {
   const { fullName, password, role, nisn, nip, class: userClass, whatsappNumber, google_id, email, provider } = req.body;
 
-  // Registrasi via Google
+  // A. Registrasi lanjutan via Google
   if (provider === 'google' && google_id) {
     try {
       const [existingUsers]: any[] = await pool.query('SELECT id FROM users WHERE google_id = ?', [google_id]);
@@ -132,7 +156,7 @@ export const register = async (req: Request, res: Response) => {
     }
   }
 
-  // Registrasi manual
+  // B. Registrasi manual
   if (!fullName || !password || !role) {
     return res.status(400).json({ message: 'Bidang wajib tidak boleh kosong.' });
   }

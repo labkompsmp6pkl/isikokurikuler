@@ -51,7 +51,10 @@ const Login: React.FC = () => {
   };
 
   const handleGoogleLogin = () => {
-    const googleLoginUrl = `${import.meta.env.VITE_API_URL}/auth/google`;
+    // Dapatkan origin saat ini (misal: https://isikokurikuler.vercel.app)
+    const origin = window.location.origin;
+    // Bangun URL dengan menyertakan origin sebagai query parameter
+    const googleLoginUrl = `${import.meta.env.VITE_API_URL}/api/auth/google?origin=${encodeURIComponent(origin)}`;
     window.location.href = googleLoginUrl;
   };
 

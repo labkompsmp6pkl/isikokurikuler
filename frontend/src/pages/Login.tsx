@@ -51,7 +51,7 @@ const Login: React.FC = () => {
   };
 
   const handleGoogleLogin = () => {
-    const googleLoginUrl = `${import.meta.env.VITE_API_URL}/api/auth/google`;
+    const googleLoginUrl = `${import.meta.env.VITE_API_URL}/auth/google`;
     window.location.href = googleLoginUrl;
   };
 

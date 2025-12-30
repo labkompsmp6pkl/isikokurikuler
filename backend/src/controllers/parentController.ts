@@ -1,7 +1,6 @@
 
 import { Request, Response } from 'express';
 import db from '../config/db'; 
-// [PERBAIKAN] Impor 'AuthenticatedRequest' dari file middleware yang benar
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 
 interface CharacterLog {
@@ -20,8 +19,9 @@ export const getDashboardData = async (req: AuthenticatedRequest, res: Response)
     }
 
     try {
+        // [PERBAIKAN] Mengganti 'fullName' menjadi 'full_name' agar sesuai dengan skema database
         const [studentRows]: any = await db.execute(
-            'SELECT id, fullName, class FROM users WHERE parent_id = ? AND role = \'student\' LIMIT 1',
+            'SELECT id, full_name, class FROM users WHERE parent_id = ? AND role = \'student\' LIMIT 1',
             [parentId]
         );
 
@@ -50,8 +50,13 @@ export const getDashboardData = async (req: AuthenticatedRequest, res: Response)
             return log;
         });
 
+        // [PERBAIKAN] Mengirim data siswa dengan nama properti yang konsisten (camelCase) ke frontend
         res.json({
-            student: student,
+            student: {
+                id: student.id,
+                fullName: student.full_name, // Mengubah snake_case ke camelCase
+                class: student.class
+            },
             logs: processedLogs,
         });
 

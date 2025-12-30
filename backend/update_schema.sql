@@ -38,4 +38,12 @@ CREATE TABLE `character_logs` (
   UNIQUE KEY `student_log_date_unique` (`student_id`, `log_date`)
 ) COMMENT='Pencatatan karakter harian oleh siswa';
 
+-- Perubahan untuk Fitur Google SSO/OAuth
+ALTER TABLE `users`
+  ADD COLUMN `google_id` VARCHAR(255) UNIQUE DEFAULT NULL AFTER `class`,
+  ADD COLUMN `provider` VARCHAR(50) NOT NULL DEFAULT 'local' AFTER `google_id`;
+
+ALTER TABLE `users`
+  MODIFY COLUMN `password` VARCHAR(255) DEFAULT NULL;
+
 COMMIT;

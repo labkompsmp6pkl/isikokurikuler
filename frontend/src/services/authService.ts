@@ -1,29 +1,33 @@
 import axios from 'axios';
 
-// Tentukan tipe data yang lebih detail untuk registrasi
-interface RegistrationData {
+// Tipe data diperbarui untuk mengakomodasi pendaftaran via Google dan diekspor
+export interface RegistrationData {
   fullName: string;
-  password: string;
   role: 'student' | 'teacher' | 'contributor' | 'parent';
+  password?: string; // Dijadikan opsional karena tidak ada saat daftar dengan Google
   nisn?: string;
   nip?: string;
   class?: string;
   whatsappNumber?: string;
+  provider?: 'google'; // Opsional, untuk menandakan pendaftaran via Google
+  google_id?: string;   // Opsional, ID Google pengguna
+  email?: string;       // Opsional, email dari Google
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+// Menggunakan VITE_API_URL yang konsisten
+const API_URL = import.meta.env.VITE_API_BASE_URL;
 
 const authApi = axios.create({
-  baseURL: `${API_BASE_URL}/auth`
+  // Mengatur base URL yang benar untuk endpoint otentikasi
+  baseURL: `${API_URL}/auth`
 });
 
-// --- PERBAIKAN DI SINI ---
-// Fungsi login diperbarui untuk mengirim 'loginIdentifier' agar sesuai dengan backend.
+// Fungsi login tetap sama
 const login = (loginIdentifier: string, password: string) => {
   return authApi.post('/login', { loginIdentifier, password });
 };
 
-// Fungsi untuk mendaftar (sudah benar, tidak ada perubahan)
+// Fungsi register sekarang menerima data yang lebih fleksibel
 const register = (data: RegistrationData) => {
   return authApi.post('/register', data);
 };

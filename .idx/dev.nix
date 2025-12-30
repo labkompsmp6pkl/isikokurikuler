@@ -31,6 +31,8 @@
           sleep 5 # Tunggu server siap
           mysql -u root -e "CREATE DATABASE IF NOT EXISTS isokul;"
           mysql -u root isokul < backend/schema.sql
+          # Jalankan skrip update jika ada
+          mysql -u root isokul < backend/update_schema.sql
         '';
       };
       

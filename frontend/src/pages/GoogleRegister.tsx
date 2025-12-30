@@ -1,58 +1,72 @@
-import React, { useState, FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, FormEvent, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import authService from '../services/authService';
+import authService, { RegistrationData } from '../services/authService'; // Impor tipe RegistrationData
 
 type Role = 'student' | 'teacher' | 'parent' | 'contributor';
 
-const Register: React.FC = () => {
+const GoogleRegister: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
   const [selectedRole, setSelectedRole] = useState<Role>('student');
   const [formData, setFormData] = useState({
     fullName: '',
-    password: '',
-    confirmPassword: '',
     nisn: '',
     nip: '',
     whatsappNumber: '',
     class: '',
+    google_id: '',
+    email: '',
   });
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
-  const navigate = useNavigate();
 
   // Opsi kelas untuk dropdown
   const classOptions = ['7A', '7B', '7C', '7D', '8A', '8B', '8C', '8D', '9A', '9B', '9C', '9D'];
+
+  useEffect(() => {
+    const google_id = searchParams.get('google_id');
+    const email = searchParams.get('email');
+    const full_name = searchParams.get('full_name');
+    if (google_id && email && full_name) {
+      setFormData(prev => ({
+        ...prev,
+        google_id,
+        email,
+        fullName: full_name,
+      }));
+    } else {
+      navigate('/register');
+      toast.error('Informasi dari Google tidak lengkap. Silakan coba lagi.');
+    }
+  }, [searchParams, navigate]);
 
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    if (formData.password !== formData.confirmPassword) {
-      setError('Password dan konfirmasi password tidak cocok.');
-      setLoading(false);
-      toast.error('Password tidak cocok!');
-      return;
-    }
-
-    const loadingToast = toast.loading('Mendaftarkan akun...');
+    const loadingToast = toast.loading('Menyelesaikan pendaftaran...');
 
     try {
-      const registrationData = {
+      const registrationData: RegistrationData = {
+        provider: 'google',
+        google_id: formData.google_id,
+        email: formData.email,
         role: selectedRole,
         fullName: formData.fullName,
-        password: formData.password,
         nisn: selectedRole === 'student' ? formData.nisn : undefined,
         nip: selectedRole === 'teacher' || selectedRole === 'contributor' ? formData.nip : undefined,
         whatsappNumber: selectedRole === 'parent' ? formData.whatsappNumber : undefined,
         class: (selectedRole === 'student' || selectedRole === 'teacher') ? formData.class : undefined,
       };
-      
+
       await authService.register(registrationData);
       
       toast.dismiss(loadingToast);
       toast.success('Pendaftaran berhasil! Silakan masuk.');
-      
+
       setTimeout(() => {
         navigate('/login');
       }, 1000);
@@ -71,11 +85,6 @@ const Register: React.FC = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleGoogleRegister = () => {
-    const googleLoginUrl = `${import.meta.env.VITE_API_BASE_URL}/api/auth/google`;
-    window.location.href = googleLoginUrl;
-  };
-  
   const roles: { key: Role; label: string }[] = [
     { key: 'student', label: 'Siswa' },
     { key: 'teacher', label: 'Guru' },
@@ -95,31 +104,14 @@ const Register: React.FC = () => {
             alt="Logo SMPN 6 Pekalongan"
           />
           <h2 className="mt-4 text-3xl font-extrabold text-gray-900">
-            Buat Akun Baru
+            Selesaikan Pendaftaran Google Anda
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Pilih peran Anda untuk memulai
+            Pilih peran Anda dan lengkapi detail di bawah ini untuk menyelesaikan pendaftaran.
           </p>
         </div>
 
         <div className="bg-white shadow-xl rounded-2xl p-8">
-          <div>
-            <button
-              onClick={handleGoogleRegister}
-              type="button"
-              className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              <img className="h-5 w-5 mr-3" src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google logo" />
-              Daftar dengan Google
-            </button>
-          </div>
-
-          <div className="relative flex py-5 items-center">
-            <div className="flex-grow border-t border-gray-300"></div>
-            <span className="flex-shrink mx-4 text-gray-500 text-sm">Atau isi form di bawah</span>
-            <div className="flex-grow border-t border-gray-300"></div>
-          </div>
-
           <div className="mb-6 border-b border-gray-200">
             <nav className="-mb-px flex space-x-2 sm:space-x-4 overflow-x-auto" aria-label="Tabs">
               {roles.map((role) => (
@@ -141,10 +133,12 @@ const Register: React.FC = () => {
           
           <form onSubmit={handleRegister} className="space-y-5">
             <input type="hidden" name="role" value={selectedRole} />
+            <input type="hidden" name="google_id" value={formData.google_id} />
+            <input type="hidden" name="email" value={formData.email} />
             
             <div>
-              <label htmlFor="fullName" className="text-sm font-medium text-gray-700">Nama Lengkap</label>
-              <input id="fullName" name="fullName" type="text" required value={formData.fullName} onChange={handleInputChange} className="mt-1 input-field" placeholder="Masukkan nama lengkap Anda"/>
+                <label htmlFor="fullName" className="text-sm font-medium text-gray-700">Nama Lengkap</label>
+                <input id="fullName" name="fullName" type="text" required value={formData.fullName} onChange={handleInputChange} className="mt-1 input-field" placeholder="Masukkan nama lengkap Anda"/>
             </div>
 
             {selectedRole === 'student' && (
@@ -155,7 +149,7 @@ const Register: React.FC = () => {
                 </div>
                 <div>
                   <label htmlFor="class" className="text-sm font-medium text-gray-700">Kelas</label>
-                   <select id="class" name="class" required value={formData.class} onChange={handleInputChange} className="mt-1 input-field">
+                  <select id="class" name="class" required value={formData.class} onChange={handleInputChange} className="mt-1 input-field">
                     <option value="" disabled>Pilih kelas</option>
                     {classOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                   </select>
@@ -188,33 +182,14 @@ const Register: React.FC = () => {
               </div>
             )}
 
-            <div>
-              <label htmlFor="password">Password</label>
-              <input id="password" name="password" type="password" required value={formData.password} onChange={handleInputChange} className="mt-1 input-field" placeholder="Minimal 6 karakter"/>
-            </div>
-
-            <div>
-              <label htmlFor="confirmPassword">Konfirmasi Password</label>
-              <input id="confirmPassword" name="confirmPassword" type="password" required value={formData.confirmPassword} onChange={handleInputChange} className="mt-1 input-field" placeholder="Ulangi password Anda"/>
-            </div>
-
             {error && <p className="text-sm text-red-600 text-center">{error}</p>}
 
             <div className="pt-2">
               <button type="submit" disabled={loading} className="w-full btn-primary">
-                {loading ? 'MEMPROSES...' : 'DAFTAR'}
+                {loading ? 'MENDAFTAR...' : 'SELESAIKAN PENDAFTARAN'}
               </button>
             </div>
           </form>
-
-          <div className="mt-6 text-sm text-center text-gray-600">
-            <p>
-              Sudah punya akun?{' '}
-              <Link to="/login" className="font-medium text-blue-700 hover:text-blue-600 hover:underline">
-                Masuk di sini
-              </Link>
-            </p>
-          </div>
         </div>
       </div>
     </div>
@@ -264,4 +239,4 @@ const GlobalStyles = () => (
   `}</style>
 );
 
-export default Register;
+export default GoogleRegister;

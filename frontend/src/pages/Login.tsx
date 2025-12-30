@@ -4,8 +4,7 @@ import toast from 'react-hot-toast';
 import authService from '../services/authService';
 
 const Login: React.FC = () => {
-  const [loginIdentifier, setLoginIdentifier] = useState('');
-  const [password, setPassword] = useState('');
+  const [formData, setFormData] = useState({ loginIdentifier: '', password: '' });
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -13,22 +12,19 @@ const Login: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const loadingToast = toast.loading('Mencoba masuk...');
+    const loadingToast = toast.loading('Sedang masuk...');
 
     try {
-      const response = await authService.login(loginIdentifier, password);
+      const response = await authService.login(formData.loginIdentifier, formData.password);
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
-      
-      const user = response.data.user;
 
       toast.dismiss(loadingToast);
-      toast.success(`Halo, selamat datang ${user.fullName}!`);
+      toast.success('Login berhasil!');
 
-      // --- PERBAIKAN DI SINI ---
-      // Menggunakan window.location.href untuk memaksa pemuatan ulang halaman.
-      // Ini memastikan seluruh aplikasi me-reset state-nya dan membaca data user yang baru dari localStorage.
-      let targetPath = '/login'; // Default fallback
+      const user = response.data.user;
+      let targetPath = '/login'; // Fallback
+      
       switch (user.role) {
         case 'admin': targetPath = '/admin/dashboard'; break;
         case 'student': targetPath = '/student/dashboard'; break;
@@ -36,20 +32,27 @@ const Login: React.FC = () => {
         case 'parent': targetPath = '/parent/dashboard'; break;
         case 'contributor': targetPath = '/contributor/dashboard'; break;
       }
-      
-      // Delay singkat untuk memastikan pengguna melihat toast sebelum halaman dimuat ulang
-      setTimeout(() => {
-        window.location.href = targetPath;
-      }, 500); // 0.5 detik
+
+      // Menggunakan window.location.href untuk full page reload
+      window.location.href = targetPath;
 
     } catch (err: any) {
       toast.dismiss(loadingToast);
       const errorMessage = err.response?.data?.message || 'Login gagal. Periksa kredensial Anda.';
       toast.error(errorMessage);
       setError(errorMessage);
-      setLoading(false); // Pastikan loading berhenti pada error
+      setLoading(false);
     }
-    // Jangan set loading ke false di sini pada kasus sukses, karena halaman akan dimuat ulang
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleGoogleLogin = () => {
+    const googleLoginUrl = `${import.meta.env.VITE_API_URL}/api/auth/google`;
+    window.location.href = googleLoginUrl;
   };
 
   return (
@@ -69,64 +72,49 @@ const Login: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-white shadow-xl rounded-2xl p-8 space-y-6">
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label htmlFor="loginIdentifier" className="text-sm font-medium text-gray-700">
-                Email / NISN / NIP / No. WhatsApp
-              </label>
-              <input
-                id="loginIdentifier"
-                name="loginIdentifier"
-                type="text"
-                autoComplete="username"
-                required
-                className="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent sm:text-sm"
-                placeholder="Masukkan pengenal Anda"
-                value={loginIdentifier}
-                onChange={(e) => setLoginIdentifier(e.target.value)}
-              />
-            </div>
+        <form className="mt-8 space-y-6 bg-white shadow-xl rounded-2xl p-8" onSubmit={handleLogin}>
+          <div>
+            <button
+              onClick={handleGoogleLogin}
+              type="button"
+              className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              <img className="h-5 w-5 mr-3" src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google logo" />
+              Masuk dengan Google
+            </button>
+          </div>
 
-            <div>
-              <label htmlFor="password" className="text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                className="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent sm:text-sm"
-                placeholder="Masukkan password Anda"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            
-            {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+          <div className="relative flex py-5 items-center">
+            <div className="flex-grow border-t border-gray-300"></div>
+            <span className="flex-shrink mx-4 text-gray-500 text-sm">Atau masuk dengan</span>
+            <div className="flex-grow border-t border-gray-300"></div>
+          </div>
 
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 disabled:cursor-not-allowed"
-              >
-                {loading ? 'MEMPROSES...' : 'MASUK'}
-              </button>
+          <div className="rounded-md shadow-sm -space-y-px">
+            <div>
+              <label htmlFor="loginIdentifier" className="sr-only">NISN/NIP/No.Telp</label>
+              <input id="loginIdentifier" name="loginIdentifier" type="text" required value={formData.loginIdentifier} onChange={handleInputChange} className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm" placeholder="NISN/NIP/No.Telp" />
             </div>
-          </form>
-          
-          <div className="text-sm text-center text-gray-600">
-            <p>
-              Belum punya akun?{' '}
-              <Link to="/register" className="font-medium text-blue-700 hover:text-blue-600 hover:underline">
-                Daftar di sini
-              </Link>
+            <div>
+              <label htmlFor="password" className="sr-only">Password</label>
+              <input id="password" name="password" type="password" required value={formData.password} onChange={handleInputChange} className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm" placeholder="Password" />
+            </div>
+          </div>
+
+          {error && <p className="text-xs text-red-600 text-center">{error}</p>}
+
+          <div>
+            <button type="submit" disabled={loading} className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400">
+              {loading ? 'MEMPROSES...' : 'MASUK'}
+            </button>
+          </div>
+
+          <div className="text-sm text-center">
+            <p className="text-gray-600">
+              Belum punya akun? <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500 hover:underline">Daftar di sini</Link>
             </p>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );

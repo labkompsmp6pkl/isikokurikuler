@@ -6,6 +6,7 @@ import adminRoutes from './routes/adminRoutes';
 import studentRoutes from './routes/studentRoutes';
 import aiRoutes from './routes/aiRoutes';
 import characterRoutes from './routes/characterRoutes';
+import parentRoutes from './routes/parentRoutes'; // <-- [PENAMBAHAN] Impor rute orang tua
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,12 +39,10 @@ if (process.env.NODE_ENV === 'production') {
 
 } else {
   // UNTUK DEVELOPMENT: Izinkan semua origin dengan memantulkan origin yang masuk
-  // Ini adalah cara yang benar untuk mengizinkan semua origin saat credentials: true
   console.log('CORS running in DEVELOPMENT mode. Allowing all origins.');
   
   corsOptions = {
     origin: (origin, callback) => {
-      // Selalu izinkan origin yang masuk saat dalam mode development
       callback(null, true);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -68,6 +67,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/character', characterRoutes);
+app.use('/api/parent', parentRoutes); // <-- [PENAMBAHAN] Daftarkan rute orang tua
 
 app.listen(PORT, () => {
   console.log(`Backend server is running on http://localhost:${PORT}`);

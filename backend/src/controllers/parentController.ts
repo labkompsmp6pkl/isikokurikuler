@@ -1,0 +1,99 @@
+
+import { Request, Response } from 'express';
+import db from '../config/db'; 
+// [PERBAIKAN] Impor 'AuthenticatedRequest' dari file middleware yang benar
+import { AuthenticatedRequest } from '../middleware/authMiddleware';
+
+interface CharacterLog {
+    id: number;
+    student_id: number;
+    log_date: string;
+    status: 'Tersimpan' | 'Disetujui';
+    worship_activities?: string[] | string;
+}
+
+export const getDashboardData = async (req: AuthenticatedRequest, res: Response) => {
+    const parentId = req.user?.id;
+
+    if (!parentId) {
+        return res.status(401).json({ message: 'Akses ditolak. Token tidak valid.' });
+    }
+
+    try {
+        const [studentRows]: any = await db.execute(
+            'SELECT id, fullName, class FROM users WHERE parent_id = ? AND role = \'student\' LIMIT 1',
+            [parentId]
+        );
+
+        if (studentRows.length === 0) {
+            return res.status(404).json({ message: 'Tidak ada data siswa yang terhubung dengan akun orang tua ini.' });
+        }
+
+        const student = studentRows[0];
+        const studentId = student.id;
+
+        const [logRows]: any = await db.execute(
+            'SELECT * FROM character_logs WHERE student_id = ? ORDER BY log_date DESC',
+            [studentId]
+        );
+
+        const processedLogs = logRows.map((log: CharacterLog) => {
+            if (log.worship_activities && typeof log.worship_activities === 'string') {
+                try {
+                    log.worship_activities = JSON.parse(log.worship_activities);
+                } catch (e) {
+                    log.worship_activities = [];
+                }
+            } else if (!log.worship_activities) {
+                log.worship_activities = [];
+            }
+            return log;
+        });
+
+        res.json({
+            student: student,
+            logs: processedLogs,
+        });
+
+    } catch (error) {
+        console.error('Error in getDashboardData (Parent):', error);
+        res.status(500).json({ message: 'Kesalahan Server Internal', error: (error as Error).message });
+    }
+};
+
+export const approveCharacterLog = async (req: AuthenticatedRequest, res: Response) => {
+    const parentId = req.user?.id;
+    const { logId } = req.params;
+
+    if (!parentId) {
+        return res.status(401).json({ message: 'Akses ditolak.' });
+    }
+
+    try {
+        const [verificationRows]: any = await db.execute(`
+            SELECT cl.id
+            FROM character_logs cl
+            JOIN users s ON cl.student_id = s.id
+            WHERE cl.id = ? AND s.parent_id = ?
+        `, [logId, parentId]);
+
+        if (verificationRows.length === 0) {
+            return res.status(404).json({ message: 'Log tidak ditemukan atau Anda tidak memiliki izin untuk menyetujui log ini.' });
+        }
+
+        const [updateResult]: any = await db.execute(
+            'UPDATE character_logs SET status = ? WHERE id = ?',
+            ['Disetujui', logId]
+        );
+
+        if (updateResult.affectedRows === 0) {
+            return res.status(404).json({ message: 'Gagal memperbarui log. Log tidak ditemukan.' });
+        }
+
+        res.status(200).json({ message: 'Log berhasil disetujui.' });
+
+    } catch (error) {
+        console.error('Error in approveCharacterLog:', error);
+        res.status(500).json({ message: 'Kesalahan Server Internal', error: (error as Error).message });
+    }
+};

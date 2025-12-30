@@ -15,22 +15,12 @@ export interface RegistrationData {
 }
 
 // Menggunakan variabel lingkungan yang konsisten dengan layanan lain
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL; // Diekspor untuk digunakan di komponen
 
 // Membuat instance axios dengan baseURL yang benar dan lengkap untuk otentikasi
 const authApi = axios.create({
   baseURL: `${API_BASE_URL}/api`
 });
-
-/**
- * Mengarahkan pengguna ke halaman login Google.
- * URL dibangun secara eksplisit untuk memastikan tidak ada kesalahan path.
- */
-const googleLoginRedirect = () => {
-  const origin = window.location.origin;
-  // Pastikan URL redirect sama persis dengan yang diharapkan oleh backend
-  window.location.href = `${API_BASE_URL}/api/auth/google?origin=${encodeURIComponent(origin)}`;
-};
 
 /**
  * Melakukan login dengan kredensial lokal (email/NISN/NIP/WA + password).
@@ -59,5 +49,4 @@ export default {
   login,
   register,
   logout,
-  googleLoginRedirect
 };

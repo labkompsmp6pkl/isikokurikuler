@@ -16,35 +16,32 @@ import StudentLayout from './pages/dashboards/student/StudentLayout';
 import Beranda from './pages/dashboards/student/Beranda';
 import Riwayat from './pages/dashboards/student/Riwayat';
 
-// Fungsi untuk mengambil dan mem-parsing data pengguna dengan aman
 const getInitialUser = () => {
   try {
     const userItem = localStorage.getItem('user');
-    // Jika userItem ada dan bukan string kosong, coba parse
     if (userItem) {
       return JSON.parse(userItem);
     }
-    // Jika tidak ada, kembalikan null
     return null;
   } catch (error) {
     console.error("Gagal mem-parsing data pengguna dari localStorage:", error);
-    // Jika terjadi galat parsing, hapus item yang rusak dan kembalikan null
     localStorage.removeItem('user');
     return null;
   }
 };
 
-
 const PrivateRoute = ({ children, role, userRole }: { children: JSX.Element, role: string, userRole: string | null }) => {
   const isAuthenticated = !!localStorage.getItem('token');
   if (!isAuthenticated || userRole !== role) {
+    // Simpan lokasi yang dituju agar bisa redirect kembali setelah login
+    // const location = useLocation();
+    // return <Navigate to="/login" state={{ from: location }} replace />;
     return <Navigate to="/login" />;
   }
   return children;
 };
 
 const App = () => {
-  // Gunakan fungsi aman untuk inisialisasi state
   const [user] = useState(getInitialUser());
 
   return (
@@ -52,32 +49,35 @@ const App = () => {
       <Router>
         <Toaster position="top-center" reverseOrder={false} />
         <Routes>
+          {/* Rute Publik */}
           <Route path="/" element={<Navigate to="/login" />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/google-register" element={<GoogleRegister />} />
           
-          {/* Rute Privat */}
+          {/* Rute Privat untuk Peran Lain */}
           <Route path="/admin/dashboard" element={<PrivateRoute role="admin" userRole={user?.role}><AdminDashboard /></PrivateRoute>} />
           <Route path="/teacher/dashboard" element={<PrivateRoute role="teacher" userRole={user?.role}><TeacherDashboard /></PrivateRoute>} />
-          
-          {/* --- Rute Dasbor Siswa dengan Layout --- */}
+          <Route path="/parent/dashboard" element={<PrivateRoute role="parent" userRole={user?.role}><ParentDashboard /></PrivateRoute>} />
+          <Route path="/contributor/dashboard" element={<PrivateRoute role="contributor" userRole={user?.role}><ContributorDashboard /></PrivateRoute>} />
+
+          {/* --- [PERBAIKAN] STRUKTUR RUTE SISWA YANG BENAR --- */}
           <Route 
-            path="/student" 
+            path="/student/dashboard" 
             element={
               <PrivateRoute role="student" userRole={user?.role}>
                 <StudentLayout />
               </PrivateRoute>
             }
           >
-            <Route path="dashboard" element={<Beranda />} />
-            <Route path="history" element={<Riwayat />} />
-            {/* Tambahkan rute siswa lainnya di sini jika perlu */}
+            {/* Mengarahkan /student/dashboard ke /student/dashboard/beranda secara default */}
+            <Route index element={<Navigate to="beranda" replace />} /> 
+            {/* Rute anak yang akan dirender di dalam <Outlet /> */}
+            <Route path="beranda" element={<Beranda />} />
+            <Route path="riwayat" element={<Riwayat />} />
           </Route>
 
-          <Route path="/parent/dashboard" element={<PrivateRoute role="parent" userRole={user?.role}><ParentDashboard /></PrivateRoute>} />
-          <Route path="/contributor/dashboard" element={<PrivateRoute role="contributor" userRole={user?.role}><ContributorDashboard /></PrivateRoute>} />
-          
+          {/* Rute Catch-all untuk pengguna yang sudah login tapi URL salah */}
           <Route path="*" element={<Navigate to={user ? `/${user.role}/dashboard` : "/login"} />} />
         </Routes>
       </Router>

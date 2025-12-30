@@ -1,7 +1,59 @@
+
 import React, { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import authService from '../services/authService';
+
+// [PERBAIKAN] Komponen InputField dipindahkan ke luar komponen Register
+// Ia sekarang menerima 'onChange' sebagai prop.
+type InputFieldProps = {
+  name: string;
+  placeholder: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  type?: string;
+  required?: boolean;
+};
+
+const InputField: React.FC<InputFieldProps> = ({ name, placeholder, value, onChange, type = 'text', required = true }) => (
+  <input 
+    type={type}
+    name={name}
+    placeholder={placeholder}
+    required={required}
+    value={value}
+    onChange={onChange}
+    className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+  />
+);
+
+// [PERBAIKAN] Komponen SelectField dipindahkan ke luar komponen Register
+// Ia sekarang menerima 'onChange' sebagai prop.
+type SelectFieldProps = {
+  name: string;
+  value: string;
+  options: {value: string, label: string}[];
+  placeholder: string;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  required?: boolean;
+};
+
+const SelectField: React.FC<SelectFieldProps> = ({ name, value, options, placeholder, onChange, required = true }) => (
+  <div className="relative">
+    <select 
+      name={name}
+      value={value}
+      required={required}
+      onChange={onChange}
+      className={`appearance-none block w-full px-3 py-3 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm pr-10 ${!value ? 'text-gray-500' : 'text-gray-900'}`}>
+      <option value="" disabled>{placeholder}</option>
+      {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+    </select>
+    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700">
+      <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+    </div>
+  </div>
+);
 
 type Role = 'student' | 'teacher' | 'contributor' | 'parent';
 
@@ -77,67 +129,37 @@ const Register: React.FC = () => {
     window.location.href = googleLoginUrl;
   };
 
-  const InputField: React.FC<{ name: string; placeholder: string; type?: string; required?: boolean; }> = 
-  ({ name, placeholder, type = 'text', required = true }) => (
-    <input 
-      type={type}
-      name={name}
-      placeholder={placeholder}
-      required={required}
-      onChange={handleFormChange}
-      className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-    />
-  );
-
-  const SelectField: React.FC<{ name: string; value: string; options: {value: string, label: string}[]; placeholder: string; required?: boolean; }> = 
-  ({ name, value, options, placeholder, required = true }) => (
-    <div className="relative">
-      <select 
-        name={name}
-        value={value}
-        required={required}
-        onChange={handleFormChange}
-        className={`appearance-none block w-full px-3 py-3 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm pr-10 ${!value ? 'text-gray-500' : 'text-gray-900'}`}>
-        <option value="" disabled>{placeholder}</option>
-        {/* FIX: Menghapus className dari <option> untuk stabilitas cross-browser */}
-        {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-      </select>
-      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700">
-        <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
-      </div>
-    </div>
-  );
-
   const renderRoleSpecificFields = () => {
     switch (selectedRole) {
       case 'student':
         return (
           <>
-            <InputField name="fullName" placeholder="Nama Lengkap" />
-            <InputField name="nisn" placeholder="NISN (Nomor Induk Siswa Nasional)" />
-            <SelectField name="class" value={formData.class} options={classOptions} placeholder="Pilih Kelas" />
+            {/* [PERBAIKAN] Melewatkan 'onChange' sebagai prop */}
+            <InputField name="fullName" placeholder="Nama Lengkap" value={formData.fullName} onChange={handleFormChange} />
+            <InputField name="nisn" placeholder="NISN (Nomor Induk Siswa Nasional)" value={formData.nisn} onChange={handleFormChange} />
+            <SelectField name="class" value={formData.class} options={classOptions} placeholder="Pilih Kelas" onChange={handleFormChange} />
           </>
         );
       case 'teacher':
         return (
           <>
-            <InputField name="fullName" placeholder="Nama Lengkap" />
-            <InputField name="nip" placeholder="NIP (Nomor Induk Pegawai)" />
-            <SelectField name="class" value={formData.class} options={classOptions} placeholder="Pilih Kelas Wali (Opsional)" required={false} />
+            <InputField name="fullName" placeholder="Nama Lengkap" value={formData.fullName} onChange={handleFormChange} />
+            <InputField name="nip" placeholder="NIP (Nomor Induk Pegawai)" value={formData.nip} onChange={handleFormChange} />
+            <SelectField name="class" value={formData.class} options={classOptions} placeholder="Pilih Kelas Wali (Opsional)" required={false} onChange={handleFormChange} />
           </>
         );
       case 'contributor':
           return (
             <>
-              <InputField name="fullName" placeholder="Nama Lengkap" />
-              <InputField name="nip" placeholder="NIP (Nomor Induk Pegawai)" />
+              <InputField name="fullName" placeholder="Nama Lengkap" value={formData.fullName} onChange={handleFormChange} />
+              <InputField name="nip" placeholder="NIP (Nomor Induk Pegawai)" value={formData.nip} onChange={handleFormChange} />
             </>
           );
       case 'parent':
         return (
           <>
-            <InputField name="fullName" placeholder="Nama Lengkap Orang Tua/Wali" />
-            <InputField name="whatsappNumber" placeholder="Nomor WhatsApp (Contoh: 08123456789)" />
+            <InputField name="fullName" placeholder="Nama Lengkap Orang Tua/Wali" value={formData.fullName} onChange={handleFormChange} />
+            <InputField name="whatsappNumber" placeholder="Nomor WhatsApp (Contoh: 08123456789)" value={formData.whatsappNumber} onChange={handleFormChange} />
           </>
         );
       default:
@@ -190,8 +212,9 @@ const Register: React.FC = () => {
 
           {renderRoleSpecificFields()}
 
-          <InputField name="password" placeholder="Password" type="password" />
-          <InputField name="confirmPassword" placeholder="Konfirmasi Password" type="password" />
+          {/* [PERBAIKAN] Melewatkan 'onChange' sebagai prop */}
+          <InputField name="password" placeholder="Password" type="password" value={formData.password} onChange={handleFormChange} />
+          <InputField name="confirmPassword" placeholder="Konfirmasi Password" type="password" value={formData.confirmPassword} onChange={handleFormChange} />
 
           {error && <p className="text-sm text-red-600 text-center pt-1">{error}</p>}
 

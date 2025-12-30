@@ -63,6 +63,20 @@ const getDashboardData = async (): Promise<ParentDashboardData> => {
   }
 };
 
+const linkStudent = async (nisn: string): Promise<{ message: string; student: StudentInfo }> => {
+  try {
+      const response = await apiClient.post('/api/parents/link-student', { nisn });
+      return response.data;
+  } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+          // Lempar seluruh objek respons error agar komponen bisa mengakses detailnya
+          throw error; 
+      } else {
+          throw new Error('Terjadi kesalahan yang tidak terduga saat menautkan siswa.');
+      }
+  }
+};
+
 // --- [PENAMBAHAN] FUNGSI UNTUK MENGIRIM PERSETUJUAN LOG ---
 const approveLog = async (logId: number): Promise<{ message: string }> => {
     try {
@@ -80,6 +94,7 @@ const approveLog = async (logId: number): Promise<{ message: string }> => {
 const parentService = {
   getDashboardData,
   approveLog, // <-- Ekspor fungsi baru
+  linkStudent,
 };
 
 export default parentService;

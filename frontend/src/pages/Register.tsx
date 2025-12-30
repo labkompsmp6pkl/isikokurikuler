@@ -72,7 +72,7 @@ const Register: React.FC = () => {
   };
 
   const handleGoogleRegister = () => {
-    const googleLoginUrl = `${import.meta.env.VITE_API_BASE_URL}/api/auth/google`;
+    const googleLoginUrl = `${import.meta.env.VITE_API_BASE_URL}/auth/google`;
     window.location.href = googleLoginUrl;
   };
   

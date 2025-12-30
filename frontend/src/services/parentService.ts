@@ -50,50 +50,52 @@ export interface ParentDashboardData {
   logs: CharacterLog[];
 }
 
+// [PERBAIKAN] Mengembalikan path ke '/api/parent' (singular) agar cocok dengan backend
 const getDashboardData = async (): Promise<ParentDashboardData> => {
   try {
     const response = await apiClient.get<ParentDashboardData>('/api/parent/dashboard');
     return response.data;
   } catch (error) {
     if (axios.isAxiosError(error) && error.response) {
-        throw new Error(error.response.data.message || 'Gagal mengambil data dasbor.');
+        throw error; // Lempar error agar komponen bisa menangani status 404
     } else {
         throw new Error('Terjadi kesalahan yang tidak terduga.');
     }
   }
 };
 
-const linkStudent = async (nisn: string): Promise<{ message: string; student: StudentInfo }> => {
-  try {
-      const response = await apiClient.post('/api/parents/link-student', { nisn });
-      return response.data;
-  } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-          // Lempar seluruh objek respons error agar komponen bisa mengakses detailnya
-          throw error; 
-      } else {
-          throw new Error('Terjadi kesalahan yang tidak terduga saat menautkan siswa.');
-      }
-  }
-};
-
-// --- [PENAMBAHAN] FUNGSI UNTUK MENGIRIM PERSETUJUAN LOG ---
+// [PERBAIKAN] Mengembalikan path ke '/api/parent' (singular)
 const approveLog = async (logId: number): Promise<{ message: string }> => {
     try {
         const response = await apiClient.patch(`/api/parent/approve/${logId}`);
         return response.data;
     } catch (error) {
         if (axios.isAxiosError(error) && error.response) {
-            throw new Error(error.response.data.message || 'Gagal menyetujui log.');
+            throw error;
         } else {
             throw new Error('Terjadi kesalahan yang tidak terduga saat menyetujui log.');
         }
     }
 };
 
+// [PERBAIKAN] Mengembalikan path ke '/api/parent' (singular)
+const linkStudent = async (nisn: string): Promise<{ message: string; student: StudentInfo }> => {
+    try {
+        const response = await apiClient.post('/api/parent/link-student', { nisn });
+        return response.data;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response) {
+            throw error; 
+        } else {
+            throw new Error('Terjadi kesalahan yang tidak terduga saat menautkan siswa.');
+        }
+    }
+};
+
+
 const parentService = {
   getDashboardData,
-  approveLog, // <-- Ekspor fungsi baru
+  approveLog,
   linkStudent,
 };
 

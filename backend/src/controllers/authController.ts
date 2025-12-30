@@ -14,8 +14,7 @@ const client = new OAuth2Client(
 // --- Daftar URL Frontend yang Diizinkan ---
 const ALLOWED_ORIGINS = [
   'https://isikokurikuler.vercel.app',
-  'https://kokurikuler.smpn6pekalongan.org',
-  'http://localhost:5173' // Tambahkan localhost untuk development
+  'https://kokurikuler.smpn6pekalongan.org'
 ];
 
 // 1. MENGALIHKAN PENGGUNA KE HALAMAN PERSETUJUAN GOOGLE

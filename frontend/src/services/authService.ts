@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-// Tipe data diekspor untuk digunakan di komponen lain
+// Definisi Tipe Data
 export interface RegistrationData {
   fullName: string;
   role: 'student' | 'teacher' | 'contributor' | 'parent';
@@ -9,44 +9,48 @@ export interface RegistrationData {
   nip?: string;
   class?: string;
   whatsappNumber?: string;
-  provider?: 'google';
-  google_id?: string;
-  email?: string;
 }
 
-// Menggunakan variabel lingkungan yang konsisten dengan layanan lain
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL; // Diekspor untuk digunakan di komponen
 
-// Membuat instance axios dengan baseURL yang benar dan lengkap untuk otentikasi
+export const API_HOST = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
+// Axios instance utama
 const authApi = axios.create({
-  baseURL: `${API_BASE_URL}/api`
+  // Selalu tambahkan '/api' di belakang host
+  baseURL: `${API_HOST}/api`, 
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-/**
- * Melakukan login dengan kredensial lokal (email/NISN/NIP/WA + password).
- */
+// Interceptor (Opsional tapi disarankan): Tambahkan token otomatis jika ada
+authApi.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 const login = (loginIdentifier: string, password: string) => {
-  // Path '/login' sudah benar karena baseURL sudah mengandung '/api/auth'
+  // Akan memanggil: {API_HOST}/api/auth/login
   return authApi.post('/auth/login', { loginIdentifier, password });
 };
 
-/**
- * Mendaftarkan pengguna baru, baik secara manual maupun dari data Google.
- */
 const register = (data: RegistrationData) => {
+  // Akan memanggil: {API_HOST}/api/auth/register
   return authApi.post('/auth/register', data);
 };
 
-/**
- * Menghapus token dari local storage untuk logout.
- */
 const logout = () => {
   localStorage.removeItem('user');
   localStorage.removeItem('token');
+  window.location.href = '/login';
 };
 
 export default {
   login,
   register,
   logout,
+  API_HOST 
 };

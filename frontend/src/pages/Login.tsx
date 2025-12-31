@@ -1,32 +1,13 @@
-import React, { useState, FormEvent, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import authService, { API_BASE_URL } from '../services/authService';
+import authService from '../services/authService'; // Import service yang sudah diperbarui
 
 const Login: React.FC = () => {
   const [formData, setFormData] = useState({ loginIdentifier: '', password: '' });
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
-
   const navigate = useNavigate();
-  const location = useLocation();
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const token = params.get('token');
-    const errorMsg = params.get('error');
-
-    if (token) {
-      localStorage.setItem('token', token);
-      toast.success('Login Google Berhasil!');
-      window.location.href = '/student/dashboard'; 
-    }
-
-    if (errorMsg) {
-      toast.error('Gagal login dengan Google. Silakan coba lagi.');
-      navigate('/login', { replace: true });
-    }
-  }, [location, navigate]);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -52,8 +33,9 @@ const Login: React.FC = () => {
         case 'parent': targetPath = '/parent/dashboard'; break;
         case 'contributor': targetPath = '/contributor/dashboard'; break;
       }
-
-      window.location.href = targetPath;
+      
+      // Gunakan navigate dari react-router untuk UX lebih mulus, fallback ke window.location jika perlu refresh
+      navigate(targetPath);
 
     } catch (err: any) {
       toast.dismiss(loadingToast);
@@ -73,38 +55,12 @@ const Login: React.FC = () => {
     <div className="min-h-screen w-full bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center">
-          <img 
-            className="mx-auto h-24 w-auto" 
-            src="/logo-smpn6.png"
-            alt="Logo SMPN 6 Pekalongan"
-          />
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-            ISOKURIKULER
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            SMPN 6 PEKALONGAN
-          </p>
+          <img className="mx-auto h-24 w-auto" src="/logo-smpn6.png" alt="Logo SMPN 6 Pekalongan" />
+          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">ISOKURIKULER</h2>
+          <p className="mt-2 text-sm text-gray-600">SMPN 6 PEKALONGAN</p>
         </div>
 
-        {/* --- [PERBAIKAN STRUKTURAL] KOTAK LOGIN DIPISAH -- */}
         <div className="bg-white shadow-xl rounded-2xl p-8 space-y-6">
-          
-          {/* Tombol Google SEKARANG DI LUAR FORM */}
-          <a
-            href={`${API_BASE_URL}/api/auth/google`}
-            className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-          >
-            <img className="h-5 w-5 mr-3" src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google logo" />
-            Masuk dengan Google
-          </a>
-
-          <div className="relative flex py-2 items-center">
-            <div className="flex-grow border-t border-gray-300"></div>
-            <span className="flex-shrink mx-4 text-gray-500 text-sm">Atau masuk dengan</span>
-            <div className="flex-grow border-t border-gray-300"></div>
-          </div>
-
-          {/* FORM LOGIN LOKAL */}
           <form className="space-y-6" onSubmit={handleLogin}>
             <div className="rounded-md shadow-sm -space-y-px">
               <div>

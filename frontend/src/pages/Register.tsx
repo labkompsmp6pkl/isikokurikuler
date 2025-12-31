@@ -1,11 +1,10 @@
-
 import React, { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import authService from '../services/authService';
 
-// [PERBAIKAN] Komponen InputField dipindahkan ke luar komponen Register
-// Ia sekarang menerima 'onChange' sebagai prop.
+// --- Komponen UI Pendukung ---
+
 type InputFieldProps = {
   name: string;
   placeholder: string;
@@ -27,8 +26,6 @@ const InputField: React.FC<InputFieldProps> = ({ name, placeholder, value, onCha
   />
 );
 
-// [PERBAIKAN] Komponen SelectField dipindahkan ke luar komponen Register
-// Ia sekarang menerima 'onChange' sebagai prop.
 type SelectFieldProps = {
   name: string;
   value: string;
@@ -55,6 +52,8 @@ const SelectField: React.FC<SelectFieldProps> = ({ name, value, options, placeho
   </div>
 );
 
+// --- Tipe Data & Opsi ---
+
 type Role = 'student' | 'teacher' | 'contributor' | 'parent';
 
 const classOptions = [
@@ -62,6 +61,8 @@ const classOptions = [
   '8A', '8B', '8C', '8D', '8E', '8F',
   '9A', '9B', '9C', '9D', '9E', '9F',
 ].map(c => ({ value: c, label: c }));
+
+// --- Komponen Utama Register ---
 
 const Register: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<Role>('student');
@@ -122,19 +123,12 @@ const Register: React.FC = () => {
       setLoading(false);
     }
   };
-  
-  const handleGoogleRegister = () => {
-    const origin = window.location.origin;
-    const googleLoginUrl = `${import.meta.env.VITE_BASE_API_URL}/api/auth/google?origin=${encodeURIComponent(origin)}`;
-    window.location.href = googleLoginUrl;
-  };
 
   const renderRoleSpecificFields = () => {
     switch (selectedRole) {
       case 'student':
         return (
           <>
-            {/* [PERBAIKAN] Melewatkan 'onChange' sebagai prop */}
             <InputField name="fullName" placeholder="Nama Lengkap" value={formData.fullName} onChange={handleFormChange} />
             <InputField name="nisn" placeholder="NISN (Nomor Induk Siswa Nasional)" value={formData.nisn} onChange={handleFormChange} />
             <SelectField name="class" value={formData.class} options={classOptions} placeholder="Pilih Kelas" onChange={handleFormChange} />
@@ -177,22 +171,7 @@ const Register: React.FC = () => {
           <p className="mt-2 text-sm text-gray-600">Daftar untuk mengakses fitur Isokurikuler.</p>
         </div>
 
-        <div>
-          <button
-            onClick={handleGoogleRegister}
-            type="button"
-            className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out"
-          >
-            <img className="h-5 w-5 mr-3" src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google logo" />
-            Daftar dengan Google
-          </button>
-        </div>
-
-        <div className="relative flex py-2 items-center">
-          <div className="flex-grow border-t border-gray-300"></div>
-          <span className="flex-shrink mx-4 text-sm text-gray-500">Atau daftar manual</span>
-          <div className="flex-grow border-t border-gray-300"></div>
-        </div>
+        {/* Bagian Tombol Google & Divider Dihapus */}
 
         <form onSubmit={handleRegister} className="space-y-6">
           <div>
@@ -212,7 +191,6 @@ const Register: React.FC = () => {
 
           {renderRoleSpecificFields()}
 
-          {/* [PERBAIKAN] Melewatkan 'onChange' sebagai prop */}
           <InputField name="password" placeholder="Password" type="password" value={formData.password} onChange={handleFormChange} />
           <InputField name="confirmPassword" placeholder="Konfirmasi Password" type="password" value={formData.confirmPassword} onChange={handleFormChange} />
 

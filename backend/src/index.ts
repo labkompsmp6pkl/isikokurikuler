@@ -56,7 +56,7 @@ app.get('/', (req, res) => {
 app.use('/api/student', studentRoutes); // Rute terkait siswa
 app.use('/api/character', characterRoutes); // Untuk progres karakter harian
 app.use('/api/parent', parentRoutes); // Untuk dasbor, persetujuan, dan penautan orang tua
-app.use('/api/auth', parentRoutes); 
+app.use('/api/auth', authRoutes); 
 
 // [PENTING] Middleware untuk Error Handling harus diletakkan paling akhir
 app.use(errorHandler);

@@ -4,7 +4,8 @@ import {
     getDashboardData, 
     approveCharacterLog, 
     linkStudent, 
-    getLogHistory // [FITUR BARU] Impor controller baru
+    getLogHistory,
+    previewStudentByNisn // [FITUR BARU] Impor controller baru
 } from '../controllers/parentController';
 import { authMiddleware, roleMiddleware } from '../middleware/authMiddleware'; 
 
@@ -41,5 +42,7 @@ router.post(
     roleMiddleware(['parent']),
     linkStudent
 );
+
+router.post('/preview-student', authMiddleware, previewStudentByNisn); // Tambahkan baris ini
 
 export default router;

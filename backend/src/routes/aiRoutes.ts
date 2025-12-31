@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAIFeedback } from '../controllers/aiController';
+import { getAIFeedback, generateClassRecap } from '../controllers/aiController';
 import { authMiddleware } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -8,5 +8,6 @@ const router = Router();
 router.use(authMiddleware);
 
 router.post('/feedback', getAIFeedback);
+router.post('/class-recap', generateClassRecap);
 
 export default router;

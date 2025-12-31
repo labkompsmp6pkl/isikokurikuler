@@ -1,6 +1,7 @@
 import express from 'express';
 import cors, { CorsOptions } from 'cors';
 import dotenv from 'dotenv';
+dotenv.config();
 import { errorHandler } from './middleware/errorMiddleware';
 
 // Impor rute
@@ -9,29 +10,26 @@ import parentRoutes from './routes/parentRoutes';
 import characterRoutes from './routes/characterRoutes';
 import authRoutes from './routes/authRoutes';
 
-dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // --- Konfigurasi CORS ---
 
+// 1. Daftar Origin yang Diizinkan di Production
 const productionOrigins = [
   'https://kokurikuler.smpn6pekalongan.org',
+  'https://www.kokurikuler.smpn6pekalongan.org',
   'https://isikokurikuler.vercel.app'
 ];
 
 let corsOptions: CorsOptions;
 
-// Cek apakah kita berada di lingkungan Cloud Workstation (biasanya domain berakhiran cloudworkstations.dev)
-const isCloudEnvironment = (origin: string | undefined) => {
-  return origin && (origin.includes('cloudworkstations.dev') || origin.includes('idx.google.com'));
-};
-
+// 2. Logika Pemilihan Mode (Production vs Development)
 if (process.env.NODE_ENV === 'production') {
   console.log('Running in PRODUCTION mode');
   corsOptions = {
     origin: (origin, callback) => {
+      // Izinkan request tanpa origin (seperti dari Postman/Mobile App) atau jika origin ada di daftar
       if (!origin || productionOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -45,13 +43,12 @@ if (process.env.NODE_ENV === 'production') {
   };
 } else {
   console.log('Running in DEVELOPMENT mode');
+  // Di development, izinkan semua origin agar tidak ribet saat ganti port localhost
   corsOptions = {
-    origin: (origin, callback) => {
-      callback(null, true); 
-    },
+    origin: true, 
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    credentials: true, // Penting agar cookie auth cloud bisa lewat jika diperlukan
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
   };
 }
 
@@ -64,6 +61,7 @@ app.get('/', (req, res) => {
   res.send('API is running...');
 });
 
+// Tetap gunakan prefix /api agar konsisten dengan frontend
 app.use('/api/auth', authRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/character', characterRoutes);

@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
 import Login from './pages/Login';
@@ -15,65 +14,123 @@ import StudentLayout from './pages/dashboards/student/StudentLayout';
 import Beranda from './pages/dashboards/student/Beranda';
 import Riwayat from './pages/dashboards/student/Riwayat';
 
-const getInitialUser = () => {
+// --- Komponen Pembantu ---
+
+// 1. PrivateRoute: Mengecek localStorage secara langsung setiap kali rute diakses
+//    Ini mencegah bug di mana App.tsx tidak sadar user sudah login.
+const PrivateRoute = ({ children, allowedRole }: { children: JSX.Element, allowedRole: string }) => {
+  const token = localStorage.getItem('token');
+  const userString = localStorage.getItem('user');
+  const location = useLocation();
+
+  if (!token || !userString) {
+    // Redirect ke login, simpan lokasi asal agar bisa balik (opsional)
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
   try {
-    const userItem = localStorage.getItem('user');
-    if (userItem) {
-      return JSON.parse(userItem);
+    const user = JSON.parse(userString);
+    
+    // Cek apakah role sesuai
+    if (user.role !== allowedRole) {
+      // Jika role salah, arahkan ke dashboard yang benar
+      return <Navigate to={`/${user.role}/dashboard`} replace />;
     }
-    return null;
+
+    return children;
   } catch (error) {
-    console.error("Gagal mem-parsing data pengguna dari localStorage:", error);
-    localStorage.removeItem('user');
-    return null;
+    // Jika data corrupt, bersihkan dan minta login ulang
+    localStorage.clear();
+    return <Navigate to="/login" replace />;
   }
 };
 
-const PrivateRoute = ({ children, role, userRole }: { children: JSX.Element, role: string, userRole: string | null }) => {
-  const isAuthenticated = !!localStorage.getItem('token');
-  if (!isAuthenticated || userRole !== role) {
-    return <Navigate to="/login" />;
+// 2. RedirectBasedOnAuth: Untuk menangani rute "Catch-All" (*)
+//    Cek apakah user login? Jika ya, ke dashboard. Jika tidak, ke login.
+const RedirectBasedOnAuth = () => {
+  const token = localStorage.getItem('token');
+  const userString = localStorage.getItem('user');
+
+  if (token && userString) {
+    try {
+      const user = JSON.parse(userString);
+      return <Navigate to={`/${user.role}/dashboard`} replace />;
+    } catch (e) {
+      return <Navigate to="/login" replace />;
+    }
   }
-  return children;
+  return <Navigate to="/login" replace />;
 };
+
+// --- Komponen Utama App ---
 
 const App = () => {
-  const [user] = useState(getInitialUser());
-
   return (
-    // [PERBAIKAN] Tambahkan future flags di sini untuk menghilangkan warning v7
+    // Mengaktifkan future flags untuk menghilangkan warning React Router v7
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Toaster position="top-center" reverseOrder={false} />
       <Routes>
         {/* Rute Publik */}
-        <Route path="/" element={<Navigate to="/login" />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         
-        {/* Rute Privat untuk Peran Lain */}
-        <Route path="/admin/dashboard" element={<PrivateRoute role="admin" userRole={user?.role}><AdminDashboard /></PrivateRoute>} />
-        <Route path="/teacher/dashboard" element={<PrivateRoute role="teacher" userRole={user?.role}><TeacherDashboard /></PrivateRoute>} />
-        <Route path="/parent/dashboard" element={<PrivateRoute role="parent" userRole={user?.role}><ParentDashboard /></PrivateRoute>} />
-        <Route path="/contributor/dashboard" element={<PrivateRoute role="contributor" userRole={user?.role}><ContributorDashboard /></PrivateRoute>} />
+        {/* Redirect root '/' ke logic pengecekan */}
+        <Route path="/" element={<RedirectBasedOnAuth />} />
+
+        {/* --- Rute Privat (Diperbarui agar membaca localStorage langsung) --- */}
+        
+        <Route 
+          path="/admin/dashboard" 
+          element={
+            <PrivateRoute allowedRole="admin">
+              <AdminDashboard />
+            </PrivateRoute>
+          } 
+        />
+        
+        <Route 
+          path="/teacher/dashboard" 
+          element={
+            <PrivateRoute allowedRole="teacher">
+              <TeacherDashboard />
+            </PrivateRoute>
+          } 
+        />
+        
+        <Route 
+          path="/parent/dashboard" 
+          element={
+            <PrivateRoute allowedRole="parent">
+              <ParentDashboard />
+            </PrivateRoute>
+          } 
+        />
+        
+        <Route 
+          path="/contributor/dashboard" 
+          element={
+            <PrivateRoute allowedRole="contributor">
+              <ContributorDashboard />
+            </PrivateRoute>
+          } 
+        />
 
         {/* --- Struktur Rute Siswa --- */}
         <Route 
           path="/student/dashboard" 
           element={
-            <PrivateRoute role="student" userRole={user?.role}>
+            <PrivateRoute allowedRole="student">
               <StudentLayout />
             </PrivateRoute>
           }
         >
-          {/* Mengarahkan /student/dashboard ke /student/dashboard/beranda secara default */}
           <Route index element={<Navigate to="beranda" replace />} /> 
-          {/* Rute anak yang akan dirender di dalam <Outlet /> */}
           <Route path="beranda" element={<Beranda />} />
           <Route path="riwayat" element={<Riwayat />} />
         </Route>
 
-        {/* Rute Catch-all untuk pengguna yang sudah login tapi URL salah */}
-        <Route path="*" element={<Navigate to={user ? `/${user.role}/dashboard` : "/login"} />} />
+        {/* Catch-all Route: Tangani 404 atau URL nyasar */}
+        <Route path="*" element={<RedirectBasedOnAuth />} />
       </Routes>
     </Router>
   );

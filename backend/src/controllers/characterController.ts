@@ -1,132 +1,156 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
 
-// Interface untuk memperkuat tipe data dari request body
-interface CharacterLogBody {
-    id?: number; // ID bisa jadi tidak ada saat pembuatan
-    log_date: string;
-    wake_up_time?: string;
-    sleep_time?: string;
-    worship_activities?: string[];
-    worship_notes?: string;
-    exercise_type?: string;
-    exercise_details?: string;
-    healthy_food_notes?: string;
-    learning_subject?: string;
-    learning_details?: string;
-    social_activity_notes?: string;
-}
+// Get Log Harian
+export const getDailyLog = async (req: Request, res: Response) => {
+  try {
+    const studentId = (req as any).user.id;
+    const date = req.query.date ? req.query.date : new Date().toISOString().split('T')[0];
 
-// Mendapatkan log hari ini untuk siswa yang login
-export const getTodayLog = async (req: Request, res: Response) => {
-    const student_id = (req as any).user.id;
-    const today = new Date().toISOString().slice(0, 10); // Format YYYY-MM-DD
+    const [rows] = await pool.query(
+      'SELECT * FROM character_logs WHERE student_id = ? AND log_date = ?',
+      [studentId, date]
+    );
 
-    try {
-        const [rows]: any = await pool.query(
-            'SELECT * FROM character_logs WHERE student_id = ? AND log_date = ?',
-            [student_id, today]
-        );
-
-        if (rows.length > 0) {
-            // Jika log sudah ada, kembalikan datanya
-            const log = rows[0];
-            if (log.worship_activities && typeof log.worship_activities === 'string') {
-                log.worship_activities = JSON.parse(log.worship_activities);
-            } else if (!log.worship_activities) {
-                log.worship_activities = [];
-            }
-            res.json(log);
-        } else {
-            // Jika log belum ada, beri tahu frontend. Ini adalah kondisi normal.
-            res.status(404).json({ message: 'Log untuk hari ini belum ada.' });
-        }
-    } catch (error) {
-        console.error('Error in getTodayLog:', error);
-        res.status(500).json({ message: 'Kesalahan Server Internal', error: (error as Error).message });
+    if ((rows as any).length > 0) {
+      res.json((rows as any)[0]);
+    } else {
+      res.json(null);
     }
+  } catch (error) {
+    console.error("Error fetching log:", error);
+    res.status(500).json({ message: 'Error fetching log', error });
+  }
 };
 
-// Menyimpan atau memperbarui log karakter
+// Save Log (Updated dengan field baru)
 export const saveCharacterLog = async (req: Request, res: Response) => {
-    const student_id = (req as any).user.id;
-    const { id, log_date, ...data }: CharacterLogBody = req.body;
+  try {
+    const studentId = (req as any).user.id;
+    const { 
+      log_date, mode, 
+      // Eksekusi Fields
+      wake_up_time, worship_activities, worship_detail, // New
+      sport_activities, sport_detail, 
+      meal_text, 
+      study_activities, study_detail, // New
+      social_activities, social_detail, // New
+      sleep_time, 
+      
+      // Rencana Fields
+      plan_wake_up_time, plan_worship_activities, plan_worship_detail, // New
+      plan_sport_activities, plan_sport_detail,
+      plan_meal_text, 
+      plan_study_activities, plan_study_detail, // New
+      plan_social_activities, plan_social_detail, // New
+      plan_sleep_time
+    } = req.body;
 
-    // Salin data untuk payload UPDATE
-    const updatePayload: any = { ...data };
-    
-    // Konversi array `worship_activities` menjadi string JSON jika ada
-    if (updatePayload.worship_activities && Array.isArray(updatePayload.worship_activities)) {
-        updatePayload.worship_activities = JSON.stringify(updatePayload.worship_activities);
-    }
+    // Cek existing log
+    const [existing] = await pool.query(
+      'SELECT id FROM character_logs WHERE student_id = ? AND log_date = ?',
+      [studentId, log_date]
+    );
 
-    // Payload untuk klausa INSERT (termasuk student_id dan log_date)
-    const insertPayload = { ...updatePayload, student_id, log_date };
-
-    try {
-        // `UPSERT` akan membuat baris baru jika tidak ada, atau memperbarui jika sudah ada
-        // Ini cocok untuk logika "simpan" kita
+    if ((existing as any).length === 0) {
+      // INSERT BARU
+      if (mode === 'plan') {
+         await pool.query(
+          `INSERT INTO character_logs 
+          (student_id, log_date, 
+           plan_wake_up_time, plan_worship_activities, plan_worship_detail,
+           plan_sport_activities, plan_sport_detail,
+           plan_meal_text, 
+           plan_study_activities, plan_study_detail,
+           plan_social_activities, plan_social_detail,
+           plan_sleep_time, is_plan_submitted)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+          [studentId, log_date, 
+           plan_wake_up_time, JSON.stringify(plan_worship_activities), plan_worship_detail,
+           plan_sport_activities, plan_sport_detail,
+           plan_meal_text, 
+           JSON.stringify(plan_study_activities), plan_study_detail,
+           JSON.stringify(plan_social_activities), plan_social_detail,
+           plan_sleep_time]
+        );
+      } else {
         await pool.query(
-            'INSERT INTO character_logs SET ? ON DUPLICATE KEY UPDATE ?',
-            [insertPayload, updatePayload]
+            `INSERT INTO character_logs 
+            (student_id, log_date, 
+             wake_up_time, worship_activities, worship_detail,
+             sport_activities, sport_detail, 
+             meal_text, 
+             study_activities, study_detail,
+             social_activities, social_detail,
+             sleep_time, is_execution_submitted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+            [studentId, log_date, 
+             wake_up_time, JSON.stringify(worship_activities), worship_detail,
+             sport_activities, sport_detail, 
+             meal_text, 
+             JSON.stringify(study_activities), study_detail,
+             JSON.stringify(social_activities), social_detail,
+             sleep_time]
+          );
+      }
+    } else {
+      // UPDATE EXISTING
+      if (mode === 'plan') {
+        await pool.query(
+          `UPDATE character_logs SET 
+           plan_wake_up_time = ?, plan_worship_activities = ?, plan_worship_detail = ?,
+           plan_sport_activities = ?, plan_sport_detail = ?,
+           plan_meal_text = ?, 
+           plan_study_activities = ?, plan_study_detail = ?,
+           plan_social_activities = ?, plan_social_detail = ?,
+           plan_sleep_time = ?, is_plan_submitted = 1
+           WHERE student_id = ? AND log_date = ?`,
+          [plan_wake_up_time, JSON.stringify(plan_worship_activities), plan_worship_detail,
+           plan_sport_activities, plan_sport_detail,
+           plan_meal_text, 
+           JSON.stringify(plan_study_activities), plan_study_detail,
+           JSON.stringify(plan_social_activities), plan_social_detail,
+           plan_sleep_time, 
+           studentId, log_date]
         );
-
-        res.status(200).json({ message: 'Progress berhasil disimpan!' });
-    } catch (error) {
-        console.error('Error in saveCharacterLog:', error);
-        res.status(500).json({ message: 'Gagal menyimpan progress', error: (error as Error).message });
+      } else {
+        // Mode Execution
+        await pool.query(
+          `UPDATE character_logs SET 
+           wake_up_time = ?, worship_activities = ?, worship_detail = ?,
+           sport_activities = ?, sport_detail = ?, 
+           meal_text = ?, 
+           study_activities = ?, study_detail = ?,
+           social_activities = ?, social_detail = ?,
+           sleep_time = ?, is_execution_submitted = 1
+           WHERE student_id = ? AND log_date = ?`,
+          [wake_up_time, JSON.stringify(worship_activities), worship_detail,
+           sport_activities, sport_detail, 
+           meal_text, 
+           JSON.stringify(study_activities), study_detail,
+           JSON.stringify(social_activities), social_detail,
+           sleep_time, 
+           studentId, log_date]
+        );
+      }
     }
+
+    res.status(200).json({ message: 'Log saved successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error saving log', error });
+  }
 };
-
-
-// Mendapatkan riwayat log untuk tampilan kalender
-export const getLogHistory = async (req: Request, res: Response) => {
-    const student_id = (req as any).user.id;
-    const { month, year } = req.query;
-
-    if (month === undefined || year === undefined) {
-        return res.status(400).json({ message: 'Parameter bulan dan tahun diperlukan.' });
-    }
-
+export const getHistory = async (req: Request, res: Response) => {
     try {
-        // Ambil data untuk bulan yang diminta (month di query adalah 0-11, di SQL adalah 1-12)
-        const [rows]: any = await pool.query(
-            'SELECT log_date, status FROM character_logs WHERE student_id = ? AND MONTH(log_date) = ? AND YEAR(log_date) = ?',
-            [student_id, parseInt(month as string) + 1, parseInt(year as string)]
-        );
-        res.json(rows);
+      const studentId = (req as any).user.id;
+      const [rows] = await pool.query(
+        `SELECT * FROM character_logs WHERE student_id = ? ORDER BY log_date DESC`,
+        [studentId]
+      );
+      res.json(rows);
     } catch (error) {
-        console.error('Error in getLogHistory:', error);
-        res.status(500).json({ message: 'Gagal mengambil riwayat', error: (error as Error).message });
-    }
-};
-
-// Mendapatkan detail log berdasarkan tanggal
-export const getLogByDate = async (req: Request, res: Response) => {
-    const student_id = (req as any).user.id;
-    const { date } = req.params; // Ambil tanggal dari URL, format: YYYY-MM-DD
-
-    try {
-        const [rows]: any = await pool.query(
-            'SELECT * FROM character_logs WHERE student_id = ? AND log_date = ?',
-            [student_id, date]
-        );
-
-        if (rows.length > 0) {
-            const log = rows[0];
-            // Pastikan worship_activities di-parse dari JSON string menjadi array
-            if (log.worship_activities && typeof log.worship_activities === 'string') {
-                log.worship_activities = JSON.parse(log.worship_activities);
-            } else if (!log.worship_activities) {
-                log.worship_activities = [];
-            }
-            res.json(log);
-        } else {
-            // Jika tidak ada log ditemukan untuk tanggal tersebut
-            res.status(404).json({ message: 'Log tidak ditemukan untuk tanggal ini.' });
-        }
-    } catch (error) {
-        console.error('Error in getLogByDate:', error);
-        res.status(500).json({ message: 'Kesalahan Server Internal', error: (error as Error).message });
+      console.error("Error fetching history:", error);
+      res.status(500).json({ message: 'Error fetching history', error });
     }
 };

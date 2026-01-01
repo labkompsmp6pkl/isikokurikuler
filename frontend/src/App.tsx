@@ -1,83 +1,80 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import React from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
+// Pages
 import Login from './pages/Login';
 import Register from './pages/Register';
-
 import AdminDashboard from './pages/dashboards/AdminDashboard';
 import TeacherDashboard from './pages/dashboards/TeacherDashboard';
 import ParentDashboard from './pages/dashboards/ParentDashboard';
 import ContributorDashboard from './pages/dashboards/ContributorDashboard';
 
-// --- Impor Struktur Dasbor Siswa ---
+// Student Structure
 import StudentLayout from './pages/dashboards/student/StudentLayout';
 import Beranda from './pages/dashboards/student/Beranda';
+import StudentDashboard from './pages/dashboards/StudentDashboard'; // Import Halaman Jurnal
 import Riwayat from './pages/dashboards/student/Riwayat';
 
-// --- Komponen Pembantu ---
+// Auth Hook
+import { useAuth } from './services/authService';
 
-// 1. PrivateRoute: Mengecek localStorage secara langsung setiap kali rute diakses
-//    Ini mencegah bug di mana App.tsx tidak sadar user sudah login.
+// --- Components Helper ---
+
+// 1. PrivateRoute: Menggunakan Context useAuth() agar reaktif
 const PrivateRoute = ({ children, allowedRole }: { children: JSX.Element, allowedRole: string }) => {
-  const token = localStorage.getItem('token');
-  const userString = localStorage.getItem('user');
+  const { user, token, isLoading } = useAuth();
   const location = useLocation();
 
-  if (!token || !userString) {
-    // Redirect ke login, simpan lokasi asal agar bisa balik (opsional)
+  if (isLoading) {
+    return <div className="flex justify-center items-center h-screen">Loading...</div>;
+  }
+
+  if (!token || !user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  try {
-    const user = JSON.parse(userString);
-    
-    // Cek apakah role sesuai
-    if (user.role !== allowedRole) {
-      // Jika role salah, arahkan ke dashboard yang benar
-      return <Navigate to={`/${user.role}/dashboard`} replace />;
-    }
-
-    return children;
-  } catch (error) {
-    // Jika data corrupt, bersihkan dan minta login ulang
-    localStorage.clear();
-    return <Navigate to="/login" replace />;
+  if (user.role !== allowedRole) {
+    // Redirect jika salah role
+    // Siswa -> /student (yang nanti di redirect ke /student/beranda oleh layout)
+    // Lainnya -> /role/dashboard
+    const target = user.role === 'student' ? '/student' : `/${user.role}/dashboard`;
+    return <Navigate to={target} replace />;
   }
+
+  return children;
 };
 
-// 2. RedirectBasedOnAuth: Untuk menangani rute "Catch-All" (*)
-//    Cek apakah user login? Jika ya, ke dashboard. Jika tidak, ke login.
-const RedirectBasedOnAuth = () => {
-  const token = localStorage.getItem('token');
-  const userString = localStorage.getItem('user');
+// 2. Redirect Root: Menangani user yang akses "/"
+const RedirectRoot = () => {
+  const { user, token, isLoading } = useAuth();
 
-  if (token && userString) {
-    try {
-      const user = JSON.parse(userString);
-      return <Navigate to={`/${user.role}/dashboard`} replace />;
-    } catch (e) {
-      return <Navigate to="/login" replace />;
-    }
+  if (isLoading) return null;
+
+  if (token && user) {
+    if (user.role === 'student') return <Navigate to="/student" replace />;
+    return <Navigate to={`/${user.role}/dashboard`} replace />;
   }
   return <Navigate to="/login" replace />;
 };
 
-// --- Komponen Utama App ---
+// --- Main App Component ---
 
-const App = () => {
+const App: React.FC = () => {
   return (
-    // Mengaktifkan future flags untuk menghilangkan warning React Router v7
-    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <Toaster position="top-center" reverseOrder={false} />
+    <>
+      {/* HAPUS <Router> DISINI KARENA SUDAH ADA DI main.tsx */}
+      <Toaster position="top-right" reverseOrder={false} />
+      
       <Routes>
-        {/* Rute Publik */}
+        {/* Public Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         
-        {/* Redirect root '/' ke logic pengecekan */}
-        <Route path="/" element={<RedirectBasedOnAuth />} />
+        {/* Root Redirect */}
+        <Route path="/" element={<RedirectRoot />} />
 
-        {/* --- Rute Privat (Diperbarui agar membaca localStorage langsung) --- */}
+        {/* --- Private Routes --- */}
         
         <Route 
           path="/admin/dashboard" 
@@ -115,24 +112,28 @@ const App = () => {
           } 
         />
 
-        {/* --- Struktur Rute Siswa --- */}
+        {/* --- Rute Siswa (Updated Structure) --- */}
+        {/* Perhatikan: Path utamanya '/student' bukan '/student/dashboard' agar sesuai layout */}
         <Route 
-          path="/student/dashboard" 
+          path="/student" 
           element={
             <PrivateRoute allowedRole="student">
               <StudentLayout />
             </PrivateRoute>
           }
         >
-          <Route index element={<Navigate to="beranda" replace />} /> 
+          {/* Default Route: Redirect ke Beranda */}
+          <Route index element={<Beranda />} /> 
+          
           <Route path="beranda" element={<Beranda />} />
-          <Route path="riwayat" element={<Riwayat />} />
+          <Route path="journal" element={<StudentDashboard />} /> {/* Halaman Input Jurnal */}
+          <Route path="history" element={<Riwayat />} />
         </Route>
 
-        {/* Catch-all Route: Tangani 404 atau URL nyasar */}
-        <Route path="*" element={<RedirectBasedOnAuth />} />
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </Router>
+    </>
   );
 };
 

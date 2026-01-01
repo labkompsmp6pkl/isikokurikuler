@@ -1,8 +1,9 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const API_URL = `${API_BASE_URL}/api/character`;
 
+// Helper untuk Header Auth
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token');
   return {
@@ -12,43 +13,59 @@ const getAuthHeaders = () => {
   };
 };
 
-// Mendapatkan log karakter untuk hari ini, jika ada.
-// Berbeda dari sebelumnya, fungsi ini tidak akan menyebabkan pembuatan log baru di backend.
-const getTodayLog = async () => {
+// ==========================================
+// 1. GET LOG (Harian / Tanggal Tertentu)
+// ==========================================
+// Mengambil data log berdasarkan tanggal.
+// Backend: GET /api/character/log?date=YYYY-MM-DD
+const getLogByDate = async (date: string) => {
   try {
-    const response = await axios.get(`${API_URL}/today`, getAuthHeaders());
-    return response.data; // Mengembalikan data log jika ada
+    const response = await axios.get(`${API_URL}/log`, {
+      ...getAuthHeaders(),
+      params: { date } // Mengirim tanggal sebagai query param
+    });
+    return response.data; // Mengembalikan object log atau null
   } catch (error: any) {
-    if (error.response && error.response.status === 404) {
-      return null; // Mengembalikan null jika log belum ada (ini kondisi normal)
-    }
-    throw error; // Melempar error lainnya untuk ditangani di komponen
+    console.error("Error fetching log:", error);
+    throw error;
   }
 };
 
-// Menyimpan progres karakter. Akan membuat atau memperbarui.
+// ==========================================
+// 2. SAVE LOG (Rencana & Eksekusi)
+// ==========================================
+// Menyimpan data.
+// Backend: POST /api/character/log
+// Payload harus berisi: { mode: 'plan' | 'execution', log_date, ...data }
 const saveCharacterLog = async (logData: any) => {
-  const response = await axios.post(`${API_URL}/save`, logData, getAuthHeaders());
-  return response.data;
+  try {
+    const response = await axios.post(`${API_URL}/log`, logData, getAuthHeaders());
+    return response.data;
+  } catch (error: any) {
+    console.error("Error saving log:", error);
+    throw error;
+  }
 };
 
-// Mengambil riwayat log untuk kalender
-const getLogHistory = async (month: number, year: number) => {
-  const response = await axios.get(`${API_URL}/history?month=${month}&year=${year}`, getAuthHeaders());
-  return response.data;
-};
-
-// Mengambil detail log berdasarkan tanggal
-const getLogByDate = async (date: string) => {
-  const response = await axios.get(`${API_URL}/log/${date}`, getAuthHeaders());
-  return response.data;
+// ==========================================
+// 3. GET HISTORY (Untuk Kalender)
+// ==========================================
+// Mengambil semua riwayat untuk ditampilkan di kalender.
+// Backend: GET /api/character/history
+const getHistory = async () => {
+  try {
+    const response = await axios.get(`${API_URL}/history`, getAuthHeaders());
+    return response.data; // Mengembalikan array of logs
+  } catch (error: any) {
+    console.error("Error fetching history:", error);
+    throw error;
+  }
 };
 
 const characterService = {
-  getTodayLog, // <-- Diperbarui
-  saveCharacterLog,
-  getLogHistory,
   getLogByDate,
+  saveCharacterLog,
+  getHistory
 };
 
 export default characterService;

@@ -1,119 +1,156 @@
 import React, { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { 
+  LayoutDashboard, 
+  PenTool, 
+  History, 
+  LogOut, 
+  Menu, 
+  X 
+} from 'lucide-react';
+import { useAuth } from '../../../services/authService';
 
 const StudentLayout: React.FC = () => {
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const userString = localStorage.getItem('user');
-  const user = userString ? JSON.parse(userString) : null;
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const handleLogout = () => {
-    toast.success('Anda telah berhasil keluar.');
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    logout();
     navigate('/login');
   };
 
-  // Tutup menu saat link navigasi diklik
-  const closeMenu = () => setIsMenuOpen(false);
+  // Helper untuk mendapatkan data user dengan aman
+  const userData = {
+    name: (user as any)?.fullName || user?.name || 'Siswa',
+    className: (user as any)?.class || (user as any)?.student_class || '-',
+    initial: ((user as any)?.fullName || user?.name || 'S').charAt(0)
+  };
+
+  const navItems = [
+    { 
+      path: '/student', 
+      label: 'Beranda', 
+      icon: <LayoutDashboard size={20} />, 
+      end: true 
+    },
+    { 
+      path: '/student/journal', 
+      label: 'Isi Jurnal', 
+      icon: <PenTool size={20} /> 
+    },
+    { 
+      path: '/student/history', 
+      label: 'Riwayat', 
+      icon: <History size={20} /> 
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header Utama */}
-      <header className="bg-white shadow-md sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-3">
-            {/* Identitas Aplikasi */}
-            <div className="flex items-center space-x-3">
-              <img className="h-10 w-auto" src="/logo-smpn6.png" alt="Logo SMPN 6 Pekalongan" />
-              <div className="hidden sm:flex flex-col">
-                <span className="font-bold text-lg text-blue-800">ISOKURIKULER</span>
-                <span className="text-xs text-gray-500">SMPN 6 PEKALONGAN</span>
-              </div>
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Mobile Sidebar Backdrop */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* SIDEBAR */}
+      <aside className={`
+        fixed md:sticky top-0 h-screen w-64 bg-white border-r border-gray-200 z-30 transition-transform duration-300 ease-in-out
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}>
+        {/* Logo Section */}
+        <div className="p-6 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <img src="/logo-smpn6.png" alt="Logo" className="w-8 h-8" />
+            <span className="font-bold text-gray-800">ISOKURIKULER</span>
+          </div>
+          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-gray-500">
+            <X size={24} />
+          </button>
+        </div>
+
+        {/* Navigation Items */}
+        <nav className="px-4 space-y-2 mt-4">
+          {navItems.map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              end={item.end}
+              onClick={() => setIsSidebarOpen(false)}
+              className={({ isActive }) => `
+                flex items-center gap-3 px-4 py-3 rounded-lg transition-colors font-medium
+                ${isActive 
+                  ? 'bg-blue-50 text-blue-600 border border-blue-100' 
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
+              `}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* User Profile & Logout Section */}
+        <div className="absolute bottom-0 w-full p-4 border-t border-gray-100 bg-gray-50">
+          
+          {/* Info Siswa: Nama & Kelas */}
+          <div className="flex items-center gap-3 mb-4 px-2">
+            {/* [FIX] shrink-0: Mencegah lingkaran jadi oval saat nama panjang */}
+            <div className="w-10 h-10 shrink-0 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-md">
+              {userData.initial}
             </div>
-
-            {/* Navigasi Desktop */}
-            <nav className="hidden md:flex items-center space-x-4">
-              <NavLink 
-                to="/student/dashboard/beranda" 
-                className={({ isActive }) => 
-                  `py-2 px-3 rounded-md font-medium text-sm ` + 
-                  (isActive ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800')
-                }
-              >
-                Beranda
-              </NavLink>
-              <NavLink 
-                to="/student/dashboard/riwayat" 
-                className={({ isActive }) => 
-                  `py-2 px-3 rounded-md font-medium text-sm ` + 
-                  (isActive ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800')
-                }
-              >
-                Riwayat
-              </NavLink>
-            </nav>
-
-            {/* Informasi Pengguna & Logout (Desktop) */}
-            <div className="hidden md:flex items-center space-x-4">
-              <div className="text-right">
-                <p className="font-semibold text-gray-800">{user?.fullName}</p>
-                <p className="text-sm text-gray-600">Siswa - Kelas {user?.class}</p>
+            
+            <div className="overflow-hidden w-full">
+              {/* [FIX] break-words: Agar nama panjang turun ke bawah (tidak terpotong ...) */}
+              <p className="text-sm font-bold text-gray-800 break-words leading-tight">
+                {userData.name}
+              </p>
+              
+              <div className="mt-1">
+                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                    userData.className !== '-' 
+                    ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' 
+                    : 'bg-gray-200 text-gray-500'
+                 }`}>
+                    {userData.className !== '-' ? `Kelas ${userData.className}` : 'Siswa'}
+                 </span>
               </div>
-              <button 
-                onClick={handleLogout}
-                className="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none"
-                title="Keluar"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-              </button>
-            </div>
-
-            {/* Tombol Hamburger (Mobile) */}
-            <div className="md:hidden flex items-center">
-                <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 rounded-md text-gray-600 hover:bg-gray-100">
-                    {isMenuOpen ? (
-                        <svg className="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    ) : (
-                        <svg className="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>
-                    )}
-                </button>
             </div>
           </div>
-        </div>
 
-        {/* Panel Menu Mobile */}
-        {isMenuOpen && (
-            <div className="md:hidden bg-white border-t border-gray-200">
-                <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-                    <NavLink to="/student/dashboard/beranda" onClick={closeMenu} className={({isActive}) => `block px-3 py-2 rounded-md text-base font-medium ${isActive ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}>Beranda</NavLink>
-                    <NavLink to="/student/dashboard/riwayat" onClick={closeMenu} className={({isActive}) => `block px-3 py-2 rounded-md text-base font-medium ${isActive ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}>Riwayat</NavLink>
-                </div>
-                {/* Info User di Mobile Menu */}
-                <div className="pt-4 pb-3 border-t border-gray-200">
-                    <div className="flex items-center px-5">
-                        <div className="ml-3">
-                            <p className="text-base font-medium text-gray-800">{user?.fullName}</p>
-                            <p className="text-sm font-medium text-gray-500">Siswa - Kelas {user?.class}</p>
-                        </div>
-                    </div>
-                    <div className="mt-3 px-2 space-y-1">
-                        <button onClick={() => { closeMenu(); handleLogout(); }} className="w-full text-left block px-3 py-2 rounded-md text-base font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-800">Keluar</button>
-                    </div>
-                </div>
-            </div>
-        )}
-      </header>
-
-      {/* Konten Halaman */}
-      <main className="py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Outlet />
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-100 hover:bg-red-50 hover:border-red-200 rounded-lg transition-all shadow-sm"
+          >
+            <LogOut size={18} />
+            <span>Keluar Aplikasi</span>
+          </button>
         </div>
-      </main>
+      </aside>
+
+      {/* MAIN CONTENT */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <header className="md:hidden bg-white border-b border-gray-200 p-4 flex items-center justify-between sticky top-0 z-10">
+          <div className="flex items-center gap-2">
+            <img src="/logo-smpn6.png" alt="Logo" className="w-8 h-8" />
+            <span className="font-bold text-gray-800 text-sm">ISOKURIKULER</span>
+          </div>
+          <button onClick={() => setIsSidebarOpen(true)} className="text-gray-600">
+            <Menu size={24} />
+          </button>
+        </header>
+
+        <main className="flex-1 overflow-auto p-4 md:p-8">
+          <div className="max-w-5xl mx-auto">
+            <Outlet />
+          </div>
+        </main>
+      </div>
     </div>
   );
-}
+};
 
 export default StudentLayout;

@@ -1,38 +1,33 @@
 import React, { useState, FormEvent, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import authService from '../services/authService';
+import { useAuth } from '../services/authService'; // Gunakan useAuth hook
 
 const Login: React.FC = () => {
   const [formData, setFormData] = useState({ loginIdentifier: '', password: '' });
   const [error, setError] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // Rename loading state lokal
 
   const navigate = useNavigate();
+  
+  // Ambil fungsi login dan status user dari Context
+  const { login, user, token } = useAuth(); 
 
+  // Efek untuk redirect otomatis jika sudah login
   useEffect(() => {
-    // Cek apakah user sudah punya token, jika ya langsung lempar ke dashboard
-    const token = localStorage.getItem('token');
-    const userString = localStorage.getItem('user');
-    
-    if (token && userString) {
-      try {
-        const user = JSON.parse(userString);
-        redirectUser(user.role);
-      } catch (e) {
-        localStorage.clear();
-      }
+    // Kita percaya pada state Context (user & token), bukan localStorage manual
+    if (token && user) {
+      redirectUser(user.role);
     }
-  }, [navigate]);
+  }, [user, token, navigate]);
 
-  // Fungsi khusus untuk menangani pengalihan berdasarkan peran
   const redirectUser = (role: string) => {
     switch (role) {
       case 'admin':
         navigate('/admin/dashboard');
         break;
       case 'student':
-        navigate('/student/dashboard');
+        navigate('/student/dashboard'); // Akan diarahkan ke /student/beranda oleh router
         break;
       case 'teacher':
         navigate('/teacher/dashboard');
@@ -44,44 +39,35 @@ const Login: React.FC = () => {
         navigate('/contributor/dashboard');
         break;
       default:
-        // Fallback jika role tidak dikenali, lempar ke student atau halaman default
-        toast.error(`Peran pengguna tidak dikenali: ${role}`);
-        navigate('/student/dashboard'); 
+        navigate('/student'); 
         break;
     }
   };
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setIsSubmitting(true);
     setError('');
     
-    // Toast loading
     const loadingToast = toast.loading('Sedang memverifikasi...');
 
     try {
-      const response = await authService.login(formData.loginIdentifier, formData.password);
+      // PENTING: Gunakan login dari useAuth, bukan authService langsung
+      // Ini akan update state user, token, dan localStorage sekaligus
+      await login(formData.loginIdentifier, formData.password);
       
-      // 1. Simpan data ke localStorage
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-
-      // 2. Beri umpan balik sukses
       toast.dismiss(loadingToast);
-      toast.success('Login berhasil! Mengalihkan...', { duration: 2000 });
-
-      // 3. Jeda sedikit agar toast terbaca, lalu redirect
-      // Menggunakan setTimeout agar state localStorage benar-benar siap (opsional tapi aman)
-      setTimeout(() => {
-        redirectUser(response.data.user.role);
-      }, 500);
+      toast.success('Login berhasil!');
+      
+      // Redirect akan ditangani oleh useEffect di atas begitu state user berubah
 
     } catch (err: any) {
       toast.dismiss(loadingToast);
+      // Cek struktur error dari axios
       const errorMessage = err.response?.data?.message || 'Login gagal. Periksa username/password Anda.';
       toast.error(errorMessage);
       setError(errorMessage);
-      setLoading(false); // Kembalikan loading ke false agar bisa dicoba lagi
+      setIsSubmitting(false);
     }
   };
 
@@ -119,7 +105,7 @@ const Login: React.FC = () => {
                   required 
                   value={formData.loginIdentifier} 
                   onChange={handleInputChange} 
-                  disabled={loading}
+                  disabled={isSubmitting}
                   className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm disabled:bg-gray-100" 
                   placeholder="NISN/NIP/No.Telp" 
                 />
@@ -133,7 +119,7 @@ const Login: React.FC = () => {
                   required 
                   value={formData.password} 
                   onChange={handleInputChange} 
-                  disabled={loading}
+                  disabled={isSubmitting}
                   className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm disabled:bg-gray-100" 
                   placeholder="Password" 
                 />
@@ -145,12 +131,12 @@ const Login: React.FC = () => {
             <div>
               <button 
                 type="submit" 
-                disabled={loading} 
+                disabled={isSubmitting} 
                 className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
-                  loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+                  isSubmitting ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
                 } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors`}
               >
-                {loading ? (
+                {isSubmitting ? (
                   <span className="flex items-center">
                     <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>

@@ -1,17 +1,17 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+// Hapus useNavigate karena logout di authService biasanya sudah menangani redirect
+// import { useNavigate } from 'react-router-dom'; 
+import { useAuth } from '../../services/authService'; // 1. Import useAuth
 
 const ContributorDashboard: React.FC = () => {
-  const navigate = useNavigate();
+  // 2. Ambil fungsi logout dari context
+  const { logout } = useAuth(); 
 
-  // Fungsi untuk menangani Logout
   const handleLogout = () => {
     if (window.confirm('Apakah Anda yakin ingin keluar?')) {
-      // Hapus data sesi
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      // Arahkan ke halaman login
-      navigate('/login');
+      // 3. Panggil fungsi logout dari service
+      // Ini akan membersihkan localStorage DAN state aplikasi, lalu redirect ke login
+      logout();
     }
   };
 
@@ -19,7 +19,7 @@ const ContributorDashboard: React.FC = () => {
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-lg shadow-md max-w-md w-full text-center">
         
-        {/* Ikon / Ilustrasi Sederhana (Opsional) */}
+        {/* Ikon */}
         <div className="mb-4 flex justify-center">
             <span className="text-4xl">👨‍🏫</span>
         </div>

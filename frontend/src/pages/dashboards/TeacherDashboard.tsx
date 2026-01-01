@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import aiService from '../../services/aiService';
-import CollectiveReportTemplate, { ClassAnalysisData } from './teacher/CollectiveReportTemplate';
 import { useNavigate } from 'react-router-dom';
+import aiService from '../../services/aiService';
+import { useAuth } from '../../services/authService'; // [1] Import useAuth
+import CollectiveReportTemplate, { ClassAnalysisData } from './teacher/CollectiveReportTemplate';
 
 interface UserData {
   role: string;
@@ -12,6 +13,9 @@ interface UserData {
 
 const TeacherDashboard: React.FC = () => {
   const navigate = useNavigate();
+  // [2] Ambil fungsi logout dari context global
+  const { logout } = useAuth(); 
+  
   const [user, setUser] = useState<UserData | null>(null);
 
   const [startDate, setStartDate] = useState(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
@@ -23,22 +27,30 @@ const TeacherDashboard: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
 
   useEffect(() => {
+    // Kita tetap mengambil detail user dari localStorage untuk mendapatkan field spesifik (class, nip)
+    // yang mungkin belum di-handle penuh oleh tipe User di AuthContext
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
-      const parsedUser = JSON.parse(storedUser);
-      if (parsedUser.role !== 'teacher') {
-        navigate('/login');
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        if (parsedUser.role !== 'teacher') {
+          navigate('/login');
+          return;
+        }
+        setUser(parsedUser);
+      } catch (error) {
+        // Jika data corrupt, logout
+        logout();
       }
-      setUser(parsedUser);
     } else {
       navigate('/login');
     }
-  }, [navigate]);
+  }, [navigate]); // Menghapus dependency logout untuk menghindari loop, meski aman jika logout stabil
 
+  // [3] Perbaikan Fungsi Logout
   const handleLogout = () => {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      navigate('/login');
+      // Gunakan fungsi dari useAuth agar state global bersih & redirect otomatis
+      logout();
   };
 
   const handleAnalyze = async () => {
@@ -201,14 +213,13 @@ const TeacherDashboard: React.FC = () => {
 
       </div>
 
-      {/* Modal Cetak (Template sudah diperbarui) */}
+      {/* Modal Cetak */}
       {showReport && analysis && (
         <CollectiveReportTemplate 
             analysis={analysis}
             startDate={startDate}
             endDate={endDate}
             onClose={() => setShowReport(false)}
-            // Tambahkan dua baris di bawah ini:
             teacherName={user?.fullName || "Nama Guru"}
             teacherNIP={user?.nip || "-"} 
         />

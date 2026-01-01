@@ -1,21 +1,26 @@
 import { Router } from 'express';
-import { getTodayLog, saveCharacterLog, getLogHistory, getLogByDate } from '../controllers/characterController';
+// Import nama fungsi yang BENAR sesuai controller di atas
+import { getDailyLog, saveCharacterLog, getHistory } from '../controllers/characterController';
 import { authMiddleware } from '../middleware/authMiddleware';
 
 const router = Router();
 
-// Rute untuk mendapatkan log hari ini jika ada.
-// Tidak akan membuat entri baru jika tidak ada.
-router.get('/today', authMiddleware, getTodayLog);
+// ============================================================================
+// CATATAN:
+// Frontend mengirim request ke: /api/character/log?date=YYYY-MM-DD
+// Frontend halaman Riwayat mengirim request ke: /api/character/history
+// ============================================================================
 
-// Rute untuk menyimpan atau memperbarui progres pencatatan karakter.
-// Ini akan membuat entri jika belum ada, atau memperbarui jika sudah ada.
-router.post('/save', authMiddleware, saveCharacterLog);
+// 1. Get Log Harian (Bisa untuk hari ini atau tanggal tertentu via ?date=...)
+// Menggantikan getTodayLog dan getLogByDate
+router.get('/log', authMiddleware, getDailyLog);
 
-// Rute untuk mendapatkan riwayat singkat (tanggal & status) untuk tampilan kalender.
-router.get('/history', authMiddleware, getLogHistory);
+// 2. Simpan atau Update Log (Rencana / Eksekusi)
+// Menggantikan route '/save' agar sesuai RESTful (/log method POST)
+// Frontend saya sebelumnya menggunakan POST ke /api/character/log
+router.post('/log', authMiddleware, saveCharacterLog);
 
-// Rute untuk mendapatkan detail log lengkap berdasarkan tanggal.
-router.get('/log/:date', authMiddleware, getLogByDate);
+// 3. Get Semua Riwayat (Untuk Kalender)
+router.get('/history', authMiddleware, getHistory);
 
 export default router;

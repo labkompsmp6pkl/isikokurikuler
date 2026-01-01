@@ -4,54 +4,54 @@ import toast from 'react-hot-toast';
 import parentService, { CharacterLog } from '../../../services/parentService';
 import LogDetailModal from './LogDetailModal';
 import Spinner from '../student/components/Spinner';
-import 'react-calendar/dist/Calendar.css'; // Impor CSS default
+import 'react-calendar/dist/Calendar.css';
 
-// Kustomisasi CSS untuk Kalender agar lebih modern
+// CSS Kustom untuk Indikator Status
 const calendarCustomStyle = `
   .custom-calendar {
-    border-radius: 1rem; /* rounded-xl */
+    border-radius: 1.5rem;
     border: none;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); /* shadow-lg */
-    padding: 1.5rem; /* p-6 */
-    background-color: white;
+    padding: 1rem;
     width: 100%;
+    font-family: inherit;
   }
-  .custom-calendar .react-calendar__tile--now {
-    background: #f0e6ff;
-    color: #5b21b6;
-    font-weight: bold;
+  .react-calendar__tile {
+    height: 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 10px;
   }
-  .custom-calendar .react-calendar__tile--active {
-    background: #6d28d9;
-    color: white;
+  /* Hari Ini */
+  .react-calendar__tile--now {
+    background: #eff6ff !important;
+    color: #2563eb !important;
+    border-radius: 12px;
   }
-  .custom-calendar .react-calendar__month-view__days__day--neighboringMonth {
-    color: #d1d5db; /* text-gray-300 */
+  .react-calendar__tile--active {
+    background: #4f46e5 !important;
+    color: white !important;
+    border-radius: 12px;
   }
-  /* Style untuk menandai tanggal dengan log */
-  .has-log {
-    background-color: #e0f2fe; /* bg-sky-100 */
+  
+  /* Status Indikator (Dot) */
+  .status-dot {
+    height: 8px;
+    width: 8px;
     border-radius: 50%;
-    font-weight: bold;
-    color: #0c4a6e; /* text-sky-800 */
+    margin-top: 4px;
   }
-   /* Style untuk menandai log yang sudah disetujui */
-  .has-approved-log {
-    background-color: #dcfce7; /* bg-green-200 */
-    border-radius: 50%;
-    font-weight: bold;
-    color: #166534; /* text-green-800 */
-  }
+  .status-tersimpan { background-color: #fbbf24; } /* Kuning: Menunggu Ortu */
+  .status-disetujui { background-color: #22c55e; } /* Hijau: Disetujui Ortu */
+  .status-disahkan { background-color: #2563eb; }  /* Biru: Disahkan Guru */
 `;
-
-type ValuePiece = Date | null;
-type CalendarValue = ValuePiece | [ValuePiece, ValuePiece];
 
 const HistoryCalendar: React.FC = () => {
     const [logs, setLogs] = useState<CharacterLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedLog, setSelectedLog] = useState<CharacterLog | null>(null);
-    const [calendarDate, setCalendarDate] = useState<CalendarValue>(new Date());
+    const [calendarDate, setCalendarDate] = useState<any>(new Date());
 
     useEffect(() => {
         const fetchHistory = async () => {
@@ -59,7 +59,7 @@ const HistoryCalendar: React.FC = () => {
                 const historyData = await parentService.getLogHistory();
                 setLogs(historyData);
             } catch (error: any) {
-                toast.error(error.message || 'Gagal memuat riwayat.');
+                console.error(error);
             } finally {
                 setIsLoading(false);
             }
@@ -67,66 +67,73 @@ const HistoryCalendar: React.FC = () => {
         fetchHistory();
     }, []);
 
-    const logDates = React.useMemo(() => {
-        const dateMap = new Map<string, 'approved' | 'pending'>();
-        logs.forEach(log => {
-            const dateKey = new Date(log.log_date).toDateString();
-            // Prioritaskan status 'Disetujui'
-            if (log.status === 'Disetujui') {
-                 dateMap.set(dateKey, 'approved');
-            } else if (!dateMap.has(dateKey)) {
-                 dateMap.set(dateKey, 'pending');
-            }
-        });
-        return dateMap;
-    }, [logs]);
-
     const handleDateClick = (value: Date) => {
-        const clickedDateString = value.toDateString();
-        const logForDate = logs.find(log => new Date(log.log_date).toDateString() === clickedDateString);
+        // Konversi tanggal klik ke format YYYY-MM-DD lokal
+        const offsetDate = new Date(value.getTime() - (value.getTimezoneOffset() * 60000));
+        const dateStr = offsetDate.toISOString().split('T')[0];
+
+        const logForDate = logs.find(log => log.log_date.startsWith(dateStr));
         
         if (logForDate) {
             setSelectedLog(logForDate);
         } else {
-            toast.error('Tidak ada data log untuk tanggal ini.');
+            toast('Tidak ada kegiatan pada tanggal ini', { icon: '📅' });
         }
     };
 
-    const tileClassName = ({ date, view }: { date: Date, view: string }) => {
+    // Fungsi Render Konten dalam Tanggal
+    const tileContent = ({ date, view }: { date: Date, view: string }) => {
         if (view === 'month') {
-            const dateKey = date.toDateString();
-            if (logDates.has(dateKey)) {
-                return logDates.get(dateKey) === 'approved' ? 'has-approved-log' : 'has-log';
+            const offsetDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+            const dateStr = offsetDate.toISOString().split('T')[0];
+            const log = logs.find(l => l.log_date.startsWith(dateStr));
+
+            if (log) {
+                let statusClass = '';
+                if (log.status === 'Tersimpan') statusClass = 'status-tersimpan';
+                else if (log.status === 'Disetujui') statusClass = 'status-disetujui';
+                else if (log.status === 'Disahkan') statusClass = 'status-disahkan';
+
+                return <div className={`status-dot ${statusClass}`} title={log.status}></div>;
             }
         }
         return null;
     };
 
-    if (isLoading) {
-        return (
-            <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col items-center justify-center h-full">
-                <Spinner />
-                <p className="text-gray-600 mt-2">Memuat Riwayat Kalender...</p>
-            </div>
-        );
-    }
+    if (isLoading) return <Spinner />;
 
     return (
-        <div className="bg-white p-6 rounded-xl shadow-lg">
+        <div className="bg-white p-6 rounded-[2rem] shadow-xl shadow-slate-200/60 border border-slate-100">
             <style>{calendarCustomStyle}</style>
-            <h2 className="text-2xl font-semibold mb-4 text-gray-700">Riwayat Lengkap (Kalender)</h2>
+            <div className="flex justify-between items-center mb-4 px-2">
+                <h2 className="text-xl font-black text-slate-800">Kalender Aktivitas</h2>
+            </div>
+            
             <Calendar
-                onChange={setCalendarDate} // Meskipun kita tidak menggunakan ini, ini diperlukan oleh library
+                onChange={setCalendarDate}
                 value={calendarDate}
                 onClickDay={handleDateClick}
-                tileClassName={tileClassName}
+                tileContent={tileContent}
                 className="custom-calendar"
-                locale="id-ID" // Menggunakan lokalisasi Indonesia
+                locale="id-ID"
             />
-             <div className="mt-4 flex justify-center space-x-4 text-sm">
-                <div className="flex items-center"><span className="w-4 h-4 rounded-full bg-sky-100 mr-2"></span>Tersimpan</div>
-                <div className="flex items-center"><span className="w-4 h-4 rounded-full bg-green-200 mr-2"></span>Disetujui</div>
+            
+            {/* Legend / Keterangan Status */}
+            <div className="mt-6 flex flex-wrap justify-center gap-4 text-xs font-bold text-slate-600 bg-slate-50 p-4 rounded-xl">
+                <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-yellow-400"></span>
+                    Menunggu Persetujuan Anda
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                    Disetujui (Selesai)
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-blue-600"></span>
+                    Disahkan Guru
+                </div>
             </div>
+
             <LogDetailModal log={selectedLog} onClose={() => setSelectedLog(null)} />
         </div>
     );

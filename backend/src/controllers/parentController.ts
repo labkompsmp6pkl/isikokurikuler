@@ -4,14 +4,13 @@ import pool from '../config/db';
 // Fungsi untuk menautkan siswa ke orang tua berdasarkan NISN
 export const linkStudent = async (req: Request, res: Response) => {
     const { nisn } = req.body;
-    const parentId = (req as any).user.id; // Diambil dari token JWT
+    const parentId = (req as any).user.id;
 
     if (!nisn) {
         return res.status(400).json({ message: 'NISN siswa diperlukan.' });
     }
 
     try {
-        // 1. Cari ID siswa berdasarkan NISN
         const [studentRows]: any[] = await pool.query('SELECT id, parent_id FROM users WHERE nisn = ? AND role = \'student\'', [nisn]);
         
         if (studentRows.length === 0) {
@@ -20,7 +19,6 @@ export const linkStudent = async (req: Request, res: Response) => {
         
         const student = studentRows[0];
 
-        // 2. Cek apakah siswa sudah punya orang tua (parent_id tidak null)
         if (student.parent_id) {
             if (student.parent_id === parentId) {
                 return res.status(200).json({ message: 'Siswa ini sudah tertaut dengan akun Anda.' });
@@ -29,7 +27,6 @@ export const linkStudent = async (req: Request, res: Response) => {
             }
         }
 
-        // 3. Update parent_id di data siswa (users table)
         await pool.query('UPDATE users SET parent_id = ? WHERE id = ?', [parentId, student.id]);
         
         res.status(200).json({ message: 'Siswa berhasil ditautkan!' });
@@ -45,8 +42,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
     const parentId = (req as any).user.id;
 
     try {
-        // 1. Cari siswa yang parent_id-nya adalah user yang sedang login
-        // Kita langsung cari di tabel users
+        // 1. Cari siswa
         const [studentRows]: any[] = await pool.query(
             'SELECT id, full_name, class FROM users WHERE parent_id = ?',
             [parentId]
@@ -56,12 +52,12 @@ export const getDashboardData = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'Belum ada siswa yang terhubung.' });
         }
         
-        // Asumsi satu orang tua satu siswa (jika banyak, perlu loop, tapi di sini kita ambil yg pertama dulu sesuai logika awal)
         const student = studentRows[0]; 
 
-        // 2. Ambil log karakter siswa yang perlu persetujuan
+        // 2. Ambil log karakter siswa yang statusnya 'Tersimpan' (Bukan 'pending')
+        // PERBAIKAN DI SINI: Mengubah 'pending' menjadi 'Tersimpan'
         const [logRows]: any[] = await pool.query(
-            'SELECT * FROM character_logs WHERE student_id = ? AND status = \'pending\' ORDER BY created_at DESC',
+            "SELECT * FROM character_logs WHERE student_id = ? AND status = 'Tersimpan' ORDER BY log_date DESC",
             [student.id]
         );
 
@@ -78,7 +74,6 @@ export const getLogHistory = async (req: Request, res: Response) => {
     const parentId = (req as any).user.id;
 
     try {
-        // 1. Cari siswa berdasarkan parent_id
         const [studentRows]: any[] = await pool.query(
             'SELECT id FROM users WHERE parent_id = ?',
             [parentId]
@@ -89,9 +84,9 @@ export const getLogHistory = async (req: Request, res: Response) => {
         }
         const studentId = studentRows[0].id;
 
-        // 2. Ambil semua riwayat log
+        // Ambil semua riwayat
         const [historyRows]: any[] = await pool.query(
-            'SELECT * FROM character_logs WHERE student_id = ? ORDER BY created_at DESC',
+            'SELECT * FROM character_logs WHERE student_id = ? ORDER BY log_date DESC',
             [studentId]
         );
 
@@ -109,7 +104,7 @@ export const approveCharacterLog = async (req: Request, res: Response) => {
     const parentId = (req as any).user.id;
 
     try {
-        // Validasi: Join ke tabel users untuk memastikan siswa pemilik log ini adalah anak dari parent yang login
+        // Validasi kepemilikan
         const [logRows]: any[] = await pool.query(
             `SELECT cl.id 
              FROM character_logs cl
@@ -122,11 +117,9 @@ export const approveCharacterLog = async (req: Request, res: Response) => {
             return res.status(403).json({ message: 'Anda tidak berhak mengakses log ini atau log tidak ditemukan.' });
         }
 
-        // Update status log menjadi 'approved'
-        // ENUM di database adalah: 'Tersimpan', 'Disetujui', 'Disahkan'
-        // Jadi kita ubah 'approved' menjadi 'Disetujui' sesuai SQL Dump
+        // Update status menjadi 'Disetujui'
         const [updateResult]: any = await pool.query(
-            'UPDATE character_logs SET status = \'Disetujui\' WHERE id = ?',
+            "UPDATE character_logs SET status = 'Disetujui' WHERE id = ?",
             [logId]
         );
 
@@ -134,7 +127,6 @@ export const approveCharacterLog = async (req: Request, res: Response) => {
              return res.status(404).json({ message: 'Gagal mengupdate log.' });
         }
 
-        // Ambil data log yang sudah diupdate untuk dikirim balik
         const [updatedLogRows]: any[] = await pool.query('SELECT * FROM character_logs WHERE id = ?', [logId]);
 
         res.json(updatedLogRows[0]);
@@ -153,7 +145,6 @@ export const previewStudentByNisn = async (req: Request, res: Response) => {
   }
 
   try {
-      // Cari siswa berdasarkan NISN (hanya ambil nama dan kelas)
       const [studentRows]: any[] = await pool.query(
           'SELECT full_name, class, parent_id FROM users WHERE nisn = ? AND role = \'student\'', 
           [nisn]
@@ -165,12 +156,10 @@ export const previewStudentByNisn = async (req: Request, res: Response) => {
 
       const student = studentRows[0];
 
-      // Cek apakah sudah ada orang tua lain (opsional, untuk warning awal)
       if (student.parent_id) {
            return res.status(409).json({ message: 'Siswa ini sudah terhubung dengan akun orang tua lain.' });
       }
 
-      // Kembalikan data preview
       res.json({
           fullName: student.full_name,
           class: student.class

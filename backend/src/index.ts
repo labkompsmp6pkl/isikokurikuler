@@ -10,6 +10,7 @@ import parentRoutes from './routes/parentRoutes';
 import characterRoutes from './routes/characterRoutes';
 import authRoutes from './routes/authRoutes';
 import aiRoutes from './routes/aiRoutes';
+import teacherRoutes from './routes/teacherRoutes';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -68,6 +69,7 @@ app.use('/api/student', studentRoutes);
 app.use('/api/character', characterRoutes);
 app.use('/api/parent', parentRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/teacher', teacherRoutes);
 
 // Middleware Error
 app.use(errorHandler);

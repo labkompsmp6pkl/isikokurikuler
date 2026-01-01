@@ -15,26 +15,36 @@ import {
 const StudentDashboard: React.FC = () => {
   useAuth();
   
+  // Helper untuk mendapatkan tanggal lokal (YYYY-MM-DD) yang benar
+  const getLocalDateString = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // State Utama
   const [activeTab, setActiveTab] = useState<'plan' | 'execution'>('plan');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  // Gunakan fungsi helper, jangan toISOString() langsung
+  const [date, setDate] = useState(getLocalDateString()); 
   const [loading, setLoading] = useState(false);
   
-  // State Data Mentah dari API (untuk mencegah fetch berulang/glitch)
+  // State Data Mentah dari API
   const [apiData, setApiData] = useState<any>(null);
 
   // Form State
   const [formData, setFormData] = useState<any>({
     wake_up_time: '',
     worship_activities: [],
-    worship_detail: '', // NEW
+    worship_detail: '',
     sport_activities: '',
     sport_detail: '',
     meal_text: '',
     study_activities: [],
-    study_detail: '', // NEW
+    study_detail: '',
     social_activities: [],
-    social_detail: '', // NEW
+    social_detail: '',
     sleep_time: '',
   });
 
@@ -42,23 +52,31 @@ const StudentDashboard: React.FC = () => {
   const [isPlanSubmitted, setIsPlanSubmitted] = useState(false);
   const [isExecutionSubmitted, setIsExecutionSubmitted] = useState(false);
 
-  // 1. Fetch Data saat tanggal berubah
+  // 1. Fetch Data saat komponen dimuat (Tanggal otomatis hari ini)
   useEffect(() => {
-    fetchLog();
-  }, [date]);
+    const today = getLocalDateString();
+    setDate(today); // Pastikan state date juga terupdate
+    fetchLog(today);
+  }, []);
 
-  const fetchLog = async () => {
+  const fetchLog = async (currentDate: string) => {
     setLoading(true);
     try {
-      const data = await characterService.getLogByDate(date);
-      setApiData(data); // Simpan data mentah
+      const data = await characterService.getLogByDate(currentDate);
+      setApiData(data);
       
       if (data) {
         setIsPlanSubmitted(!!data.is_plan_submitted);
         setIsExecutionSubmitted(!!data.is_execution_submitted);
+        
+        // Auto-switch tab jika rencana sudah ada tapi eksekusi belum
+        if (data.is_plan_submitted && !data.is_execution_submitted) {
+            setActiveTab('execution');
+        }
       } else {
         setIsPlanSubmitted(false);
         setIsExecutionSubmitted(false);
+        setActiveTab('plan');
       }
     } catch (error) {
       console.error("Gagal mengambil data log:", error);
@@ -67,7 +85,7 @@ const StudentDashboard: React.FC = () => {
     }
   };
 
-  // 2. Update Form saat Tab berubah atau ApiData berubah (Tanpa Fetch Ulang)
+  // 2. Update Form saat Tab berubah atau ApiData berubah
   useEffect(() => {
     if (!apiData) {
       resetForm();
@@ -91,8 +109,6 @@ const StudentDashboard: React.FC = () => {
       });
     } else {
       // Load Data Eksekusi
-      // Jika belum submit eksekusi, biarkan kosong atau copy dari plan (sesuai preferensi)
-      // Di sini kita load apa adanya dari DB, kalau null ya kosong.
       setFormData({
         wake_up_time: apiData.wake_up_time || '',
         worship_activities: parseJsonIfNeeded(apiData.worship_activities),
@@ -139,21 +155,17 @@ const StudentDashboard: React.FC = () => {
         return;
     }
 
-    // Mapping payload agar sesuai dengan backend yang baru
-    // Kita kirim dua set key tergantung mode, tapi controller handle mappingnya
-    // Untuk simplifikasi, kita kirim data form ke field yang sesuai mode
     const payload: any = {
         log_date: date,
         mode: activeTab,
     };
 
-    // Mapping dinamis ke field Plan atau Execution
     if (activeTab === 'plan') {
         payload.plan_wake_up_time = formData.wake_up_time;
         payload.plan_worship_activities = formData.worship_activities;
         payload.plan_worship_detail = formData.worship_detail;
         payload.plan_sport_activities = formData.sport_activities;
-        payload.plan_sport_detail = formData.sport_detail; // Opsional di plan
+        payload.plan_sport_detail = formData.sport_detail;
         payload.plan_meal_text = formData.meal_text;
         payload.plan_study_activities = formData.study_activities;
         payload.plan_study_detail = formData.study_detail;
@@ -177,7 +189,7 @@ const StudentDashboard: React.FC = () => {
     try {
       await characterService.saveCharacterLog(payload);
       Swal.fire('Sukses', `Data ${activeTab === 'plan' ? 'Rencana' : 'Eksekusi'} berhasil disimpan!`, 'success');
-      fetchLog(); // Refresh data dari server
+      fetchLog(date); 
     } catch (error) {
       Swal.fire('Error', 'Gagal menyimpan data', 'error');
     }
@@ -196,12 +208,10 @@ const StudentDashboard: React.FC = () => {
     }
   };
 
-  // Render Label Rencana (Hanya muncul di Tab Eksekusi)
   const renderPlanLabel = (field: string, isArray = false) => {
     if (activeTab !== 'execution') return null;
     if (!apiData) return <span className="text-red-500 text-xs italic ml-2">⚠️ Rencana belum diisi!</span>;
     
-    // Mapping nama field form ke nama field database PLAN
     const planKey = 'plan_' + field;
     let val = apiData[planKey];
     
@@ -215,24 +225,43 @@ const StudentDashboard: React.FC = () => {
     );
   };
 
-  const isLocked = activeTab === 'execution' && !isPlanSubmitted;
+  // LOGIKA KUNCI FORM (DISABLED)
+  let isFormDisabled = false;
+  let disabledMessage = "";
+
+  if (activeTab === 'plan') {
+    if (isPlanSubmitted) {
+      isFormDisabled = true;
+      disabledMessage = "✅ Laporan Rencana hari ini sudah disimpan dan tidak dapat diubah.";
+    }
+  } else { // activeTab === 'execution'
+    if (!isPlanSubmitted) {
+      isFormDisabled = true;
+      disabledMessage = "⚠️ Silakan isi laporan Rencana terlebih dahulu.";
+    } else if (isExecutionSubmitted) {
+      isFormDisabled = true;
+      disabledMessage = "✅ Laporan Eksekusi hari ini sudah disimpan dan tidak dapat diubah.";
+    }
+  }
+
+  // Helper untuk format tanggal Indonesia (Tampilan di Header)
+  const formattedDate = new Date().toLocaleDateString('id-ID', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
 
   if (loading) return <Spinner />;
 
   return (
     <div className="max-w-4xl mx-auto pb-20 animate-fade-in">
       
-      {/* Header & Date Picker */}
+      {/* Header & Info Tanggal */}
       <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">Input Karakter</h2>
-        <div className="flex items-center gap-4">
-          <label className="font-medium text-gray-600">Tanggal:</label>
-          <input 
-            type="date" 
-            value={date} 
-            onChange={(e) => setDate(e.target.value)} 
-            className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
-          />
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Input Karakter Harian</h2>
+        <div className="flex items-center gap-2 text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-100">
+          <span className="text-xl">📅</span>
+          <span className="font-bold text-lg">{formattedDate}</span>
+          {/* Debugging (Opsional): Untuk memastikan tanggal yang dikirim benar */}
+          {/* <span className="text-xs text-gray-400">({date})</span> */}
         </div>
       </div>
 
@@ -260,24 +289,19 @@ const StudentDashboard: React.FC = () => {
         </button>
       </div>
 
-      {/* Status Bar */}
-      <div className="bg-white rounded-xl shadow-sm p-4 mb-6 flex justify-between items-center border border-gray-100">
-        <div>
-            <span className="text-gray-500 text-xs font-bold uppercase tracking-wider">Status Harian</span>
-            <div className="flex gap-4 font-bold mt-1 text-sm">
-                <span className={isPlanSubmitted ? "text-blue-600" : "text-gray-400"}>
-                    Rencana: {isPlanSubmitted ? "Tersimpan ✅" : "Belum ❌"}
-                </span>
-                <span className="text-gray-300">|</span>
-                <span className={isExecutionSubmitted ? "text-green-600" : "text-gray-400"}>
-                    Eksekusi: {isExecutionSubmitted ? "Tersimpan ✅" : "Belum ❌"}
-                </span>
-            </div>
+      {/* Pesan Status Disabled */}
+      {isFormDisabled && (
+        <div className={`p-4 rounded-xl mb-6 text-center border-l-4 font-medium shadow-sm animate-pulse ${
+          disabledMessage.includes('✅') 
+            ? 'bg-green-100 border-green-500 text-green-800' 
+            : 'bg-yellow-100 border-yellow-500 text-yellow-800'
+        }`}>
+          {disabledMessage}
         </div>
-      </div>
+      )}
 
       {/* FORM CONTENT */}
-      <div className={`space-y-6 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
+      <fieldset disabled={isFormDisabled} className={`space-y-6 ${isFormDisabled ? 'opacity-70 grayscale-[0.5]' : ''}`}>
         
         {/* 1. Bangun Pagi */}
         <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-orange-400">
@@ -291,7 +315,7 @@ const StudentDashboard: React.FC = () => {
               type="time" 
               value={formData.wake_up_time}
               onChange={(e) => handleChange('wake_up_time', e.target.value)}
-              className="border p-2 rounded-lg w-full max-w-xs focus:ring-2 focus:ring-orange-200 outline-none"
+              className="border p-2 rounded-lg w-full max-w-xs focus:ring-2 focus:ring-orange-200 outline-none disabled:bg-gray-100"
             />
             <span className="font-bold text-gray-500">WIB</span>
           </div>
@@ -311,17 +335,16 @@ const StudentDashboard: React.FC = () => {
                   type="checkbox" 
                   checked={formData.worship_activities.includes(opt.value)}
                   onChange={() => handleCheckbox('worship_activities', opt.value)}
-                  className="rounded text-emerald-600 focus:ring-emerald-500 w-5 h-5"
+                  className="rounded text-emerald-600 focus:ring-emerald-500 w-5 h-5 disabled:bg-gray-200"
                 />
                 <span className="text-sm font-medium text-gray-700">{opt.label}</span>
               </label>
             ))}
           </div>
-          {/* Form Tambahan: Catatan Ibadah */}
           <label className="block text-sm font-bold text-gray-600 mb-1">Catatan Tambahan:</label>
           <textarea 
             placeholder="Contoh: Hafalan surat pendek, sedekah..."
-            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-emerald-200 outline-none text-sm"
+            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-emerald-200 outline-none text-sm disabled:bg-gray-100"
             rows={2}
             value={formData.worship_detail}
             onChange={(e) => handleChange('worship_detail', e.target.value)}
@@ -337,7 +360,7 @@ const StudentDashboard: React.FC = () => {
           {renderPlanLabel('sport_activities')}
           
           <select 
-            className="w-full border p-3 rounded-lg mb-3 focus:ring-2 focus:ring-blue-200 outline-none bg-white"
+            className="w-full border p-3 rounded-lg mb-3 focus:ring-2 focus:ring-blue-200 outline-none bg-white disabled:bg-gray-100"
             value={formData.sport_activities}
             onChange={(e) => handleChange('sport_activities', e.target.value)}
           >
@@ -347,11 +370,10 @@ const StudentDashboard: React.FC = () => {
             ))}
           </select>
           
-          {/* Detail Aktivitas (Selalu muncul di Plan & Eksekusi sesuai request) */}
           <label className="block text-sm font-bold text-gray-600 mb-1">Detail Aktivitas:</label>
           <textarea 
             placeholder="Contoh: Lari 30 menit, Push up 20x..."
-            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none text-sm"
+            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none text-sm disabled:bg-gray-100"
             rows={2}
             value={formData.sport_detail}
             onChange={(e) => handleChange('sport_detail', e.target.value)}
@@ -367,7 +389,7 @@ const StudentDashboard: React.FC = () => {
           {renderPlanLabel('meal_text')}
           <textarea 
             placeholder="Apa menu sehatmu hari ini?"
-            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-green-200 outline-none text-sm"
+            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-green-200 outline-none text-sm disabled:bg-gray-100"
             rows={2}
             value={formData.meal_text}
             onChange={(e) => handleChange('meal_text', e.target.value)}
@@ -388,17 +410,16 @@ const StudentDashboard: React.FC = () => {
                   type="checkbox" 
                   checked={formData.study_activities.includes(opt.value)}
                   onChange={() => handleCheckbox('study_activities', opt.value)}
-                  className="rounded text-purple-600 focus:ring-purple-500 w-5 h-5"
+                  className="rounded text-purple-600 focus:ring-purple-500 w-5 h-5 disabled:bg-gray-200"
                 />
                 <span className="text-sm font-medium text-gray-700">{opt.label}</span>
               </label>
             ))}
           </div>
-          {/* Form Tambahan: Wawasan Baru */}
           <label className="block text-sm font-bold text-gray-600 mb-1">Wawasan Baru / Detail Belajar:</label>
           <textarea 
             placeholder="Apa hal baru yang kamu pelajari hari ini?"
-            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-purple-200 outline-none text-sm"
+            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-purple-200 outline-none text-sm disabled:bg-gray-100"
             rows={2}
             value={formData.study_detail}
             onChange={(e) => handleChange('study_detail', e.target.value)}
@@ -419,17 +440,16 @@ const StudentDashboard: React.FC = () => {
                   type="checkbox" 
                   checked={formData.social_activities.includes(opt.value)}
                   onChange={() => handleCheckbox('social_activities', opt.value)}
-                  className="rounded text-teal-600 focus:ring-teal-500 w-5 h-5"
+                  className="rounded text-teal-600 focus:ring-teal-500 w-5 h-5 disabled:bg-gray-200"
                 />
                 <span className="text-sm font-medium text-gray-700">{opt.label}</span>
               </label>
             ))}
           </div>
-          {/* Form Tambahan: Catatan Kebaikan */}
           <label className="block text-sm font-bold text-gray-600 mb-1">Catatan Kebaikan:</label>
           <textarea 
             placeholder="Ceritakan kebaikan yang kamu lakukan..."
-            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-teal-200 outline-none text-sm"
+            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-teal-200 outline-none text-sm disabled:bg-gray-100"
             rows={2}
             value={formData.social_detail}
             onChange={(e) => handleChange('social_detail', e.target.value)}
@@ -448,34 +468,29 @@ const StudentDashboard: React.FC = () => {
               type="time" 
               value={formData.sleep_time}
               onChange={(e) => handleChange('sleep_time', e.target.value)}
-              className="border p-2 rounded-lg w-full max-w-xs focus:ring-2 focus:ring-indigo-200 outline-none"
+              className="border p-2 rounded-lg w-full max-w-xs focus:ring-2 focus:ring-indigo-200 outline-none disabled:bg-gray-100"
             />
             <span className="font-bold text-gray-500">WIB</span>
           </div>
         </div>
 
-      </div>
-
-      {isLocked && (
-        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-6 rounded-xl mt-6 text-center animate-pulse shadow-md">
-          <p className="font-bold text-lg mb-1">⚠️ Akses Dikunci</p>
-          <p>Silakan isi tab <strong>Rencana</strong> terlebih dahulu sebelum mengisi Eksekusi!</p>
-        </div>
-      )}
+      </fieldset>
 
       {/* Save Button */}
-      <div className="mt-8 flex justify-end">
-        <button 
-          onClick={handleSave}
-          disabled={isLocked}
-          className={`px-8 py-4 rounded-2xl font-black text-white shadow-xl transform transition-all hover:scale-105 active:scale-95 flex items-center gap-2 ${
-            activeTab === 'plan' ? 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600' : 
-            isLocked ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600'
-          }`}
-        >
-          <span>💾</span> Simpan {activeTab === 'plan' ? 'Rencana' : 'Eksekusi'}
-        </button>
-      </div>
+      {!isFormDisabled && (
+        <div className="mt-8 flex justify-end">
+            <button 
+            onClick={handleSave}
+            className={`px-8 py-4 rounded-2xl font-black text-white shadow-xl transform transition-all hover:scale-105 active:scale-95 flex items-center gap-2 ${
+                activeTab === 'plan' 
+                ? 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600' 
+                : 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600'
+            }`}
+            >
+            <span>💾</span> Simpan {activeTab === 'plan' ? 'Rencana' : 'Eksekusi'}
+            </button>
+        </div>
+      )}
     </div>
   );
 };

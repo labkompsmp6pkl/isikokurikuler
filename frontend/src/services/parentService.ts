@@ -9,7 +9,6 @@ const apiClient = axios.create({
   },
 });
 
-// Interceptor untuk menyisipkan Token JWT otomatis
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -25,38 +24,43 @@ apiClient.interceptors.request.use(
 
 // --- [DEFINISI TIPE DATA] --- //
 
-// Interface untuk Preview Siswa (Sebelum ditautkan)
 export interface StudentPreviewData {
   fullName: string;
   class: string;
 }
 
-// Interface informasi siswa setelah login/linked
 export interface StudentInfo {
     id: number;
     full_name: string;
     class: string;
 }
 
-// Interface untuk Log Karakter
 export interface CharacterLog {
     id: number;
     student_id: number;
     log_date: string; 
-    status: 'Tersimpan' | 'Disetujui' | 'Disahkan'; // Sesuaikan dengan Enum Database
+    status: 'Tersimpan' | 'Disetujui' | 'Disahkan'; 
     wake_up_time: string;
     sleep_time: string;
-    worship_activities: string[]; // Frontend mengharapkan array
-    worship_notes?: string;
-    exercise_type?: string;
-    exercise_details?: string;
-    healthy_food_notes?: string;
-    learning_subject?: string;
-    learning_details?: string;
-    social_activity_notes?: string;
+    
+    // Perbaikan: Menyesuaikan dengan kolom database baru
+    worship_activities: string[] | string; // Bisa string JSON atau array
+    worship_detail?: string;               // Menggantikan worship_notes
+    
+    sport_activities?: string;             // Menggantikan exercise_type
+    sport_detail?: string;                 // Menggantikan exercise_details
+    
+    meal_text?: string;                    // Menggantikan healthy_food_notes
+    
+    study_activities?: string[] | string;  // Menggantikan learning_subject
+    study_detail?: string;                 // Menggantikan learning_details
+    
+    social_activities?: string[] | string; 
+    social_detail?: string;                // Menggantikan social_activity_notes
+    
+    is_execution_submitted?: boolean;
 }
 
-// Interface Response Dashboard Utama
 export interface ParentDashboardData {
     student: StudentInfo;
     logs: CharacterLog[];
@@ -64,7 +68,6 @@ export interface ParentDashboardData {
 
 // --- [LAYANAN API] --- //
 
-// 1. Ambil Data Dashboard (Siswa & Log Pending)
 const getDashboardData = async (): Promise<ParentDashboardData> => {
   try {
     const response = await apiClient.get<ParentDashboardData>('/api/parent/dashboard');
@@ -78,7 +81,6 @@ const getDashboardData = async (): Promise<ParentDashboardData> => {
   }
 };
 
-// 2. Preview Siswa berdasarkan NISN (BARU DITAMBAHKAN)
 const getStudentPreview = async (nisn: string): Promise<StudentPreviewData> => {
     try {
         const response = await apiClient.post<StudentPreviewData>('/api/parent/preview-student', { nisn });
@@ -92,7 +94,6 @@ const getStudentPreview = async (nisn: string): Promise<StudentPreviewData> => {
     }
 };
 
-// 3. Tautkan Akun Orang Tua dengan Siswa (Link)
 const linkStudent = async (nisn: string): Promise<{ message: string; student: StudentInfo }> => {
     try {
         const response = await apiClient.post('/api/parent/link-student', { nisn });
@@ -106,7 +107,6 @@ const linkStudent = async (nisn: string): Promise<{ message: string; student: St
     }
 };
 
-// 4. Setujui Log Karakter
 const approveLog = async (logId: number): Promise<{ message: string; log: CharacterLog }> => {
     try {
         const response = await apiClient.patch(`/api/parent/approve/${logId}`);
@@ -120,7 +120,6 @@ const approveLog = async (logId: number): Promise<{ message: string; log: Charac
     }
 };
 
-// 5. Ambil Riwayat Log Lengkap
 const getLogHistory = async (): Promise<CharacterLog[]> => {
     try {
         const response = await apiClient.get<CharacterLog[]>('/api/parent/log-history');
@@ -136,7 +135,7 @@ const getLogHistory = async (): Promise<CharacterLog[]> => {
 
 const parentService = {
   getDashboardData,
-  getStudentPreview, // Pastikan ini diexport
+  getStudentPreview,
   linkStudent,
   approveLog,
   getLogHistory,

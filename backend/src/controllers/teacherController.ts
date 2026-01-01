@@ -4,12 +4,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // --- 1. DASHBOARD & VALIDASI ---
 export const getTeacherDashboard = async (req: Request, res: Response) => {
-    // Ambil ID dari token (Token hanya perlu bawa ID, sisanya kita cek di DB)
+    // Ambil ID dari token
     const teacherId = (req as any).user?.id;
 
     try {
-        // [PERBAIKAN UTAMA] 
-        // Query langsung ke DB untuk memastikan data 'class' terbaru terbaca
+        // 1. Ambil Data Guru & Kelasnya
         const [teacherRows]: any[] = await pool.query(
             'SELECT class, full_name FROM users WHERE id = ? AND role = \'teacher\'',
             [teacherId]
@@ -23,14 +22,23 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
         const teacherClass = teacherData.class;
         const teacherName = teacherData.full_name;
 
-        // Cek apakah kolom class masih kosong di database
+        // Cek apakah kolom class masih kosong
         if (!teacherClass) {
             return res.status(400).json({ message: 'Anda belum terdaftar sebagai wali kelas. Silakan hubungi Administrator.' });
         }
 
-        // 2. Ambil semua siswa di kelas ini
+        // 2. Ambil semua siswa di kelas ini BESERTA NAMA ORANG TUA
+        // [UPDATE] Melakukan Self-Join ke tabel users untuk mendapatkan nama parent
         const [students]: any[] = await pool.query(
-            'SELECT id, full_name, nisn FROM users WHERE class = ? AND role = \'student\' ORDER BY full_name ASC',
+            `SELECT 
+                s.id, 
+                s.full_name, 
+                s.nisn, 
+                p.full_name AS parent_name
+             FROM users s
+             LEFT JOIN users p ON s.parent_id = p.id
+             WHERE s.class = ? AND s.role = 'student' 
+             ORDER BY s.full_name ASC`,
             [teacherClass]
         );
 
@@ -86,7 +94,7 @@ export const getClassHistory = async (req: Request, res: Response) => {
     const { studentId } = req.query;
 
     try {
-        // Ambil kelas guru dari DB (Lagi-lagi, jangan dari token)
+        // Ambil kelas guru dari DB
         const [teacherRows]: any[] = await pool.query('SELECT class FROM users WHERE id = ?', [teacherId]);
         if (teacherRows.length === 0 || !teacherRows[0].class) {
              return res.status(403).json({ message: 'Akses ditolak. Kelas tidak ditemukan.' });

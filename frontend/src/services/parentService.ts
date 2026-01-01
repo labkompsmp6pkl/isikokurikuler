@@ -36,6 +36,8 @@ export interface StudentInfo {
 }
 
 export interface CharacterLog {
+    learning_details: string;
+    exercise_details: string;
     id: number;
     student_id: number;
     log_date: string; 

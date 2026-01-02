@@ -11,7 +11,7 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-      callbackURL: '/api/auth/google/callback', // Sesuaikan path backend
+      callbackURL: process.env.GOOGLE_CALLBACK_URL || '/api/auth/google/callback',
       proxy: true // PENTING: Fix untuk Cloud Workstations
     },
     async (accessToken, refreshToken, profile, done) => {
@@ -29,6 +29,3 @@ passport.serializeUser((user: any, done) => {
 passport.deserializeUser((user: any, done) => {
   done(null, user);
 });
-
-// TIDAK PERLU ADA "export default passport" DI SINI
-// Karena kita memodifikasi object passport global langsung dari import di atas.

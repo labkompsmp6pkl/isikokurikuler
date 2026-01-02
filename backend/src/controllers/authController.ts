@@ -114,10 +114,10 @@ export const googleCallbackHandler = async (req: Request, res: Response) => {
     // Redirect menggunakan variable URL
     return res.redirect(`${frontendBaseUrl}/google-register-complete?token=${tempToken}`);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Google Auth Error:", error);
-    // Redirect error juga menggunakan variable URL
-    return res.redirect(`${frontendBaseUrl}/login?error=GoogleAuthFailed`);
+    // TAMPILKAN ERROR DI URL AGAR KITA TAHU PENYEBABNYA
+    return res.redirect(`${frontendBaseUrl}/login?error=${encodeURIComponent(error.message)}`);
   }
 };
 

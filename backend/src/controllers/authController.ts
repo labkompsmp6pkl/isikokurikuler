@@ -116,8 +116,16 @@ export const googleCallbackHandler = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error("Google Auth Error:", error);
-    // TAMPILKAN ERROR DI URL AGAR KITA TAHU PENYEBABNYA
-    return res.redirect(`${frontendBaseUrl}/login?error=${encodeURIComponent(error.message)}`);
+    
+    // --- UBAH BAGIAN INI ---
+    // Kita kirim pesan error asli ke URL agar bisa dibaca di browser
+    const errorMessage = error instanceof Error ? error.message : 'Unknown Error';
+    const errorString = encodeURIComponent(errorMessage); // Supaya aman di URL
+    
+    // Pastikan variabel frontendBaseUrl sudah didefinisikan di atas (ambil dari process.env)
+    const frontendBaseUrl = process.env.FRONTEND_URL || '';
+    
+    return res.redirect(`${frontendBaseUrl}/login?error=${errorString}`);
   }
 };
 

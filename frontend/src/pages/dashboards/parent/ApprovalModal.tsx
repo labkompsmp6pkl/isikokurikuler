@@ -1,72 +1,205 @@
-
 import React from 'react';
+import { X, CheckCircle, Clock, Heart, BookOpen, User, Coffee, Activity } from 'lucide-react';
 import { CharacterLog } from '../../../services/parentService';
-import { X, ThumbsUp, Loader } from 'lucide-react';
 
 interface ApprovalModalProps {
-  isOpen: boolean;
-  log: CharacterLog | null;
-  onClose: () => void;
-  onApprove: (logId: number) => void;
-  isApproving: boolean;
+    log: CharacterLog;
+    onClose: () => void;
+    onApprove: () => void;
+    isProcessing: boolean;
 }
 
-// Perbaikan: Fungsi ini sekarang menerima tipe `string | Date` untuk lebih aman.
-const formatDate = (dateInput: string | Date) => {
-    if (!dateInput) return "Tanggal tidak valid";
-    // Menggunakan new Date() untuk menangani string atau objek Date.
-    return new Date(dateInput).toLocaleDateString('id-ID', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-    });
-};
+const ApprovalModal: React.FC<ApprovalModalProps> = ({ log, onClose, onApprove, isProcessing }) => {
+    // Safety check jika log null (walau harusnya tidak terjadi krn conditional rendering di parent)
+    if (!log) return null;
 
-const ApprovalModal: React.FC<ApprovalModalProps> = ({ isOpen, log, onClose, onApprove, isApproving }) => {
-  if (!isOpen || !log) return null;
+    // --- HELPER 1: Format Jam ---
+    const formatTime = (timeStr?: string) => {
+        if (!timeStr) return '-';
+        return timeStr.substring(0, 5);
+    };
 
-  // Perbaikan: Logika untuk menampilkan worship_activities dibuat lebih kuat.
-  // Ini memastikan kita hanya memanggil .join() pada sebuah array.
-  const worshipActivitiesText = (Array.isArray(log.worship_activities) && log.worship_activities.length > 0)
-      ? log.worship_activities.join(', ')
-      : 'Tidak ada';
+    // --- HELPER 2: Parsing & Render Section ---
+    const renderActivitySection = (
+        title: string, 
+        icon: React.ReactNode, 
+        activities: string | string[] | undefined, 
+        detail: string | undefined, 
+        colorTheme: string
+    ) => {
+        let items: string[] = [];
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 relative animate-fade-in-up">
-        <button onClick={onClose} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600">
-          <X size={24} />
-        </button>
-        
-        <h2 className="text-xl font-bold text-gray-800">Tinjau dan Setujui</h2>
-        <p className="text-sm text-gray-500 mb-4">{formatDate(log.log_date)}</p>
+        // Normalisasi data activities menjadi array string
+        if (Array.isArray(activities)) {
+            // Filter undefined/null values dalam array
+            items = activities.filter((item): item is string => !!item);
+        } else if (typeof activities === 'string') {
+            try {
+                const parsed = JSON.parse(activities);
+                if (Array.isArray(parsed)) items = parsed;
+                else items = [activities];
+            } catch (e) {
+                if (activities.trim() !== '') items = [activities];
+            }
+        }
 
-        <div className="space-y-2 text-sm text-gray-700 mb-6">
-          <p><strong>Bangun Pagi:</strong> {log.wake_up_time || '-'}</p>
-          <p><strong>Tidur Malam:</strong> {log.sleep_time || '-'}</p>
-          <p><strong>Aktivitas Ibadah:</strong> {worshipActivitiesText}</p>
-          <p><strong>Belajar:</strong> {log.learning_details || '-'}</p>
-          <p><strong>Olahraga:</strong> {log.exercise_details || '-'}</p>
+        // Normalisasi detail
+        const safeDetail = detail || ''; 
+        const hasList = items.length > 0;
+        const hasDetail = safeDetail.trim() !== '' && safeDetail !== '-';
+
+        // Jika kosong total
+        if (!hasList && !hasDetail) {
+            return (
+                <div className={`p-4 rounded-xl border border-gray-100 bg-gray-50 opacity-60`}>
+                    <div className="flex items-center gap-2 mb-1">
+                        {icon}
+                        <h4 className="font-bold text-gray-500 text-sm uppercase">{title}</h4>
+                    </div>
+                    <p className="text-xs text-gray-400 pl-7 italic">Tidak ada aktivitas</p>
+                </div>
+            );
+        }
+
+        return (
+            <div className={`p-4 rounded-xl border-l-4 ${colorTheme} bg-white shadow-sm`}>
+                <div className="flex items-center gap-2 mb-2">
+                    {icon}
+                    <h4 className="font-bold text-gray-800 text-sm uppercase">{title}</h4>
+                </div>
+                <div className="pl-7">
+                    {/* List Items */}
+                    {hasList && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                            {items.map((item, idx) => (
+                                <span key={idx} className="bg-gray-100 text-gray-700 border border-gray-200 text-xs font-bold px-2 py-1 rounded-md">
+                                    {item}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                    
+                    {/* Detail Text */}
+                    {hasDetail && (
+                        <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded-lg italic border border-gray-100">
+                            "{safeDetail}"
+                        </p>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-gray-50 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]">
+                
+                {/* Header */}
+                <div className="bg-white p-5 border-b border-gray-200 rounded-t-2xl flex justify-between items-center sticky top-0 z-10">
+                    <div>
+                        <h3 className="text-xl font-black text-gray-800">Tinjau Kegiatan</h3>
+                        <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider">
+                            {new Date(log.log_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="p-2 bg-gray-100 rounded-full hover:bg-red-100 hover:text-red-500 transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                {/* Content */}
+                <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar">
+                    
+                    {/* Waktu */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-white p-3 rounded-xl border border-orange-200 flex flex-col items-center justify-center shadow-sm">
+                            <div className="flex items-center gap-1 text-orange-600 mb-1">
+                                <Clock size={16} /> <span className="text-xs font-bold uppercase">Bangun</span>
+                            </div>
+                            <span className="text-2xl font-black text-gray-800">{formatTime(log.wake_up_time)}</span>
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border border-indigo-200 flex flex-col items-center justify-center shadow-sm">
+                            <div className="flex items-center gap-1 text-indigo-600 mb-1">
+                                <Clock size={16} /> <span className="text-xs font-bold uppercase">Tidur</span>
+                            </div>
+                            <span className="text-2xl font-black text-gray-800">{formatTime(log.sleep_time)}</span>
+                        </div>
+                    </div>
+
+                    {/* Ibadah */}
+                    {renderActivitySection(
+                        "Ibadah", 
+                        <Heart size={18} className="text-emerald-600"/>, 
+                        log.worship_activities, 
+                        log.worship_detail, 
+                        "border-emerald-500"
+                    )}
+
+                    {/* Olahraga */}
+                    {renderActivitySection(
+                        "Olahraga", 
+                        <Activity size={18} className="text-blue-600"/>, 
+                        [log.sport_activities].filter((x): x is string => !!x), // Fix array conversion
+                        log.sport_detail || log.exercise_details, // Support fallback name
+                        "border-blue-500"
+                    )}
+
+                    {/* Makan Sehat */}
+                    {renderActivitySection(
+                        "Makan Sehat", 
+                        <Coffee size={18} className="text-green-600"/>, 
+                        [], // Makan biasanya cuma detail
+                        log.meal_text || log.healthy_food_notes, 
+                        "border-green-500"
+                    )}
+
+                    {/* Belajar */}
+                    {renderActivitySection(
+                        "Belajar", 
+                        <BookOpen size={18} className="text-purple-600"/>, 
+                        log.study_activities, 
+                        log.study_detail || log.learning_details, 
+                        "border-purple-500"
+                    )}
+
+                    {/* Sosial */}
+                    {renderActivitySection(
+                        "Sosial", 
+                        <User size={18} className="text-teal-600"/>, 
+                        log.social_activities, 
+                        log.social_detail || log.social_activity_notes, 
+                        "border-teal-500"
+                    )}
+
+                </div>
+
+                {/* Footer */}
+                <div className="p-5 border-t border-gray-200 bg-white rounded-b-2xl flex gap-3">
+                    <button 
+                        onClick={onClose} 
+                        className="flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors"
+                        disabled={isProcessing}
+                    >
+                        Batal
+                    </button>
+                    <button 
+                        onClick={onApprove} 
+                        className="flex-[2] py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg hover:shadow-indigo-200 flex justify-center items-center gap-2"
+                        disabled={isProcessing}
+                    >
+                        {isProcessing ? (
+                            <span className="animate-pulse">Memproses...</span>
+                        ) : (
+                            <>
+                                <CheckCircle size={20} />
+                                Setujui Kegiatan
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
         </div>
-
-        <div className="flex justify-end space-x-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 font-semibold"
-            disabled={isApproving}
-          >
-            Batal
-          </button>
-          <button
-            onClick={() => onApprove(log.id)}
-            className="px-4 py-2 rounded-md text-white bg-green-600 hover:bg-green-700 font-semibold flex items-center justify-center disabled:bg-green-400"
-            disabled={isApproving}
-          >
-            {isApproving ? <Loader className="animate-spin mr-2" size={20} /> : <ThumbsUp className="mr-2" size={20} />}
-            {isApproving ? 'Memproses...' : 'Setujui'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default ApprovalModal;

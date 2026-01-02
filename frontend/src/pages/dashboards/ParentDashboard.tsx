@@ -205,11 +205,26 @@ const ParentDashboard: React.FC = () => {
     useEffect(() => { fetchData(); }, []);
 
     const handleApprovalSuccess = (updatedLog: CharacterLog) => {
+        // [FIX] Safety Check: Pastikan updatedLog dan updatedLog.id ada
+        // Jika tidak ada data log (misal backend cuma kirim pesan sukses), 
+        // kita cukup refresh data lewat fetchData() saja.
+        if (!updatedLog || !updatedLog.id) {
+            fetchData();
+            return;
+        }
+
         setDashboardData(prevData => {
             if (!prevData) return null;
-            const updatedLogs = prevData.logs.map(log => log.id === updatedLog.id ? updatedLog : log);
+            
+            // Update state lokal secara optimis
+            const updatedLogs = prevData.logs.map(log => 
+                log.id === updatedLog.id ? updatedLog : log
+            );
+            
             return { ...prevData, logs: updatedLogs };
         });
+        
+        // Refresh data dari server untuk memastikan sinkronisasi
         fetchData();
     };
 

@@ -36,6 +36,8 @@ export interface StudentInfo {
 }
 
 export interface CharacterLog {
+    social_activity_notes: string | undefined;
+    healthy_food_notes: string | undefined;
     learning_details: string;
     exercise_details: string;
     id: number;

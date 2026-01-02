@@ -1,6 +1,20 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
 
+// Helper: Ubah string JSON database menjadi Array/Object JavaScript
+const parseJSON = (data: any) => {
+    if (!data) return [];
+    try {
+        // Jika sudah object/array, kembalikan langsung
+        if (typeof data === 'object') return data;
+        // Jika string, coba parse
+        return JSON.parse(data);
+    } catch (e) {
+        console.error("JSON Parse Error:", e);
+        return []; // Jika error (misal text biasa), kembalikan array kosong
+    }
+};
+
 // Fungsi untuk menautkan siswa ke orang tua berdasarkan NISN
 export const linkStudent = async (req: Request, res: Response) => {
     const { nisn } = req.body;
@@ -37,12 +51,11 @@ export const linkStudent = async (req: Request, res: Response) => {
     }
 };
 
-// Fungsi untuk mengambil data awal dasbor orang tua
 export const getDashboardData = async (req: Request, res: Response) => {
     const parentId = (req as any).user.id;
 
     try {
-        // 1. Cari siswa
+        // Ambil Data Siswa
         const [studentRows]: any[] = await pool.query(
             'SELECT id, full_name, class FROM users WHERE parent_id = ?',
             [parentId]
@@ -54,14 +67,30 @@ export const getDashboardData = async (req: Request, res: Response) => {
         
         const student = studentRows[0]; 
 
-        // 2. Ambil log karakter siswa yang statusnya 'Tersimpan' (Bukan 'pending')
-        // PERBAIKAN DI SINI: Mengubah 'pending' menjadi 'Tersimpan'
+        // Ambil Log (Hanya yang statusnya 'Tersimpan' untuk validasi, atau ambil semua utk history)
+        // Di dashboard biasanya kita butuh list validasi & history, disini kita ambil yg Tersimpan dulu
+        // atau sesuaikan dengan kebutuhan frontend Anda. 
+        // Code ini mengambil SEMUA log untuk dipilah di frontend (pending vs history)
         const [logRows]: any[] = await pool.query(
-            "SELECT * FROM character_logs WHERE student_id = ? AND status = 'Tersimpan' ORDER BY log_date DESC",
+            "SELECT * FROM character_logs WHERE student_id = ? ORDER BY log_date DESC LIMIT 50",
             [student.id]
         );
 
-        res.json({ student, logs: logRows });
+        // [FIX] Lakukan Parsing JSON di sini sebelum dikirim ke Frontend
+        const processedLogs = logRows.map((log: any) => ({
+            ...log,
+            // Parse data Eksekusi
+            worship_activities: parseJSON(log.worship_activities),
+            study_activities: parseJSON(log.study_activities),
+            social_activities: parseJSON(log.social_activities),
+            
+            // Parse data Rencana (jika ada fitur rencana)
+            plan_worship_activities: parseJSON(log.plan_worship_activities),
+            plan_study_activities: parseJSON(log.plan_study_activities),
+            plan_social_activities: parseJSON(log.plan_social_activities),
+        }));
+
+        res.json({ student, logs: processedLogs });
 
     } catch (error) {
         console.error("Error fetching dashboard data:", error);

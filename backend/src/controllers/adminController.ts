@@ -379,7 +379,7 @@ export const generateNationalAnalysis = async (req: Request, res: Response) => {
             }
         };
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const prompt = `
             Sebagai Konsultan Pendidikan, analisis data karakter siswa ini:

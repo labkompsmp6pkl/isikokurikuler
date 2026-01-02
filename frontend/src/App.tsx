@@ -5,7 +5,15 @@ import { Toaster } from 'react-hot-toast';
 // Pages
 import Login from './pages/Login';
 import Register from './pages/Register';
+
+// Admin Pages
 import AdminDashboard from './pages/dashboards/AdminDashboard';
+import NationalAnalysis from './pages/dashboards/NationalAnalysis'; // [BARU] Import Halaman Analisis
+import UserManagement from './pages/dashboards/admin/UserManagement'; // Import Baru
+import UserDetail from './pages/dashboards/admin/UserDetail'; // Import Baru
+import ClassManagement from './pages/dashboards/admin/ClassManagement';
+
+// Other Roles
 import TeacherDashboard from './pages/dashboards/TeacherDashboard';
 import ParentDashboard from './pages/dashboards/ParentDashboard';
 import ContributorDashboard from './pages/dashboards/ContributorDashboard';
@@ -76,6 +84,7 @@ const App: React.FC = () => {
 
         {/* --- Private Routes --- */}
         
+        {/* ADMIN ROUTES */}
         <Route 
           path="/admin/dashboard" 
           element={
@@ -84,7 +93,17 @@ const App: React.FC = () => {
             </PrivateRoute>
           } 
         />
+        {/* [BARU] Route untuk Analisis AI */}
+        <Route 
+          path="/admin/analysis" 
+          element={
+            <PrivateRoute allowedRole="admin">
+              <NationalAnalysis />
+            </PrivateRoute>
+          } 
+        />
         
+        {/* TEACHER ROUTE */}
         <Route 
           path="/teacher/dashboard" 
           element={
@@ -94,6 +113,11 @@ const App: React.FC = () => {
           } 
         />
         
+        <Route path="/admin/users" element={<PrivateRoute allowedRole="admin"><UserManagement /></PrivateRoute>} />
+        <Route path="/admin/users/:id" element={<PrivateRoute allowedRole="admin"><UserDetail /></PrivateRoute>} />
+        <Route path="/admin/classes" element={<PrivateRoute allowedRole="admin"><ClassManagement /></PrivateRoute>} />
+        
+        {/* PARENT ROUTE */}
         <Route 
           path="/parent/dashboard" 
           element={
@@ -103,6 +127,7 @@ const App: React.FC = () => {
           } 
         />
         
+        {/* CONTRIBUTOR ROUTE */}
         <Route 
           path="/contributor/dashboard" 
           element={
@@ -112,7 +137,7 @@ const App: React.FC = () => {
           } 
         />
 
-        {/* --- Rute Siswa (Updated Structure) --- */}
+        {/* STUDENT ROUTES (Nested Structure) */}
         {/* Perhatikan: Path utamanya '/student' bukan '/student/dashboard' agar sesuai layout */}
         <Route 
           path="/student" 

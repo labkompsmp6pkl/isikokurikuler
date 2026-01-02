@@ -11,6 +11,7 @@ import characterRoutes from './routes/characterRoutes';
 import authRoutes from './routes/authRoutes';
 import teacherRoutes from './routes/teacherRoutes';
 import contributorRoutes from './routes/contributorRoutes';
+import adminRoutes from './routes/adminRoutes'
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -70,6 +71,7 @@ app.use('/api/character', characterRoutes);
 app.use('/api/parent', parentRoutes);
 app.use('/api/teacher', teacherRoutes);
 app.use('/api/contributor', contributorRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Middleware Error
 app.use(errorHandler);

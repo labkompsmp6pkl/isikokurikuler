@@ -1,25 +1,19 @@
-
 import { Router } from 'express';
-// [PERBAIKAN] Mengimpor fungsi yang benar dari controller
-import { getCharacterLogs, upsertCharacterLog } from '../controllers/studentController';
+// Import fungsi lama dan baru
+import { getCharacterLogs, upsertCharacterLog, getStudentDashboardData, completeMission } from '../controllers/studentController';
 import { authMiddleware, roleMiddleware } from '../middleware/authMiddleware';
 
 const router = Router();
 
-// Semua rute siswa memerlukan login sebagai 'student'
 router.use(authMiddleware);
 router.use(roleMiddleware(['student']));
 
-// [PERBAIKAN] Menggunakan fungsi getCharacterLogs untuk GET
-router.get(
-    '/',
-    getCharacterLogs
-);
+// Fitur Lama (Jurnal)
+router.get('/', getCharacterLogs);
+router.post('/', upsertCharacterLog);
 
-// [PERBAIKAN] Menggunakan fungsi upsertCharacterLog untuk POST (membuat/memperbarui)
-router.post(
-    '/',
-    upsertCharacterLog
-);
+// Fitur Baru (Dashboard & Misi)
+router.get('/dashboard', getStudentDashboardData);
+router.post('/mission/complete', completeMission);
 
 export default router;

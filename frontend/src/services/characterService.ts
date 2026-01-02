@@ -2,6 +2,7 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const API_URL = `${API_BASE_URL}/api/character`;
+const STUDENT_URL = `${API_BASE_URL}/api/student`;
 
 // Helper untuk Header Auth
 const getAuthHeaders = () => {
@@ -62,10 +63,32 @@ const getHistory = async () => {
   }
 };
 
+const getStudentDashboard = async () => {
+  try {
+      const response = await axios.get(`${STUDENT_URL}/dashboard`, getAuthHeaders());
+      return response.data;
+  } catch (error) {
+      console.error("Error dashboard:", error);
+      return null;
+  }
+};
+
+const completeMission = async (missionId: number) => {
+  try {
+      await axios.post(`${STUDENT_URL}/mission/complete`, { missionId }, getAuthHeaders());
+      return true;
+  } catch (error) {
+      console.error("Error completing mission:", error);
+      return false;
+  }
+};
+
 const characterService = {
   getLogByDate,
   saveCharacterLog,
-  getHistory
+  getHistory,
+  getStudentDashboard,
+  completeMission
 };
 
 export default characterService;

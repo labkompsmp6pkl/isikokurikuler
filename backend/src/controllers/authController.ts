@@ -8,14 +8,35 @@ export const login = async (req: Request, res: Response) => {
   const { loginIdentifier, password } = req.body;
 
   try {
-    // Cari user berdasarkan email, NISN, NIP, atau No WA
-    const query = `
-      SELECT * FROM users 
-      WHERE email = ? OR nisn = ? OR nip = ? OR whatsapp_number = ?
-    `;
-    const params = [loginIdentifier, loginIdentifier, loginIdentifier, loginIdentifier];
-    const [rows]: any[] = await pool.query(query, params);
-    const user = rows[0];
+    let user = null;
+
+    // --- LOGIC PRIORITAS PARENT ---
+    // Cek apakah input hanya angka dan panjangnya minimal 10 digit (asumsi No WA/HP)
+    // Regex: ^\d{10,}$ artinya start sampai end isinya digit, minimal 10 karakter
+    const isPhoneNumber = /^\d{10,}$/.test(loginIdentifier);
+
+    if (isPhoneNumber) {
+        // Jika terlihat seperti No HP, Coba cari PARENT terlebih dahulu secara spesifik
+        const parentQuery = `SELECT * FROM users WHERE whatsapp_number = ? AND role = 'parent' LIMIT 1`;
+        const [parentRows]: any[] = await pool.query(parentQuery, [loginIdentifier]);
+        
+        if (parentRows.length > 0) {
+            user = parentRows[0];
+        }
+    }
+
+    // Jika user belum ditemukan (bukan parent atau input bukan nomor hp), lakukan pencarian umum
+    if (!user) {
+        const query = `
+          SELECT * FROM users 
+          WHERE email = ? OR nisn = ? OR nip = ? OR whatsapp_number = ?
+          LIMIT 1
+        `;
+        const params = [loginIdentifier, loginIdentifier, loginIdentifier, loginIdentifier];
+        const [rows]: any[] = await pool.query(query, params);
+        user = rows[0];
+    }
+    // -----------------------------
 
     if (!user) {
       return res.status(401).json({ message: 'Username atau password salah' });
@@ -43,7 +64,7 @@ export const login = async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         fullName: user.full_name,
-        role: user.role,
+        role: user.role, // Role ini yang menentukan redirect di frontend
         class: user.class,
         nip: user.nip
       }

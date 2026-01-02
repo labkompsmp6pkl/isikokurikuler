@@ -3,19 +3,17 @@ import Swal from 'sweetalert2';
 import { useAuth } from '../../services/authService';
 import characterService from '../../services/characterService';
 import Spinner from './student/components/Spinner';
-
-// Import Options
 import { 
   worshipOptions, 
   exerciseOptions, 
   learningOptions, 
   socialOptions 
 } from './student/components/options';
+import { Star, CheckCircle2, Trophy, CalendarDays } from 'lucide-react'; // Icon Baru
 
 const StudentDashboard: React.FC = () => {
   useAuth();
   
-  // Helper untuk mendapatkan tanggal lokal (YYYY-MM-DD) yang benar
   const getLocalDateString = () => {
     const now = new Date();
     const year = now.getFullYear();
@@ -24,16 +22,16 @@ const StudentDashboard: React.FC = () => {
     return `${year}-${month}-${day}`;
   };
 
-  // State Utama
+  // State Lama
   const [activeTab, setActiveTab] = useState<'plan' | 'execution'>('plan');
-  // Gunakan fungsi helper, jangan toISOString() langsung
   const [date, setDate] = useState(getLocalDateString()); 
   const [loading, setLoading] = useState(false);
-  
-  // State Data Mentah dari API
   const [apiData, setApiData] = useState<any>(null);
+  
+  // State Baru (Dashboard & Misi)
+  const [dashData, setDashData] = useState<any>(null);
 
-  // Form State
+  // Form State (Tetap)
   const [formData, setFormData] = useState<any>({
     wake_up_time: '',
     worship_activities: [],
@@ -48,15 +46,14 @@ const StudentDashboard: React.FC = () => {
     sleep_time: '',
   });
 
-  // Status Submission
   const [isPlanSubmitted, setIsPlanSubmitted] = useState(false);
   const [isExecutionSubmitted, setIsExecutionSubmitted] = useState(false);
 
-  // 1. Fetch Data saat komponen dimuat (Tanggal otomatis hari ini)
   useEffect(() => {
     const today = getLocalDateString();
-    setDate(today); // Pastikan state date juga terupdate
+    setDate(today); 
     fetchLog(today);
+    fetchDashboardData(); // Ambil Misi & Poin
   }, []);
 
   const fetchLog = async (currentDate: string) => {
@@ -64,12 +61,9 @@ const StudentDashboard: React.FC = () => {
     try {
       const data = await characterService.getLogByDate(currentDate);
       setApiData(data);
-      
       if (data) {
         setIsPlanSubmitted(!!data.is_plan_submitted);
         setIsExecutionSubmitted(!!data.is_execution_submitted);
-        
-        // Auto-switch tab jika rencana sudah ada tapi eksekusi belum
         if (data.is_plan_submitted && !data.is_execution_submitted) {
             setActiveTab('execution');
         }
@@ -85,15 +79,27 @@ const StudentDashboard: React.FC = () => {
     }
   };
 
-  // 2. Update Form saat Tab berubah atau ApiData berubah
-  useEffect(() => {
-    if (!apiData) {
-      resetForm();
-      return;
-    }
+  // [BARU] Ambil Data Misi & Poin
+  const fetchDashboardData = async () => {
+      try {
+          const data = await characterService.getStudentDashboard();
+          if (data) setDashData(data);
+      } catch (error) { console.error(error); }
+  };
 
+  // [BARU] Handler Selesaikan Misi
+  const handleCompleteMission = async (missionId: number) => {
+      const success = await characterService.completeMission(missionId);
+      if (success) {
+          Swal.fire('Kerja Bagus!', 'Misi berhasil diselesaikan.', 'success');
+          fetchDashboardData(); // Refresh agar misi hilang dari list
+      }
+  };
+
+  // ... (SISA KODE FORM LOGIC LAMA TETAP SAMA) ...
+  useEffect(() => {
+    if (!apiData) { resetForm(); return; }
     if (activeTab === 'plan') {
-      // Load Data Rencana
       setFormData({
         wake_up_time: apiData.plan_wake_up_time || '',
         worship_activities: parseJsonIfNeeded(apiData.plan_worship_activities),
@@ -108,7 +114,6 @@ const StudentDashboard: React.FC = () => {
         sleep_time: apiData.plan_sleep_time || '',
       });
     } else {
-      // Load Data Eksekusi
       setFormData({
         wake_up_time: apiData.wake_up_time || '',
         worship_activities: parseJsonIfNeeded(apiData.worship_activities),
@@ -127,9 +132,7 @@ const StudentDashboard: React.FC = () => {
 
   const parseJsonIfNeeded = (data: any) => {
       if (Array.isArray(data)) return data;
-      if (typeof data === 'string') {
-          try { return JSON.parse(data); } catch { return []; }
-      }
+      if (typeof data === 'string') { try { return JSON.parse(data); } catch { return []; } }
       return [];
   };
 
@@ -154,12 +157,8 @@ const StudentDashboard: React.FC = () => {
         Swal.fire('Gagal', 'Anda harus mengisi Rencana terlebih dahulu!', 'error');
         return;
     }
-
-    const payload: any = {
-        log_date: date,
-        mode: activeTab,
-    };
-
+    const payload: any = { log_date: date, mode: activeTab };
+    // Mapping field sesuai mode (Plan vs Execution)
     if (activeTab === 'plan') {
         payload.plan_wake_up_time = formData.wake_up_time;
         payload.plan_worship_activities = formData.worship_activities;
@@ -211,12 +210,9 @@ const StudentDashboard: React.FC = () => {
   const renderPlanLabel = (field: string, isArray = false) => {
     if (activeTab !== 'execution') return null;
     if (!apiData) return <span className="text-red-500 text-xs italic ml-2">⚠️ Rencana belum diisi!</span>;
-    
     const planKey = 'plan_' + field;
     let val = apiData[planKey];
-    
     if (isArray && Array.isArray(val)) val = val.join(', ');
-    
     return (
       <div className="mb-3 p-2 bg-yellow-50 border-l-4 border-yellow-400 rounded text-sm text-yellow-800 flex flex-col justify-start">
         <span className="text-xs font-bold uppercase text-yellow-600">📝 Rencana kamu:</span>
@@ -225,26 +221,23 @@ const StudentDashboard: React.FC = () => {
     );
   };
 
-  // LOGIKA KUNCI FORM (DISABLED)
   let isFormDisabled = false;
   let disabledMessage = "";
-
   if (activeTab === 'plan') {
     if (isPlanSubmitted) {
       isFormDisabled = true;
-      disabledMessage = "✅ Laporan Rencana hari ini sudah disimpan dan tidak dapat diubah.";
+      disabledMessage = "✅ Laporan Rencana hari ini sudah disimpan.";
     }
-  } else { // activeTab === 'execution'
+  } else { 
     if (!isPlanSubmitted) {
       isFormDisabled = true;
       disabledMessage = "⚠️ Silakan isi laporan Rencana terlebih dahulu.";
     } else if (isExecutionSubmitted) {
       isFormDisabled = true;
-      disabledMessage = "✅ Laporan Eksekusi hari ini sudah disimpan dan tidak dapat diubah.";
+      disabledMessage = "✅ Laporan Eksekusi hari ini sudah disimpan.";
     }
   }
 
-  // Helper untuk format tanggal Indonesia (Tampilan di Header)
   const formattedDate = new Date().toLocaleDateString('id-ID', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
@@ -260,10 +253,58 @@ const StudentDashboard: React.FC = () => {
         <div className="flex items-center gap-2 text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-100">
           <span className="text-xl">📅</span>
           <span className="font-bold text-lg">{formattedDate}</span>
-          {/* Debugging (Opsional): Untuk memastikan tanggal yang dikirim benar */}
-          {/* <span className="text-xs text-gray-400">({date})</span> */}
         </div>
       </div>
+
+      {/* --- FITUR KREASI: MISI & STATISTIK --- */}
+      {dashData && (
+          <div className="mb-8 space-y-4">
+              {/* Statistik Poin */}
+              <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl p-5 text-white shadow-lg flex items-center justify-between">
+                  <div>
+                      <p className="text-xs font-bold text-orange-100 uppercase tracking-wider">Total Poin Sikap</p>
+                      <h3 className="text-4xl font-black mt-1">{dashData.stats.behaviorScore}</h3>
+                  </div>
+                  <Trophy size={48} className="text-orange-200 opacity-50"/>
+              </div>
+
+              {/* Daftar Misi */}
+              {dashData.missions.length > 0 ? (
+                  <div className="bg-white border-2 border-orange-100 rounded-2xl p-5 shadow-sm">
+                      <h3 className="text-lg font-black text-gray-800 mb-3 flex items-center gap-2">
+                          <Star className="text-orange-500" fill="currentColor"/> Misi & Tantangan
+                      </h3>
+                      <div className="space-y-3">
+                          {dashData.missions.map((m: any) => (
+                              <div key={m.id} className="p-4 bg-orange-50 rounded-xl border border-orange-200 flex justify-between items-center gap-4">
+                                  <div>
+                                      <span className="text-[10px] font-bold bg-white text-orange-600 px-2 py-0.5 rounded border border-orange-100 mb-1 inline-block">
+                                          {m.habit_category} • {m.contributor_name}
+                                      </span>
+                                      <h4 className="font-bold text-gray-800 text-sm">{m.title}</h4>
+                                      <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                                          <CalendarDays size={12}/> Deadline: {new Date(m.due_date).toLocaleDateString('id-ID')}
+                                      </div>
+                                  </div>
+                                  <button 
+                                      onClick={() => handleCompleteMission(m.id)}
+                                      className="shrink-0 bg-white text-orange-600 p-2 rounded-full border-2 border-orange-200 hover:bg-orange-500 hover:text-white hover:border-orange-500 transition-all shadow-sm"
+                                      title="Tandai Selesai"
+                                  >
+                                      <CheckCircle2 size={20}/>
+                                  </button>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              ) : (
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 text-center text-gray-400 text-sm">
+                      Belum ada misi aktif saat ini.
+                  </div>
+              )}
+          </div>
+      )}
+      {/* --------------------------------------- */}
 
       {/* Tabs */}
       <div className="flex gap-4 mb-6">
@@ -300,7 +341,7 @@ const StudentDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* FORM CONTENT */}
+      {/* FORM CONTENT (SAMA SEPERTI SEBELUMNYA) */}
       <fieldset disabled={isFormDisabled} className={`space-y-6 ${isFormDisabled ? 'opacity-70 grayscale-[0.5]' : ''}`}>
         
         {/* 1. Bangun Pagi */}
@@ -341,137 +382,52 @@ const StudentDashboard: React.FC = () => {
               </label>
             ))}
           </div>
-          <label className="block text-sm font-bold text-gray-600 mb-1">Catatan Tambahan:</label>
-          <textarea 
-            placeholder="Contoh: Hafalan surat pendek, sedekah..."
-            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-emerald-200 outline-none text-sm disabled:bg-gray-100"
-            rows={2}
-            value={formData.worship_detail}
-            onChange={(e) => handleChange('worship_detail', e.target.value)}
-          />
+          <textarea placeholder="Contoh: Hafalan surat pendek..." className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-emerald-200 outline-none text-sm disabled:bg-gray-100" rows={2} value={formData.worship_detail} onChange={(e) => handleChange('worship_detail', e.target.value)}/>
         </div>
 
         {/* 3. Olahraga */}
         <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-400">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-3xl">🏃</span>
-            <h3 className="text-xl font-bold text-gray-800">Berolahraga</h3>
-          </div>
+          <div className="flex items-center gap-3 mb-4"><span className="text-3xl">🏃</span><h3 className="text-xl font-bold text-gray-800">Berolahraga</h3></div>
           {renderPlanLabel('sport_activities')}
-          
-          <select 
-            className="w-full border p-3 rounded-lg mb-3 focus:ring-2 focus:ring-blue-200 outline-none bg-white disabled:bg-gray-100"
-            value={formData.sport_activities}
-            onChange={(e) => handleChange('sport_activities', e.target.value)}
-          >
+          <select className="w-full border p-3 rounded-lg mb-3 focus:ring-2 focus:ring-blue-200 outline-none bg-white disabled:bg-gray-100" value={formData.sport_activities} onChange={(e) => handleChange('sport_activities', e.target.value)}>
             <option value="">Pilih Olahraga...</option>
-            {exerciseOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
+            {exerciseOptions.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
           </select>
-          
-          <label className="block text-sm font-bold text-gray-600 mb-1">Detail Aktivitas:</label>
-          <textarea 
-            placeholder="Contoh: Lari 30 menit, Push up 20x..."
-            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none text-sm disabled:bg-gray-100"
-            rows={2}
-            value={formData.sport_detail}
-            onChange={(e) => handleChange('sport_detail', e.target.value)}
-          />
+          <textarea placeholder="Contoh: Lari 30 menit..." className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none text-sm disabled:bg-gray-100" rows={2} value={formData.sport_detail} onChange={(e) => handleChange('sport_detail', e.target.value)}/>
         </div>
 
         {/* 4. Makan Sehat */}
         <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-green-400">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-3xl">🥗</span>
-            <h3 className="text-xl font-bold text-gray-800">Makan Sehat</h3>
-          </div>
+          <div className="flex items-center gap-3 mb-4"><span className="text-3xl">🥗</span><h3 className="text-xl font-bold text-gray-800">Makan Sehat</h3></div>
           {renderPlanLabel('meal_text')}
-          <textarea 
-            placeholder="Apa menu sehatmu hari ini?"
-            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-green-200 outline-none text-sm disabled:bg-gray-100"
-            rows={2}
-            value={formData.meal_text}
-            onChange={(e) => handleChange('meal_text', e.target.value)}
-          />
+          <textarea placeholder="Apa menu sehatmu hari ini?" className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-green-200 outline-none text-sm disabled:bg-gray-100" rows={2} value={formData.meal_text} onChange={(e) => handleChange('meal_text', e.target.value)}/>
         </div>
 
         {/* 5. Belajar */}
         <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-purple-400">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-3xl">📚</span>
-            <h3 className="text-xl font-bold text-gray-800">Gemar Belajar</h3>
-          </div>
+          <div className="flex items-center gap-3 mb-4"><span className="text-3xl">📚</span><h3 className="text-xl font-bold text-gray-800">Gemar Belajar</h3></div>
           {renderPlanLabel('study_activities', true)}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            {learningOptions.map(opt => (
-              <label key={opt.value} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors">
-                <input 
-                  type="checkbox" 
-                  checked={formData.study_activities.includes(opt.value)}
-                  onChange={() => handleCheckbox('study_activities', opt.value)}
-                  className="rounded text-purple-600 focus:ring-purple-500 w-5 h-5 disabled:bg-gray-200"
-                />
-                <span className="text-sm font-medium text-gray-700">{opt.label}</span>
-              </label>
-            ))}
+            {learningOptions.map(opt => (<label key={opt.value} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors"><input type="checkbox" checked={formData.study_activities.includes(opt.value)} onChange={() => handleCheckbox('study_activities', opt.value)} className="rounded text-purple-600 focus:ring-purple-500 w-5 h-5 disabled:bg-gray-200"/><span className="text-sm font-medium text-gray-700">{opt.label}</span></label>))}
           </div>
-          <label className="block text-sm font-bold text-gray-600 mb-1">Wawasan Baru / Detail Belajar:</label>
-          <textarea 
-            placeholder="Apa hal baru yang kamu pelajari hari ini?"
-            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-purple-200 outline-none text-sm disabled:bg-gray-100"
-            rows={2}
-            value={formData.study_detail}
-            onChange={(e) => handleChange('study_detail', e.target.value)}
-          />
+          <textarea placeholder="Apa hal baru yang kamu pelajari hari ini?" className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-purple-200 outline-none text-sm disabled:bg-gray-100" rows={2} value={formData.study_detail} onChange={(e) => handleChange('study_detail', e.target.value)}/>
         </div>
 
         {/* 6. Bermasyarakat */}
         <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-teal-400">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-3xl">🌍</span>
-            <h3 className="text-xl font-bold text-gray-800">Bermasyarakat</h3>
-          </div>
+          <div className="flex items-center gap-3 mb-4"><span className="text-3xl">🌍</span><h3 className="text-xl font-bold text-gray-800">Bermasyarakat</h3></div>
           {renderPlanLabel('social_activities', true)}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-            {socialOptions.map(opt => (
-              <label key={opt.value} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors">
-                <input 
-                  type="checkbox" 
-                  checked={formData.social_activities.includes(opt.value)}
-                  onChange={() => handleCheckbox('social_activities', opt.value)}
-                  className="rounded text-teal-600 focus:ring-teal-500 w-5 h-5 disabled:bg-gray-200"
-                />
-                <span className="text-sm font-medium text-gray-700">{opt.label}</span>
-              </label>
-            ))}
+            {socialOptions.map(opt => (<label key={opt.value} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors"><input type="checkbox" checked={formData.social_activities.includes(opt.value)} onChange={() => handleCheckbox('social_activities', opt.value)} className="rounded text-teal-600 focus:ring-teal-500 w-5 h-5 disabled:bg-gray-200"/><span className="text-sm font-medium text-gray-700">{opt.label}</span></label>))}
           </div>
-          <label className="block text-sm font-bold text-gray-600 mb-1">Catatan Kebaikan:</label>
-          <textarea 
-            placeholder="Ceritakan kebaikan yang kamu lakukan..."
-            className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-teal-200 outline-none text-sm disabled:bg-gray-100"
-            rows={2}
-            value={formData.social_detail}
-            onChange={(e) => handleChange('social_detail', e.target.value)}
-          />
+          <textarea placeholder="Ceritakan kebaikan yang kamu lakukan..." className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-teal-200 outline-none text-sm disabled:bg-gray-100" rows={2} value={formData.social_detail} onChange={(e) => handleChange('social_detail', e.target.value)}/>
         </div>
 
         {/* 7. Tidur Cepat */}
         <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-indigo-400">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-3xl">🌙</span>
-            <h3 className="text-xl font-bold text-gray-800">Tidur Cepat</h3>
-          </div>
+          <div className="flex items-center gap-3 mb-4"><span className="text-3xl">🌙</span><h3 className="text-xl font-bold text-gray-800">Tidur Cepat</h3></div>
           {renderPlanLabel('sleep_time')}
-          <div className="flex items-center gap-2">
-            <input 
-              type="time" 
-              value={formData.sleep_time}
-              onChange={(e) => handleChange('sleep_time', e.target.value)}
-              className="border p-2 rounded-lg w-full max-w-xs focus:ring-2 focus:ring-indigo-200 outline-none disabled:bg-gray-100"
-            />
-            <span className="font-bold text-gray-500">WIB</span>
-          </div>
+          <div className="flex items-center gap-2"><input type="time" value={formData.sleep_time} onChange={(e) => handleChange('sleep_time', e.target.value)} className="border p-2 rounded-lg w-full max-w-xs focus:ring-2 focus:ring-indigo-200 outline-none disabled:bg-gray-100"/><span className="font-bold text-gray-500">WIB</span></div>
         </div>
 
       </fieldset>

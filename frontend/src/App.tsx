@@ -24,6 +24,9 @@ import Beranda from './pages/dashboards/student/Beranda';
 import StudentDashboard from './pages/dashboards/StudentDashboard'; // Import Halaman Jurnal
 import Riwayat from './pages/dashboards/student/Riwayat';
 
+import GoogleSuccess from './pages/GoogleSuccess';
+import GoogleRegisterComplete from './pages/GoogleRegisterComplete';
+
 // Auth Hook
 import { useAuth } from './services/authService';
 
@@ -79,6 +82,9 @@ const App: React.FC = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         
+        <Route path="/auth/google/success" element={<GoogleSuccess />} />
+        <Route path="/auth/google/complete" element={<GoogleRegisterComplete />} />
+
         {/* Root Redirect */}
         <Route path="/" element={<RedirectRoot />} />
 

@@ -3,6 +3,10 @@ import cors, { CorsOptions } from 'cors';
 import dotenv from 'dotenv';
 dotenv.config();
 import { errorHandler } from './middleware/errorMiddleware';
+import passport from 'passport'; 
+
+// 2. IMPORT FILE KONFIGURASI YANG TADI DIBUAT (Hanya untuk dijalankan kodenya)
+import './config/passport'; // Pastikan pathnya sesuai dengan lokasi file Anda
 
 // Impor rute
 import studentRoutes from './routes/studentRoutes';
@@ -26,6 +30,8 @@ const productionOrigins = [
 ];
 
 let corsOptions: CorsOptions;
+
+app.use(passport.initialize());
 
 // 2. Logika Pemilihan Mode (Production vs Development)
 if (process.env.NODE_ENV === 'production') {

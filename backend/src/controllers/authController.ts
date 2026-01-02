@@ -3,59 +3,45 @@ import pool from '../config/db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-// 1. LOGIN MANUAL
+// --- 1. LOGIN MANUAL (Tetap) ---
 export const login = async (req: Request, res: Response) => {
   const { loginIdentifier, password } = req.body;
 
   try {
     let user = null;
 
-    // --- LOGIC PRIORITAS PARENT ---
-    // Cek apakah input hanya angka dan panjangnya minimal 10 digit (asumsi No WA/HP)
-    // Regex: ^\d{10,}$ artinya start sampai end isinya digit, minimal 10 karakter
+    // Cek apakah input angka (potensi No HP Parent)
     const isPhoneNumber = /^\d{10,}$/.test(loginIdentifier);
 
     if (isPhoneNumber) {
-        // Jika terlihat seperti No HP, Coba cari PARENT terlebih dahulu secara spesifik
         const parentQuery = `SELECT * FROM users WHERE whatsapp_number = ? AND role = 'parent' LIMIT 1`;
         const [parentRows]: any[] = await pool.query(parentQuery, [loginIdentifier]);
-        
-        if (parentRows.length > 0) {
-            user = parentRows[0];
-        }
+        if (parentRows.length > 0) user = parentRows[0];
     }
 
-    // Jika user belum ditemukan (bukan parent atau input bukan nomor hp), lakukan pencarian umum
     if (!user) {
         const query = `
           SELECT * FROM users 
           WHERE email = ? OR nisn = ? OR nip = ? OR whatsapp_number = ?
           LIMIT 1
         `;
-        const params = [loginIdentifier, loginIdentifier, loginIdentifier, loginIdentifier];
-        const [rows]: any[] = await pool.query(query, params);
+        const [rows]: any[] = await pool.query(query, [loginIdentifier, loginIdentifier, loginIdentifier, loginIdentifier]);
         user = rows[0];
     }
-    // -----------------------------
 
-    if (!user) {
-      return res.status(401).json({ message: 'Username atau password salah' });
-    }
+    if (!user) return res.status(401).json({ message: 'Akun tidak ditemukan.' });
 
     // Cek Password
-    // Handle format hash lama ($2y$) jika ada, ubah ke $2a$ agar kompatibel dengan bcryptjs
-    const userPasswordHash = user.password.replace('$2y$', '$2a$');
+    const userPasswordHash = user.password.replace('$2y$', '$2a$'); 
     const isPasswordValid = await bcrypt.compare(password, userPasswordHash);
 
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Username atau password salah' });
-    }
+    if (!isPasswordValid) return res.status(401).json({ message: 'Password salah.' });
 
     // Buat Token
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, name: user.full_name },
       process.env.JWT_SECRET as string,
-      { expiresIn: '1h' }
+      { expiresIn: '1d' }
     );
 
     res.json({
@@ -64,9 +50,8 @@ export const login = async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         fullName: user.full_name,
-        role: user.role, // Role ini yang menentukan redirect di frontend
-        class: user.class,
-        nip: user.nip
+        role: user.role,
+        classId: user.class_id,
       }
     });
 
@@ -76,75 +61,151 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
-// 2. REGISTRASI MANUAL
+// --- 2. REGISTRASI MANUAL (Tetap) ---
 export const register = async (req: Request, res: Response) => {
-  const { fullName, password, role, nisn, nip, class: userClass, whatsappNumber } = req.body;
+    res.status(501).json({ message: "Gunakan fitur Google Login." });
+};
 
-  if (!fullName || !password || !role) {
-    return res.status(400).json({ message: 'Mohon lengkapi data wajib.' });
-  }
-
-  let dbEmail: string;
+// --- 3. GOOGLE CALLBACK HANDLER (UPDATED FRONTEND URL) ---
+export const googleCallbackHandler = async (req: Request, res: Response) => {
+  // Ambil URL Frontend dari ENV
+  // Jika tidak ada di .env, default ke localhost (untuk development)
+  const frontendBaseUrl = process.env.FRONTEND_URL || '';
 
   try {
-    // Cek duplikasi data
-    let conflictCheckQuery: string = '';
-    let conflictCheckParams: any[] = [];
+    const userProfile = req.user as any;
+    const email = userProfile.emails[0].value;
+    const googleId = userProfile.id;
+    const displayName = userProfile.displayName;
 
-    switch(role) {
-      case 'student':
-        if (!nisn) return res.status(400).json({ message: 'NISN diperlukan untuk siswa.' });
-        dbEmail = `${nisn}@student.isokul`;
-        conflictCheckQuery = 'SELECT id FROM users WHERE nisn = ?';
-        conflictCheckParams = [nisn];
-        break;
-      case 'teacher':
-      case 'contributor':
-        if (!nip) return res.status(400).json({ message: 'NIP diperlukan.' });
-        dbEmail = `${nip}@teacher.isokul`;
-        conflictCheckQuery = 'SELECT id FROM users WHERE nip = ?';
-        conflictCheckParams = [nip];
-        break;
-      case 'parent':
-        if (!whatsappNumber) return res.status(400).json({ message: 'Nomor WhatsApp diperlukan.' });
-        dbEmail = `${whatsappNumber}@parent.isokul`;
-        conflictCheckQuery = 'SELECT id FROM users WHERE whatsapp_number = ?';
-        conflictCheckParams = [whatsappNumber];
-        break;
-      default:
-        return res.status(400).json({ message: 'Peran tidak valid.' });
-    }
+    // Cek User di DB
+    const [rows]: any = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+    const existingUser = rows[0];
 
-    if (conflictCheckQuery) {
-      const [existingUsers]: any[] = await pool.query(conflictCheckQuery, conflictCheckParams);
-      if (existingUsers.length > 0) {
-        return res.status(409).json({ message: 'User dengan data tersebut sudah terdaftar.' });
+    // SKENARIO A: USER SUDAH TERDAFTAR
+    if (existingUser) {
+      if (!existingUser.google_id) {
+        await pool.query('UPDATE users SET google_id = ? WHERE id = ?', [googleId, existingUser.id]);
       }
+
+      const token = jwt.sign(
+        { id: existingUser.id, role: existingUser.role, name: existingUser.full_name },
+        process.env.JWT_SECRET as string,
+        { expiresIn: '1d' }
+      );
+
+      // Redirect menggunakan variable URL
+      return res.redirect(`${frontendBaseUrl}/google-register-complete?token=${token}`);
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // SKENARIO B: USER BARU
+    const tempToken = jwt.sign(
+        { 
+            email: email, 
+            googleId: googleId, 
+            fullName: displayName,
+            role: 'new_user',
+            isNewUser: true 
+        },
+        process.env.JWT_SECRET as string,
+        { expiresIn: '1h' } 
+    );
 
-    const insertQuery = `
-      INSERT INTO users (full_name, email, password, role, nisn, nip, class, whatsapp_number) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    const insertParams = [
-      fullName, 
-      dbEmail, 
-      hashedPassword, 
-      role, 
-      nisn || null, 
-      nip || null, 
-      userClass || null, 
-      whatsappNumber || null
-    ];
-    
-    const [result]: any[] = await pool.query(insertQuery, insertParams);
-
-    res.status(201).json({ message: 'Registrasi berhasil', userId: result.insertId });
+    // Redirect menggunakan variable URL
+    return res.redirect(`${frontendBaseUrl}/google-register-complete?token=${tempToken}`);
 
   } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ message: 'Gagal mendaftarkan pengguna.', error });
+    console.error("Google Auth Error:", error);
+    // Redirect error juga menggunakan variable URL
+    return res.redirect(`${frontendBaseUrl}/login?error=GoogleAuthFailed`);
   }
+};
+
+// --- 4. SUBMIT PENDAFTARAN LENGKAP (Tetap) ---
+export const completeGoogleRegistration = async (req: Request, res: Response) => {
+    const { role, fullName, nisn, classId, nip, phoneNumber } = req.body;
+    
+    const userToken = (req as any).user; 
+
+    if (!userToken || !userToken.email || !userToken.googleId) {
+        return res.status(401).json({ message: "Token tidak valid atau sesi habis." });
+    }
+
+    const { email, googleId } = userToken;
+    const connection = await pool.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        const [checkUser]: any = await connection.query('SELECT id FROM users WHERE email = ?', [email]);
+        if (checkUser.length > 0) {
+             throw new Error("Email ini sudah terdaftar sebelumnya.");
+        }
+
+        // 1. Insert User Dasar
+        const [result]: any = await connection.query(
+            `INSERT INTO users (full_name, email, role, google_id, password) 
+             VALUES (?, ?, ?, ?, NULL)`,
+            [fullName, email, role, googleId]
+        );
+        const newUserId = result.insertId;
+
+        // 2. Update Data Spesifik Berdasarkan Role
+        if (role === 'student') {
+            if (!nisn || !classId) throw new Error("NISN dan Kelas wajib diisi.");
+            
+            const [checkNisn]: any = await connection.query('SELECT id FROM users WHERE nisn = ?', [nisn]);
+            if (checkNisn.length > 0) throw new Error("NISN sudah digunakan siswa lain.");
+
+            await connection.query(
+                'UPDATE users SET nisn = ?, class_id = ? WHERE id = ?',
+                [nisn, classId, newUserId]
+            );
+
+        } else if (role === 'teacher') {
+            if (!nip) throw new Error("NIP/NIS wajib diisi.");
+            
+            await connection.query(
+                'UPDATE users SET nip = ?, class_id = ? WHERE id = ?',
+                [nip, classId || null, newUserId]
+            );
+
+        } else if (role === 'parent') {
+            if (!phoneNumber) throw new Error("Nomor Telepon wajib diisi.");
+            
+            await connection.query(
+                'UPDATE users SET whatsapp_number = ? WHERE id = ?',
+                [phoneNumber, newUserId]
+            );
+
+        } else if (role === 'contributor') {
+             if (!nip) throw new Error("NIP/NIS wajib diisi.");
+             await connection.query(
+                'UPDATE users SET nip = ? WHERE id = ?',
+                [nip, newUserId]
+            );
+        }
+
+        await connection.commit();
+
+        // 3. Generate Token Login Permanen
+        const finalToken = jwt.sign(
+            { id: newUserId, role, name: fullName },
+            process.env.JWT_SECRET as string,
+            { expiresIn: '1d' }
+        );
+
+        res.status(201).json({ 
+            message: 'Registrasi berhasil', 
+            token: finalToken,
+            user: { id: newUserId, role, fullName } 
+        });
+
+    } catch (error: any) {
+        await connection.rollback();
+        console.error("Register Complete Error:", error);
+        res.status(400).json({ message: error.message || 'Gagal menyimpan data.' });
+    } finally {
+        connection.release();
+    }
 };

@@ -1,7 +1,8 @@
 import React, { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import authService from '../services/authService';
+// IMPORT PENTING: Gunakan hook dan konstanta dari AuthService yang baru
+import { useAuth, API_HOST } from '../services/authService'; 
 
 // --- Komponen UI Pendukung ---
 
@@ -65,6 +66,9 @@ const classOptions = [
 // --- Komponen Utama Register ---
 
 const Register: React.FC = () => {
+  // Panggil fungsi register dari Context
+  const { register } = useAuth(); 
+  
   const [selectedRole, setSelectedRole] = useState<Role>('student');
   const [formData, setFormData] = useState({
     fullName: '',
@@ -109,7 +113,8 @@ const Register: React.FC = () => {
         class: (selectedRole === 'student' || selectedRole === 'teacher') ? (formData.class || undefined) : undefined,
       };
       
-      await authService.register(registrationData);
+      // Menggunakan fungsi register dari context
+      await register(registrationData);
       
       toast.dismiss(loadingToast);
       toast.success('Pendaftaran berhasil! Silakan masuk.');
@@ -171,7 +176,31 @@ const Register: React.FC = () => {
           <p className="mt-2 text-sm text-gray-600">Daftar untuk mengakses fitur Isokurikuler.</p>
         </div>
 
-        {/* Bagian Tombol Google & Divider Dihapus */}
+        {/* --- GOOGLE REGISTER BUTTON --- */}
+        <div className="mt-2">
+            <a 
+                // PERBAIKAN: Gunakan API_HOST agar dinamis sesuai .env
+                href={`${API_HOST}/api/auth/google`} 
+                className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+            >
+                <img 
+                    className="h-5 w-5" 
+                    src="https://www.svgrepo.com/show/475656/google-color.svg" 
+                    alt="Google Logo" 
+                />
+                <span>Daftar dengan Google</span>
+            </a>
+
+            <div className="relative mt-6">
+                <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500">Atau daftar manual</span>
+                </div>
+            </div>
+        </div>
+        {/* ----------------------------- */}
 
         <form onSubmit={handleRegister} className="space-y-6">
           <div>

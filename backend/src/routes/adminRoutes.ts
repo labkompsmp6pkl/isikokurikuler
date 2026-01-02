@@ -14,6 +14,8 @@ const router = Router();
 
 // Middleware: Hanya Admin yang boleh akses
 router.use(authMiddleware);
+router.get('/classes', getClasses);
+router.get('/teachers-list', getTeachersList);
 router.use(roleMiddleware(['admin']));
 
 // Route Dashboard Statistik
@@ -26,9 +28,8 @@ router.post('/users', createUser);
 router.put('/users/:id', updateUser);
 router.delete('/users/:id', deleteUser);
 
-router.get('/classes', getClasses);
-router.post('/classes/setup', setupClassDatabase); // <--- Route Baru untuk Fix Database
 router.post('/classes', createClass);
+router.post('/classes/setup', setupClassDatabase); // <--- Route Baru untuk Fix Database
 router.post('/classes/generate', generateClasses);
 router.put('/classes/:id', updateClass);
 router.delete('/classes/:id', deleteClass);

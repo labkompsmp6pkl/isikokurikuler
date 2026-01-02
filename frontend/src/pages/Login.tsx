@@ -25,18 +25,21 @@ const Login: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identifier || !password) {
-      toast.error("Mohon lengkapi data login.");
+      // FIX: Gunakan ID agar tidak spam jika diklik berkali-kali
+      toast.error("Mohon lengkapi data login.", { id: 'login-validation' });
       return;
     }
 
     setLoading(true);
-    const toastId = toast.loading('Memverifikasi akun...');
+    // FIX: Simpan ID toast loading untuk di-update nanti
+    const toastId = toast.loading('Memverifikasi akun...', { id: 'login-process' });
 
     try {
       const { user } = await login(identifier, password);
       
-      toast.dismiss(toastId);
+      // FIX: Update toast loading menjadi success (bukan dismiss + new toast)
       toast.success(`Selamat datang, ${user.fullName.split(' ')[0]}!`, {
+        id: toastId,
         icon: '👋',
         style: { borderRadius: '20px', fontWeight: 'bold' }
       });
@@ -54,9 +57,12 @@ const Login: React.FC = () => {
       }, 800);
 
     } catch (err: any) {
-      toast.dismiss(toastId);
       const msg = err.response?.data?.message || 'Login gagal. Periksa kembali data Anda.';
-      toast.error(msg, { style: { borderRadius: '20px', fontWeight: 'bold' } });
+      // FIX: Update toast loading menjadi error
+      toast.error(msg, { 
+        id: toastId,
+        style: { borderRadius: '20px', fontWeight: 'bold' } 
+      });
     } finally {
       setLoading(false);
     }
@@ -79,7 +85,7 @@ const Login: React.FC = () => {
           <h1 className="text-4xl font-black text-slate-900 tracking-tighter mb-3 flex justify-center items-center gap-2">
             Masuk Akun 
           </h1>
-          <p className="text-slate-500 font-medium text-lg leading-relaxed">Selamat datang kembali di portal <span className="text-violet-600 font-black">Kokurikuler SMPN 6 Pekalongan</span>.</p>
+          <p className="text-slate-500 font-medium text-lg leading-relaxed">Selamat datang kembali di portal <span className="text-violet-600 font-black">Kokurikuler SMPN 6 PEKALONGAN</span>.</p>
         </div>
 
         {/* GOOGLE LOGIN - Style Tombol Rounded Besar */}
@@ -112,7 +118,7 @@ const Login: React.FC = () => {
           
           {/* Input Identifier */}
           <div className="space-y-2">
-            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-4">ID Pengguna (NoTelp / NISN / NIP)</label>
+            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-4">ID Pengguna (Email / NISN / NIP)</label>
             <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-400 group-focus-within:text-violet-600 transition-colors">
                 <User size={22} />
@@ -132,7 +138,6 @@ const Login: React.FC = () => {
           <div className="space-y-2">
             <div className="flex justify-between items-center px-4">
               <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Kata Sandi</label>
-              <a href="#" className="text-[11px] font-bold text-violet-600 hover:text-violet-800 transition-colors hover:underline decoration-2 underline-offset-4">Lupa Password?</a>
             </div>
             <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-400 group-focus-within:text-violet-600 transition-colors">

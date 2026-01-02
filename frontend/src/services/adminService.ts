@@ -58,7 +58,7 @@ const deleteUser = async (id: number) => {
 };
 
 const getClasses = async () => {
-    const response = await axios.get(`${API_URL}/classes`, getAuthHeaders());
+    const response = await axios.get(`${API_URL}/classes-list`, getAuthHeaders());
     return response.data;
 };
 

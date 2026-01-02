@@ -47,7 +47,7 @@ const GoogleRegisterComplete = () => {
         // 2. Ambil Data Kelas
         try {
             // Pastikan API_HOST di AuthService mengarah ke https://backendkokurikuler.smpn6pekalongan.org
-            const response = await authApi.get('/admin/classes'); 
+            const response = await authApi.get('/admin/classes-list'); 
             const data = response.data.data || response.data;
             setClassList(Array.isArray(data) ? data : []);
         } catch (classErr) {

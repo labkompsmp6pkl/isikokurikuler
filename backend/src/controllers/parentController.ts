@@ -15,7 +15,6 @@ const parseJSON = (data: any) => {
     }
 };
 
-// Fungsi untuk menautkan siswa ke orang tua berdasarkan NISN
 export const linkStudent = async (req: Request, res: Response) => {
     const { nisn } = req.body;
     const parentId = (req as any).user.id;
@@ -42,7 +41,6 @@ export const linkStudent = async (req: Request, res: Response) => {
         }
 
         await pool.query('UPDATE users SET parent_id = ? WHERE id = ?', [parentId, student.id]);
-        
         res.status(200).json({ message: 'Siswa berhasil ditautkan!' });
 
     } catch (error) {
@@ -55,9 +53,13 @@ export const getDashboardData = async (req: Request, res: Response) => {
     const parentId = (req as any).user.id;
 
     try {
-        // Ambil Data Siswa
+        // Ambil Data Siswa dengan JOIN ke tabel classes untuk dapat Nama Kelas
         const [studentRows]: any[] = await pool.query(
-            'SELECT id, full_name, class FROM users WHERE parent_id = ?',
+            `SELECT u.id, u.full_name, u.class_id, c.name as class 
+             FROM users u 
+             LEFT JOIN classes c ON u.class_id = c.id 
+             WHERE u.parent_id = ? AND u.role = 'student' 
+             LIMIT 1`,
             [parentId]
         );
 
@@ -67,24 +69,17 @@ export const getDashboardData = async (req: Request, res: Response) => {
         
         const student = studentRows[0]; 
 
-        // Ambil Log (Hanya yang statusnya 'Tersimpan' untuk validasi, atau ambil semua utk history)
-        // Di dashboard biasanya kita butuh list validasi & history, disini kita ambil yg Tersimpan dulu
-        // atau sesuaikan dengan kebutuhan frontend Anda. 
-        // Code ini mengambil SEMUA log untuk dipilah di frontend (pending vs history)
+        // Ambil Log Karakter
         const [logRows]: any[] = await pool.query(
             "SELECT * FROM character_logs WHERE student_id = ? ORDER BY log_date DESC LIMIT 50",
             [student.id]
         );
 
-        // [FIX] Lakukan Parsing JSON di sini sebelum dikirim ke Frontend
         const processedLogs = logRows.map((log: any) => ({
             ...log,
-            // Parse data Eksekusi
             worship_activities: parseJSON(log.worship_activities),
             study_activities: parseJSON(log.study_activities),
             social_activities: parseJSON(log.social_activities),
-            
-            // Parse data Rencana (jika ada fitur rencana)
             plan_worship_activities: parseJSON(log.plan_worship_activities),
             plan_study_activities: parseJSON(log.plan_study_activities),
             plan_social_activities: parseJSON(log.plan_social_activities),
@@ -127,75 +122,57 @@ export const getLogHistory = async (req: Request, res: Response) => {
     }
 };
 
-// Fungsi untuk menyetujui log karakter
 export const approveCharacterLog = async (req: Request, res: Response) => {
     const { logId } = req.params;
     const parentId = (req as any).user.id;
-
     try {
-        // Validasi kepemilikan
         const [logRows]: any[] = await pool.query(
-            `SELECT cl.id 
-             FROM character_logs cl
-             JOIN users u ON cl.student_id = u.id
-             WHERE cl.id = ? AND u.parent_id = ?`,
+            `SELECT cl.id FROM character_logs cl JOIN users u ON cl.student_id = u.id WHERE cl.id = ? AND u.parent_id = ?`,
             [logId, parentId]
         );
+        if (logRows.length === 0) return res.status(403).json({ message: 'Akses ditolak.' });
 
-        if (logRows.length === 0) {
-            return res.status(403).json({ message: 'Anda tidak berhak mengakses log ini atau log tidak ditemukan.' });
-        }
-
-        // Update status menjadi 'Disetujui'
-        const [updateResult]: any = await pool.query(
-            "UPDATE character_logs SET status = 'Disetujui' WHERE id = ?",
-            [logId]
-        );
-
-        if (updateResult.affectedRows === 0) {
-             return res.status(404).json({ message: 'Gagal mengupdate log.' });
-        }
-
-        const [updatedLogRows]: any[] = await pool.query('SELECT * FROM character_logs WHERE id = ?', [logId]);
-
-        res.json(updatedLogRows[0]);
-
+        await pool.query("UPDATE character_logs SET status = 'Disetujui' WHERE id = ?", [logId]);
+        const [updated]: any[] = await pool.query('SELECT * FROM character_logs WHERE id = ?', [logId]);
+        res.json(updated[0]);
     } catch (error) {
-        console.error('Error approving log:', error);
-        res.status(500).json({ message: 'Terjadi kesalahan pada server.' });
+        res.status(500).json({ message: 'Gagal validasi.' });
     }
 };
 
 export const previewStudentByNisn = async (req: Request, res: Response) => {
-  const { nisn } = req.body;
+    const { nisn } = req.body;
 
-  if (!nisn) {
-      return res.status(400).json({ message: 'NISN siswa diperlukan.' });
-  }
+    if (!nisn) {
+        return res.status(400).json({ message: 'NISN siswa diperlukan.' });
+    }
 
-  try {
-      const [studentRows]: any[] = await pool.query(
-          'SELECT full_name, class, parent_id FROM users WHERE nisn = ? AND role = \'student\'', 
-          [nisn]
-      );
+    try {
+        const [studentRows]: any[] = await pool.query(
+            `SELECT u.full_name, u.parent_id, c.name as class_name 
+             FROM users u 
+             LEFT JOIN classes c ON u.class_id = c.id 
+             WHERE u.nisn = ? AND u.role = 'student'`, 
+            [nisn]
+        );
 
-      if (studentRows.length === 0) {
-          return res.status(404).json({ message: 'Siswa dengan NISN ini tidak ditemukan.' });
-      }
+        if (studentRows.length === 0) {
+            return res.status(404).json({ message: 'Siswa dengan NISN ini tidak ditemukan.' });
+        }
 
-      const student = studentRows[0];
+        const student = studentRows[0];
 
-      if (student.parent_id) {
-           return res.status(409).json({ message: 'Siswa ini sudah terhubung dengan akun orang tua lain.' });
-      }
+        if (student.parent_id) {
+             return res.status(409).json({ message: 'Siswa ini sudah terhubung dengan akun orang tua lain.' });
+        }
 
-      res.json({
-          fullName: student.full_name,
-          class: student.class
-      });
+        res.json({
+            fullName: student.full_name,
+            class: student.class_name || 'Tanpa Kelas' // Mengirim nama kelas asli
+        });
 
-  } catch (error) {
-      console.error("Error previewing student:", error);
-      res.status(500).json({ message: 'Terjadi kesalahan server.' });
-  }
+    } catch (error) {
+        console.error("Error previewing student:", error);
+        res.status(500).json({ message: 'Terjadi kesalahan server.' });
+    }
 };

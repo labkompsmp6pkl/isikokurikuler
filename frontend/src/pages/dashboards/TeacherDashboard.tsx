@@ -3,27 +3,27 @@ import toast from 'react-hot-toast';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { 
-  LayoutDashboard, 
-  CheckSquare, 
-  CalendarDays, 
-  BarChart3, 
-  LogOut, 
-  Menu, 
-  X, 
-  Printer, 
-  Sparkles,
-  Clock,
-  ChevronRight,
-  AlertCircle,
-  UserCheck,
-  TrendingUp,
-  FileText,
-  Award,
-  Filter,
-  RefreshCw,
-  Search,
-  BookOpen,
-  Users
+    LayoutDashboard, 
+    CheckSquare, 
+    CalendarDays, 
+    BarChart3, 
+    LogOut, 
+    Menu, 
+    X, 
+    Printer, 
+    Sparkles,
+    Clock,
+    ChevronRight,
+    AlertCircle,
+    UserCheck,
+    TrendingUp,
+    FileText,
+    Award,
+    Filter,
+    RefreshCw,
+    Search,
+    BookOpen,
+    Users
 } from 'lucide-react';
 
 import teacherService from '../../services/teacherService';
@@ -87,7 +87,9 @@ const TeacherDashboard: React.FC = () => {
     const [reportConfig, setReportConfig] = useState({ studentId: '', startDate: '', endDate: '' });
     const [analysisResult, setAnalysisResult] = useState<any>(null);
     const [isGenerating, setIsGenerating] = useState(false);
-const selectedStudent = data?.students?.find((s: any) => s.id == reportConfig.studentId);
+    
+    const selectedStudent = data?.students?.find((s: any) => s.id == reportConfig.studentId);
+
     // ==========================================
     // 3. EFFECTS (Lifecycle)
     // ==========================================
@@ -139,7 +141,6 @@ const selectedStudent = data?.students?.find((s: any) => s.id == reportConfig.st
     };
 
     const handleFetchHistory = async () => {
-        // Cek apakah data dashboard dasar sudah masuk (punya teacherClassId)
         if (!data?.teacherClassId) return;
     
         try {
@@ -264,7 +265,7 @@ const selectedStudent = data?.students?.find((s: any) => s.id == reportConfig.st
                             <img src="/logo-smpn6.png" className="w-8 h-8" alt="Logo" />
                         </div>
                         <div>
-                            <h1 className="font-black text-xl text-slate-900 leading-tight tracking-tighter">ISIKOKURIKULER</h1>
+                            <h1 className="font-black text-xl text-slate-900 leading-tight tracking-tighter">KOKURIKULER</h1>
                             <p className="text-[10px] text-slate-400 font-black tracking-[0.2em] uppercase">Teacher Panel</p>
                         </div>
                     </div>
@@ -317,15 +318,31 @@ const selectedStudent = data?.students?.find((s: any) => s.id == reportConfig.st
             {/* MAIN CONTENT */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 
-                {/* Mobile Header Navbar */}
-                <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 p-5 flex justify-between items-center md:hidden sticky top-0 z-20 no-print">
-                    <div className="flex items-center gap-3">
-                        <img src="/logo-smpn6.png" className="w-9 h-9" alt="Logo" />
-                        <span className="font-black text-slate-800 text-sm tracking-tighter">ISIKOKURIKULER</span>
+                {/* Mobile Header Navbar - ENHANCED WITH USER DETAIL */}
+                <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 p-4 md:hidden sticky top-0 z-20 no-print">
+                    <div className="flex justify-between items-center mb-3">
+                        <div className="flex items-center gap-2">
+                            <img src="/logo-smpn6.png" className="w-8 h-8" alt="Logo" />
+                            <span className="font-black text-slate-900 text-xs tracking-tighter uppercase">kokurikuler</span>
+                        </div>
+                        <button onClick={() => setIsSidebarOpen(true)} className="p-2 bg-indigo-50 text-indigo-600 rounded-xl active:scale-90 transition-transform">
+                            <Menu size={24} />
+                        </button>
                     </div>
-                    <button onClick={() => setIsSidebarOpen(true)} className="p-2 bg-slate-100 rounded-xl text-slate-600 active:scale-90 transition-transform">
-                        <Menu size={26} />
-                    </button>
+                    
+                    {/* User Quick Info in Mobile Navbar */}
+                    <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-xs uppercase shadow-md">
+                            {user.fullName.charAt(0)}
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                            <p className="text-[10px] font-bold text-gray-400 leading-none uppercase tracking-widest">Wali Kelas</p>
+                            <p className="text-xs font-black text-gray-800 truncate mt-0.5">{user.fullName}</p>
+                        </div>
+                        <div className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-[10px] font-black uppercase">
+                            Kelas {data?.teacherClass || '-'}
+                        </div>
+                    </div>
                 </header>
 
                 <main className="flex-1 overflow-auto p-4 md:p-10 custom-scrollbar">
@@ -622,7 +639,7 @@ const selectedStudent = data?.students?.find((s: any) => s.id == reportConfig.st
                                                 <img src="/logo-smpn6.png" alt="Logo" className="w-32 h-auto" />
                                                 <div className="text-center">
                                                     <h1 className="text-5xl font-black text-black uppercase tracking-tighter mb-2">SMP NEGERI 6 PEKALONGAN</h1>
-                                                    <p className="text-base font-black text-slate-800 uppercase tracking-[0.3em] mb-2">LAPORAN PEMBIASAAN KARAKTER SISWA (ISIKOKURIKULER)</p>
+                                                    <p className="text-base font-black text-slate-800 uppercase tracking-[0.3em] mb-2">LAPORAN PEMBIASAAN KARAKTER SISWA (KOKURIKULER)</p>
                                                     <p className="text-xs font-bold text-slate-600 italic">Alamat: Jl. Teratai No.31, Poncol, Kec. Pekalongan Tim., Kota Pekalongan, Jawa Tengah 51122</p>
                                                 </div>
                                             </div>
@@ -684,7 +701,6 @@ const selectedStudent = data?.students?.find((s: any) => s.id == reportConfig.st
                                                     <div className="text-center w-80">
                                                         <p className="mb-32 font-black text-slate-800">Pekalongan, {new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'})}<br/><span className="text-xs uppercase tracking-widest text-slate-400">Wali Kelas {data?.teacherClass}</span></p>
                                                         <p className="font-black underline uppercase mb-2 text-black text-xl leading-none tracking-tighter">{user.fullName}</p>
-                                                        {/* NIP DINAMIS DARI DATA GURU LOGIN */}
                                                         <p className="text-sm font-black text-slate-700 tracking-widest">NIP. {user.nip || "........................................"}</p>
                                                     </div>
                                                 </div>
@@ -692,7 +708,7 @@ const selectedStudent = data?.students?.find((s: any) => s.id == reportConfig.st
 
                                             {/* FOOTER PDF */}
                                             <div className="mt-20 pt-10 text-center border-t border-slate-50 opacity-20 no-print">
-                                                <p className="text-[10px] font-black uppercase tracking-[0.5em]">Generated by ISIKOKURIKULER Intelligent System v2.0</p>
+                                                <p className="text-[10px] font-black uppercase tracking-[0.5em]">Generated by KOKURIKULER Intelligent System v2.0</p>
                                             </div>
                                         </div>
                                     </div>

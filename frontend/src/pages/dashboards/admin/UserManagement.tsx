@@ -125,7 +125,7 @@ const UserManagement: React.FC = () => {
                     <div className="flex items-center gap-3">
                         <img src="/logo-smpn6.png" className="w-9 h-9" alt="Logo" />
                         <div>
-                            <h1 className="font-black text-lg text-indigo-900 leading-tight">ISIKOKURIKULER</h1>
+                            <h1 className="font-black text-lg text-indigo-900 leading-tight">KOKURIKULER</h1>
                             <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Admin Panel</p>
                         </div>
                     </div>
@@ -155,7 +155,7 @@ const UserManagement: React.FC = () => {
                 <header className="bg-white border-b border-slate-200 p-4 flex justify-between items-center md:hidden sticky top-0 z-10">
                     <div className="flex items-center gap-2">
                         <img src="/logo-smpn6.png" className="w-8 h-8" alt="Logo" />
-                        <span className="font-black text-slate-800 text-xs">ISIKOKURIKULER</span>
+                        <span className="font-black text-slate-800 text-xs">KOKURIKULER</span>
                     </div>
                     <button onClick={() => setIsSidebarOpen(true)} className="text-slate-600"><Menu size={24} /></button>
                 </header>

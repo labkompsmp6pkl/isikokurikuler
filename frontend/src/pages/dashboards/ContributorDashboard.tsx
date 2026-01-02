@@ -15,7 +15,9 @@ import {
     Award, 
     UserCircle, 
     Users, 
-    CheckCircle 
+    CheckCircle,
+    Type,
+    UserCog,
 } from 'lucide-react';
 
 import contributorService from '../../services/contributorService';
@@ -38,12 +40,16 @@ const ContributorDashboard: React.FC = () => {
     // Data State
     const [user, setUser] = useState<any>({ fullName: 'Kontributor' });
     const [students, setStudents] = useState<any[]>([]); 
-    const [classes, setClasses] = useState<ClassOption[]>([]); // MODIFIKASI: Gunakan interface ClassOption
+    const [classes, setClasses] = useState<ClassOption[]>([]); 
     const [historyData, setHistoryData] = useState<any[]>([]); 
+
+    // Custom Role State
+    const [isCustomRole, setIsCustomRole] = useState(false);
 
     // Form State: Penilaian Sikap
     const [sikapForm, setSikapForm] = useState({
         role: "Guru Mata Pelajaran",
+        customRoleName: "", // State untuk peran manual
         studentId: '',
         category: 'Bangun Pagi',
         date: new Date().toISOString().split('T')[0],
@@ -56,7 +62,7 @@ const ContributorDashboard: React.FC = () => {
     const [selectedHabitForMission, setSelectedHabitForMission] = useState('');
     const [misiForm, setMisiForm] = useState({
         targetType: 'siswa', 
-        targetId: '', // Berisi student_id atau class_id
+        targetId: '', 
         title: '',
         dueDate: ''
     });
@@ -98,9 +104,7 @@ const ContributorDashboard: React.FC = () => {
         try {
             const data = await contributorService.getData();
             setStudents(data.students || []);
-            // MODIFIKASI: Pastikan data kelas yang diterima memiliki struktur id dan name
             setClasses(data.classes || []); 
-            
             await loadHistory(); 
         } catch (error) {
             console.error("Gagal memuat data", error);
@@ -125,10 +129,14 @@ const ContributorDashboard: React.FC = () => {
     };
 
     const handleKirimSikap = async () => {
+        const finalRole = isCustomRole ? sikapForm.customRoleName : sikapForm.role;
+
         if (!sikapForm.studentId) return Swal.fire('Perhatian', 'Pilih siswa terlebih dahulu', 'warning');
+        if (isCustomRole && !sikapForm.customRoleName) return Swal.fire('Perhatian', 'Isi peran kustom Anda', 'warning');
         
         try {
-            await contributorService.submitScore(sikapForm);
+            const payload = { ...sikapForm, role: finalRole };
+            await contributorService.submitScore(payload);
             Swal.fire({
                 title: 'Berhasil',
                 text: 'Nilai sikap berhasil dikirim!',
@@ -136,7 +144,9 @@ const ContributorDashboard: React.FC = () => {
                 timer: 1500,
                 showConfirmButton: false
             });
-            setSikapForm(prev => ({ ...prev, score: 80, notes: '' }));
+            // Reset form
+            setSikapForm(prev => ({ ...prev, score: 80, notes: '', customRoleName: '' }));
+            setIsCustomRole(false);
             loadHistory(); 
         } catch (error) {
             Swal.fire('Gagal', 'Terjadi kesalahan saat mengirim nilai.', 'error');
@@ -163,7 +173,6 @@ const ContributorDashboard: React.FC = () => {
         if (misiForm.targetType === 'siswa') {
             payload.studentId = misiForm.targetId;
         } else {
-            // MODIFIKASI: Mengirimkan class_id sebagai target
             payload.classId = misiForm.targetId; 
         }
 
@@ -205,8 +214,8 @@ const ContributorDashboard: React.FC = () => {
                     <div className="flex items-center gap-3">
                         <img src="/logo-smpn6.png" className="w-9 h-9" alt="Logo" />
                         <div>
-                            <h1 className="font-black text-lg text-emerald-900 leading-tight">ISIKOKURIKULER</h1>
-                            <p className="text-[10px] text-gray-500 font-bold tracking-widest">CONTRIBUTOR</p>
+                            <h1 className="font-black text-lg text-emerald-900 leading-tight">KOKURIKULER</h1>
+                            <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase">Contributor</p>
                         </div>
                     </div>
                     <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-gray-400 hover:text-red-500"><X size={24} /></button>
@@ -231,7 +240,7 @@ const ContributorDashboard: React.FC = () => {
                         </div>
                         <div className="overflow-hidden">
                             <p className="text-sm font-bold text-gray-800 truncate">{user.fullName}</p>
-                            <p className="text-xs text-emerald-600 font-semibold">Role: Kontributor</p>
+                            <p className="text-xs text-emerald-600 font-semibold uppercase tracking-wider">Kontributor</p>
                         </div>
                     </div>
                     <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-red-600 bg-white border border-red-100 rounded-lg hover:bg-red-50 transition-colors">
@@ -242,22 +251,42 @@ const ContributorDashboard: React.FC = () => {
 
             {/* MAIN CONTENT */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <header className="bg-white border-b border-gray-200 p-4 flex justify-between items-center md:hidden sticky top-0 z-10">
-                    <div className="flex items-center gap-2">
-                        <img src="/logo-smpn6.png" className="w-8 h-8" alt="Logo" />
-                        <span className="font-bold text-gray-800">ISOKURIKULER</span>
+                {/* HEADER MOBILE WITH USER DETAILS */}
+                <header className="bg-white border-b border-gray-200 p-4 md:hidden sticky top-0 z-10 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <img src="/logo-smpn6.png" className="w-8 h-8" alt="Logo" />
+                            <span className="font-bold text-gray-800 uppercase text-xs">KOKURIKULER</span>
+                        </div>
+                        <button onClick={() => setIsSidebarOpen(true)} className="p-2 bg-emerald-50 text-emerald-600 rounded-lg active:scale-90 transition-transform">
+                            <Menu size={24} />
+                        </button>
                     </div>
-                    <button onClick={() => setIsSidebarOpen(true)} className="text-gray-600"><Menu size={24} /></button>
+
+                    {/* Quick Profile Section in Navbar Mobile */}
+                    <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
+                        <div className="w-9 h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-md">
+                            {user.fullName ? user.fullName.charAt(0).toUpperCase() : 'C'}
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                            <p className="text-[10px] font-bold text-gray-400 leading-none uppercase tracking-widest">Kontributor</p>
+                            <p className="text-xs font-black text-gray-800 truncate mt-1">{user.fullName}</p>
+                        </div>
+                        <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm">
+                            Online
+                        </div>
+                    </div>
                 </header>
 
                 <main className="flex-1 overflow-auto p-4 md:p-8">
                     <div className="max-w-5xl mx-auto pb-20">
+                        {/* TAB CONTENT: BERANDA */}
                         {activeTab === 'beranda' && (
                             <div className="space-y-8 animate-fade-in">
-                                <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
+                                <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-[2rem] p-8 text-white shadow-xl relative overflow-hidden">
                                     <h1 className="text-3xl font-black mb-2 relative z-10">Misi Kebiasaan Indonesia Hebat</h1>
                                     <p className="text-emerald-100 max-w-2xl text-lg font-medium relative z-10">
-                                        Sebagai kontributor, Anda berperan penting dalam memberikan penilaian sikap dan tantangan untuk membentuk karakter siswa.
+                                        Sebagai kontributor, Anda berperan penting dalam memberikan penilaian sikap dan tantangan produktif untuk karakter siswa.
                                     </p>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -277,6 +306,7 @@ const ContributorDashboard: React.FC = () => {
                             </div>
                         )}
 
+                        {/* TAB CONTENT: MISI */}
                         {activeTab === 'misi' && (
                             <div className="space-y-6 animate-fade-in">
                                 <div className="flex bg-white p-1 rounded-xl shadow-sm border border-gray-200 w-fit mb-6">
@@ -289,38 +319,66 @@ const ContributorDashboard: React.FC = () => {
                                 </div>
 
                                 {activeMissionTab === 'sikap' && (
-                                    <div className="bg-white p-6 md:p-8 rounded-3xl shadow-lg border border-gray-100 max-w-2xl">
+                                    <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-lg border border-gray-100 max-w-2xl">
                                         <h2 className="text-2xl font-black text-gray-800 mb-6 flex items-center gap-2">
                                             <span className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600"><Award size={20}/></span>
                                             Input Nilai Sikap
                                         </h2>
                                         <div className="space-y-5">
                                             <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Peran Anda</label>
-                                                <select className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500" value={sikapForm.role} onChange={(e) => setSikapForm({...sikapForm, role: e.target.value})}>
-                                                    {contributorRoles.map(r => <option key={r} value={r}>{r}</option>)}
-                                                </select>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 tracking-wider">Peran Anda</label>
+                                                <div className="space-y-3">
+                                                    <select 
+                                                        className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all shadow-sm" 
+                                                        value={isCustomRole ? "custom" : sikapForm.role} 
+                                                        onChange={(e) => {
+                                                            if (e.target.value === "custom") {
+                                                                setIsCustomRole(true);
+                                                                setSikapForm({...sikapForm, role: ""});
+                                                            } else {
+                                                                setIsCustomRole(false);
+                                                                setSikapForm({...sikapForm, role: e.target.value});
+                                                            }
+                                                        }}
+                                                    >
+                                                        {contributorRoles.map(r => <option key={r} value={r}>{r}</option>)}
+                                                        <option value="custom" className="text-emerald-600 font-black">+ Lainnya (Ketik Manual)</option>
+                                                    </select>
+
+                                                    {isCustomRole && (
+                                                        <div className="relative animate-in slide-in-from-top-2 duration-300">
+                                                            <div className="absolute left-3 top-3 text-emerald-600"><UserCog size={18}/></div>
+                                                            <input 
+                                                                type="text" 
+                                                                placeholder="Masukkan Peran Anda (Contoh: Pembimbing Rohis)" 
+                                                                className="w-full p-3 pl-10 bg-white border-2 border-emerald-100 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500 shadow-sm"
+                                                                value={sikapForm.customRoleName}
+                                                                onChange={(e) => setSikapForm({...sikapForm, customRoleName: e.target.value})}
+                                                                autoFocus
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Target Siswa</label>
-                                                <select className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500" value={sikapForm.studentId} onChange={(e) => setSikapForm({...sikapForm, studentId: e.target.value})}>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 tracking-wider">Target Siswa</label>
+                                                <select className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all shadow-sm" value={sikapForm.studentId} onChange={(e) => setSikapForm({...sikapForm, studentId: e.target.value})}>
                                                     <option value="">-- Pilih Siswa --</option>
                                                     {students.map((s:any) => (
-                                                        // MODIFIKASI: Menampilkan nama kelas relasional jika ada (s.class_name)
-                                                        <option key={s.id} value={s.id}>{s.full_name} ({s.class_name || s.class || '-'})</option>
+                                                        <option key={s.id} value={s.id}>{s.full_name} ({s.class_name || s.class || 'N/A'})</option>
                                                     ))}
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Kategori Kebiasaan</label>
-                                                <select className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500" value={sikapForm.category} onChange={(e) => setSikapForm({...sikapForm, category: e.target.value})}>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 tracking-wider">Kategori Kebiasaan</label>
+                                                <select className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all shadow-sm" value={sikapForm.category} onChange={(e) => setSikapForm({...sikapForm, category: e.target.value})}>
                                                     {habits.map((h, i) => <option key={i} value={h.title}>{h.icon} {h.title}</option>)}
                                                 </select>
                                             </div>
-                                            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex gap-3 items-start">
+                                            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex gap-3 items-start shadow-inner">
                                                 <div className="mt-1 text-blue-600"><CalendarDays size={18}/></div>
                                                 <div>
-                                                    <p className="text-sm font-bold text-blue-800 uppercase">Tanggal Penilaian</p>
+                                                    <p className="text-sm font-bold text-blue-800 uppercase tracking-tight">Tanggal Penilaian</p>
                                                     <input type="date" className="bg-transparent border-b border-blue-300 text-blue-900 font-bold text-sm outline-none mt-1" value={sikapForm.date} onChange={(e) => setSikapForm({...sikapForm, date: e.target.value})} />
                                                 </div>
                                             </div>
@@ -332,10 +390,10 @@ const ContributorDashboard: React.FC = () => {
                                                 <input type="range" min="0" max="100" step="5" className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-600" value={sikapForm.score} onChange={(e) => setSikapForm({...sikapForm, score: parseInt(e.target.value)})} />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Catatan (Opsional)</label>
-                                                <textarea className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-medium text-sm text-gray-700 outline-none focus:border-emerald-500" rows={2} placeholder="Contoh: Sangat sopan..." value={sikapForm.notes} onChange={(e) => setSikapForm({...sikapForm, notes: e.target.value})} />
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 tracking-wider">Catatan (Opsional)</label>
+                                                <textarea className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-medium text-sm text-gray-700 outline-none focus:border-emerald-500 transition-all shadow-sm" rows={2} placeholder="Berikan catatan singkat jika perlu..." value={sikapForm.notes} onChange={(e) => setSikapForm({...sikapForm, notes: e.target.value})} />
                                             </div>
-                                            <button onClick={handleKirimSikap} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold text-lg hover:bg-emerald-700 transition-all shadow-lg flex justify-center items-center gap-2">
+                                            <button onClick={handleKirimSikap} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-black text-lg hover:bg-emerald-700 transition-all shadow-lg active:scale-95 flex justify-center items-center gap-2">
                                                 <Send size={20}/> Kirim Penilaian
                                             </button>
                                         </div>
@@ -346,7 +404,7 @@ const ContributorDashboard: React.FC = () => {
                                     <div className="space-y-6">
                                         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                             <h2 className="text-xl font-black text-gray-800 mb-2">Agenda Misi Siswa</h2>
-                                            <p className="text-gray-500 text-sm">Tantangan akan muncul di dashboard target.</p>
+                                            <p className="text-gray-500 text-sm">Berikan tantangan harian untuk dikerjakan siswa. Misi akan tampil di dashboard mereka.</p>
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {habits.map((habit, idx) => (
@@ -355,7 +413,7 @@ const ContributorDashboard: React.FC = () => {
                                                         <div className="text-3xl group-hover:scale-110 transition-transform">{habit.icon}</div>
                                                         <div>
                                                             <h3 className="font-bold text-gray-700">{habit.title}</h3>
-                                                            <p className="text-[10px] text-gray-400 uppercase font-bold">Buat Agenda</p>
+                                                            <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest">Jadwal Misi</p>
                                                         </div>
                                                     </div>
                                                     <button onClick={() => openMissionModal(habit.title)} className="px-4 py-2 bg-gray-100 text-gray-600 font-bold text-xs rounded-lg hover:bg-emerald-100 hover:text-emerald-700 transition-colors uppercase">
@@ -369,36 +427,38 @@ const ContributorDashboard: React.FC = () => {
                             </div>
                         )}
 
+                        {/* TAB CONTENT: RIWAYAT */}
                         {activeTab === 'riwayat' && (
                             <div className="space-y-6 animate-fade-in">
                                 <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-end">
                                     <div>
-                                        <h2 className="text-2xl font-black text-gray-800">Kalender Kontribusi</h2>
-                                        <p className="text-gray-500 text-sm">Daftar penilaian yang telah Anda lakukan.</p>
+                                        <h2 className="text-2xl font-black text-gray-800 tracking-tight">Kalender Kontribusi</h2>
+                                        <p className="text-gray-500 text-sm">Daftar rekaman penilaian yang telah Anda lakukan di platform ini.</p>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                    <div className="bg-white p-6 rounded-3xl shadow-lg border border-gray-100 lg:col-span-1">
+                                    <div className="bg-white p-6 rounded-[2rem] shadow-lg border border-gray-100 lg:col-span-1">
                                         <Calendar className="w-full border-none font-sans" locale="id-ID"/>
                                     </div>
-                                    <div className="bg-white p-6 rounded-3xl shadow-lg border border-gray-100 lg:col-span-2">
-                                        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><History size={18} className="text-emerald-600"/> Log Aktivitas</h3>
+                                    <div className="bg-white p-6 rounded-[2rem] shadow-lg border border-gray-100 lg:col-span-2">
+                                        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><History size={18} className="text-emerald-600"/> Log Aktivitas Terkini</h3>
                                         <div className="overflow-y-auto max-h-[400px] space-y-3 pr-2 custom-scrollbar">
                                             {historyData.length === 0 ? (
-                                                <p className="text-center text-gray-400 text-sm py-10">Belum ada riwayat.</p>
+                                                <p className="text-center text-gray-400 text-sm py-10 font-bold uppercase tracking-widest">Belum ada riwayat</p>
                                             ) : (
                                                 historyData.map((h: any) => (
-                                                    <div key={h.id} className="p-4 bg-gray-50 rounded-xl flex justify-between items-center group hover:bg-emerald-50 transition-colors">
+                                                    <div key={h.id} className="p-4 bg-gray-50 rounded-xl flex justify-between items-center group hover:bg-emerald-50 transition-colors border border-transparent hover:border-emerald-100">
                                                         <div>
                                                             <div className="flex gap-2 mb-1">
                                                                 <span className="text-[10px] font-bold bg-white border border-gray-200 px-2 py-0.5 rounded text-gray-500">{new Date(h.record_date).toLocaleDateString('id-ID')}</span>
-                                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-blue-100 text-blue-700">{h.type}</span>
+                                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-blue-100 text-blue-700 tracking-widest">{h.type}</span>
                                                             </div>
                                                             <p className="font-bold text-gray-800 text-sm">{h.student_name} <span className="text-gray-400 text-xs">({h.class_name || h.class})</span></p>
                                                             <p className="text-xs text-gray-500">{h.category || h.type_detail}</p>
                                                         </div>
                                                         <div className="text-right">
                                                             <span className="block text-xl font-black text-emerald-600">+{h.score}</span>
+                                                            <span className="text-[10px] text-gray-400 uppercase font-black">Poin</span>
                                                         </div>
                                                     </div>
                                                 ))
@@ -415,69 +475,68 @@ const ContributorDashboard: React.FC = () => {
             {/* MODAL JADWAL MISI */}
             {modalMisiOpen && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl scale-100 transform transition-all">
-                        <div className="flex justify-between items-center mb-6">
+                    <div className="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl scale-100 transform transition-all overflow-hidden border border-white">
+                        <div className="flex justify-between items-center mb-6 border-b border-gray-50 pb-4">
                             <div>
                                 <h3 className="font-black text-xl text-gray-800">Buat Misi Baru</h3>
-                                <p className="text-sm text-emerald-600 font-bold">{selectedHabitForMission}</p>
+                                <p className="text-sm text-emerald-600 font-black">{selectedHabitForMission}</p>
                             </div>
                             <button onClick={() => setModalMisiOpen(false)} className="bg-gray-100 p-2 rounded-full hover:bg-red-100 hover:text-red-500 transition-colors"><X size={20}/></button>
                         </div>
                         
                         <div className="space-y-4">
                             <div>
-                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Judul Misi (Tantangan)</label>
-                                <input type="text" placeholder="Contoh: Membaca buku 15 menit" className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500" value={misiForm.title} onChange={(e) => setMisiForm({...misiForm, title: e.target.value})} />
+                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block tracking-wider">Judul Misi (Tantangan)</label>
+                                <div className="relative">
+                                    <div className="absolute left-3 top-3 text-gray-400"><Type size={16}/></div>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Contoh: Baca buku 15 menit" 
+                                        className="w-full bg-gray-50 border border-gray-200 pl-10 pr-3 py-3 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all shadow-inner" 
+                                        value={misiForm.title} 
+                                        onChange={(e) => setMisiForm({...misiForm, title: e.target.value})} 
+                                    />
+                                </div>
                             </div>
 
                             <div>
-                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Target Penerima</label>
-                                <div className="flex gap-2 mb-2">
-                                    <button onClick={() => setMisiForm({...misiForm, targetType: 'siswa', targetId: ''})} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${misiForm.targetType === 'siswa' ? 'bg-emerald-600 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>
+                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block tracking-wider">Target Penerima</label>
+                                <div className="flex gap-2 mb-3">
+                                    <button onClick={() => setMisiForm({...misiForm, targetType: 'siswa', targetId: ''})} className={`flex-1 py-2.5 rounded-lg text-xs font-black transition-all ${misiForm.targetType === 'siswa' ? 'bg-emerald-600 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>
                                         <UserCircle size={14} className="inline mr-1"/> Perorangan
                                     </button>
-                                    <button onClick={() => setMisiForm({...misiForm, targetType: 'kelas', targetId: ''})} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${misiForm.targetType === 'kelas' ? 'bg-emerald-600 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>
+                                    <button onClick={() => setMisiForm({...misiForm, targetType: 'kelas', targetId: ''})} className={`flex-1 py-2.5 rounded-lg text-xs font-black transition-all ${misiForm.targetType === 'kelas' ? 'bg-emerald-600 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>
                                         <Users size={14} className="inline mr-1"/> Satu Kelas
                                     </button>
                                 </div>
                                 
                                 {misiForm.targetType === 'siswa' ? (
-    <select 
-        className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500"
-        value={misiForm.targetId} 
-        onChange={(e) => setMisiForm({...misiForm, targetId: e.target.value})}
-    >
-        <option value="">-- Pilih Siswa --</option>
-        {students.map(s => (
-            <option key={s.id} value={s.id}>
-                {/* FIX: Gunakan s.class_name dari hasil JOIN backend */}
-                {s.full_name} ({s.class_name || 'Tanpa Kelas'})
-            </option>
-        ))}
-    </select>
-) : (
-    /* Bagian Dropdown Satu Kelas */
-    <select 
-        className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500"
-        value={misiForm.targetId} 
-        onChange={(e) => setMisiForm({...misiForm, targetId: e.target.value})}
-    >
-        <option value="">-- Pilih Kelas --</option>
-        {classes.map(c => (
-            // FIX: Gunakan c.id sebagai value dan c.name sebagai tampilan
-            <option key={c.id} value={c.id}>{c.name}</option>
-        ))}
-    </select>
-)}
+                                    <select className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all shadow-inner" value={misiForm.targetId} onChange={(e) => setMisiForm({...misiForm, targetId: e.target.value})}>
+                                        <option value="">-- Pilih Siswa --</option>
+                                        {students.map(s => <option key={s.id} value={s.id}>{s.full_name} ({s.class_name || s.class || 'N/A'})</option>)}
+                                    </select>
+                                ) : (
+                                    <select className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all shadow-inner" value={misiForm.targetId} onChange={(e) => setMisiForm({...misiForm, targetId: e.target.value})}>
+                                        <option value="">-- Pilih Kelas --</option>
+                                        {classes.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                )}
                             </div>
 
                             <div>
-                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Tenggat Waktu</label>
-                                <input type="date" className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500" value={misiForm.dueDate} onChange={(e) => setMisiForm({...misiForm, dueDate: e.target.value})} />
+                                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block tracking-wider">Tenggat Waktu</label>
+                                <input 
+                                    type="date" 
+                                    className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all shadow-inner" 
+                                    value={misiForm.dueDate} 
+                                    onChange={(e) => setMisiForm({...misiForm, dueDate: e.target.value})} 
+                                />
                             </div>
 
-                            <button onClick={handleJadwalkanMisi} className="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold text-lg hover:bg-emerald-700 transition-all shadow-lg mt-4 flex justify-center items-center gap-2">
-                                <CheckCircle size={18}/> Simpan Misi
+                            <button onClick={handleJadwalkanMisi} className="w-full bg-emerald-600 text-white py-4 rounded-xl font-black text-lg hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 mt-4 flex justify-center items-center gap-2 active:scale-95">
+                                <CheckCircle size={20}/> Simpan Misi
                             </button>
                         </div>
                     </div>

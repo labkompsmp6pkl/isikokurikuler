@@ -79,7 +79,7 @@ const Login: React.FC = () => {
       <div className="w-full max-w-md space-y-6">
         <div className="text-center">
           <img className="mx-auto h-24 w-auto" src="/logo-smpn6.png" alt="Logo SMPN 6 Pekalongan" />
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">ISOKURIKULER</h2>
+          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">KOKURIKULER</h2>
           <p className="mt-2 text-sm text-gray-600">SMPN 6 PEKALONGAN</p>
         </div>
 

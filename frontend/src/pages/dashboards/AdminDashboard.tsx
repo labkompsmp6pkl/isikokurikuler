@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  LayoutDashboard, LogOut, Menu, X, Activity, 
-  TrendingUp, Shield, UserCircle, BrainCircuit, Users, BookOpen
+    LayoutDashboard, LogOut, Menu, X, Activity, 
+    TrendingUp, Shield, UserCircle, BrainCircuit, Users, BookOpen,
 } from 'lucide-react';
 import adminService from '../../services/adminService';
 
@@ -75,30 +75,26 @@ const AdminDashboard: React.FC = () => {
                     <div className="flex items-center gap-3">
                         <img src="/logo-smpn6.png" className="w-9 h-9" alt="Logo" />
                         <div>
-                            <h1 className="font-black text-lg text-indigo-900 leading-tight">ISIKOKURIKULER</h1>
-                            <p className="text-[10px] text-gray-500 font-bold tracking-widest">ADMINISTRATOR</p>
+                            <h1 className="font-black text-lg text-indigo-900 leading-tight">KOKURIKULER</h1>
+                            <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase">Administrator</p>
                         </div>
                     </div>
                     <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-gray-400 hover:text-red-500"><X size={24} /></button>
                 </div>
 
                 <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-                    {/* Menu Dashboard (Aktif) */}
                     <button onClick={() => navigate('/admin/dashboard')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 font-medium transition-all">
                         <LayoutDashboard size={20}/> <span>Dashboard Utama</span>
                     </button>
 
-                    {/* Menu Analisis AI */}
                     <button onClick={() => navigate('/admin/analysis')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all font-medium">
                         <BrainCircuit size={20}/> <span>Sintesis AI</span>
                     </button>
 
-                    {/* Menu Manajemen User */}
                     <button onClick={() => navigate('/admin/users')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all font-medium">
                         <Users size={20}/> <span>Manajemen User</span>
                     </button>
 
-                    {/* Menu Manajemen Kelas (BARU) */}
                     <button onClick={() => navigate('/admin/classes')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all font-medium">
                         <BookOpen size={20}/> <span>Manajemen Kelas</span>
                     </button>
@@ -109,7 +105,7 @@ const AdminDashboard: React.FC = () => {
                         <div className="w-10 h-10 rounded-full bg-white text-indigo-600 flex items-center justify-center font-bold shadow-sm border border-indigo-100">A</div>
                         <div className="overflow-hidden">
                             <p className="text-sm font-bold text-gray-800 truncate">Administrator</p>
-                            <p className="text-xs text-indigo-600 font-semibold">Super User</p>
+                            <p className="text-xs text-indigo-600 font-semibold uppercase">Super User</p>
                         </div>
                     </div>
                     <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-red-600 bg-white border border-red-100 rounded-lg hover:bg-red-50 transition-colors">
@@ -120,18 +116,37 @@ const AdminDashboard: React.FC = () => {
 
             {/* MAIN CONTENT */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <header className="bg-white border-b border-gray-200 p-4 flex justify-between items-center md:hidden sticky top-0 z-10">
-                    <div className="flex items-center gap-2">
-                        <img src="/logo-smpn6.png" className="w-8 h-8" alt="Logo" />
-                        <span className="font-bold text-gray-800">ISOKURIKULER</span>
+                {/* HEADER MOBILE ENHANCED WITH USER PROFILE */}
+                <header className="bg-white border-b border-gray-200 p-4 md:hidden sticky top-0 z-10 shadow-sm">
+                    <div className="flex justify-between items-center mb-3">
+                        <div className="flex items-center gap-2">
+                            <img src="/logo-smpn6.png" className="w-8 h-8" alt="Logo" />
+                            <span className="font-black text-indigo-900 uppercase text-xs tracking-tighter">kokurikuler</span>
+                        </div>
+                        <button onClick={() => setIsSidebarOpen(true)} className="p-2 bg-indigo-50 text-indigo-600 rounded-xl active:scale-90 transition-transform">
+                            <Menu size={24} />
+                        </button>
                     </div>
-                    <button onClick={() => setIsSidebarOpen(true)} className="text-gray-600"><Menu size={24} /></button>
+                    
+                    {/* User Profile Info in Mobile Header */}
+                    <div className="flex items-center gap-3 pt-2 border-t border-gray-100 mt-2">
+                        <div className="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-xs shadow-md">
+                            A
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                            <p className="text-[10px] font-bold text-gray-400 leading-none uppercase tracking-widest">Admin System</p>
+                            <p className="text-xs font-black text-gray-800 truncate mt-1">Administrator</p>
+                        </div>
+                        <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm">
+                            Super User
+                        </div>
+                    </div>
                 </header>
 
                 <main className="flex-1 overflow-auto p-4 md:p-8">
                     <div className="max-w-6xl mx-auto pb-20 space-y-8">
                         
-                        {/* Header Section */}
+                        {/* Dashboard Welcome Header */}
                         <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-center gap-6">
                             <div>
                                 <h1 className="text-3xl font-black text-gray-900 mb-2">Pusat Data Karakter</h1>
@@ -142,36 +157,36 @@ const AdminDashboard: React.FC = () => {
                             <div className="bg-indigo-50 p-4 rounded-2xl flex items-center gap-3">
                                 <Activity className="text-indigo-600" />
                                 <div className="text-right">
-                                    <p className="text-xs font-bold text-indigo-400 uppercase">Status Data</p>
-                                    <p className="font-black text-indigo-800">Realtime Update</p>
+                                    <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Status Data</p>
+                                    <p className="font-black text-indigo-800 uppercase text-xs">Realtime Update</p>
                                 </div>
                             </div>
                         </div>
 
                         {/* SECTION 1: SEBARAN 7 KEBIASAAN */}
                         <div>
-                            <h2 className="text-xl font-black text-gray-800 mb-4 flex items-center gap-2">
-                                <span className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">☀️</span>
-                                Sebaran 7 Kebiasaan
+                            <h2 className="text-xl font-black text-gray-800 mb-6 flex items-center gap-3">
+                                <span className="w-1.5 h-6 bg-orange-500 rounded-full"></span>
+                                Sebaran 7 Kebiasaan Siswa
                             </h2>
                             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
                                 {habitsList.map((h, idx) => (
-                                    <div key={idx} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center transition-all hover:-translate-y-1 hover:shadow-md">
-                                        <div className={`text-3xl mb-2 p-3 rounded-full ${h.bg}`}>{h.icon}</div>
-                                        <h3 className="font-bold text-xs text-gray-600 uppercase tracking-wide mb-2 h-8 flex items-center justify-center">{h.title}</h3>
+                                    <div key={idx} className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center transition-all hover:-translate-y-1 hover:shadow-xl">
+                                        <div className={`text-4xl mb-3 p-3 rounded-2xl ${h.bg}`}>{h.icon}</div>
+                                        <h3 className="font-black text-[10px] text-gray-500 uppercase tracking-tight mb-3 h-8 flex items-center justify-center">{h.title}</h3>
                                         
                                         {/* Circular Progress */}
                                         <div className="relative w-16 h-16">
                                             <svg className="w-full h-full transform -rotate-90">
-                                                <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-gray-100" />
+                                                <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-gray-50" />
                                                 <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="6" fill="transparent" 
                                                     strokeDasharray={175.9} 
                                                     strokeDashoffset={175.9 - (175.9 * h.percent) / 100} 
                                                     className={h.color} 
-                                                    style={{ transition: 'stroke-dashoffset 1s ease-in-out' }}
+                                                    style={{ transition: 'stroke-dashoffset 1.5s ease-in-out', strokeLinecap: 'round' }}
                                                 />
                                             </svg>
-                                            <span className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 font-black text-sm ${h.color}`}>
+                                            <span className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 font-black text-xs ${h.color}`}>
                                                 {h.percent}%
                                             </span>
                                         </div>
@@ -181,40 +196,42 @@ const AdminDashboard: React.FC = () => {
                         </div>
 
                         {/* SECTION 2: PROFIL LULUSAN TERKINI */}
-                        <div className="bg-white p-8 rounded-[2.5rem] shadow-lg border border-gray-100">
-                            <div className="flex items-center gap-3 mb-8">
-                                <div className="p-3 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-200">
-                                    <TrendingUp size={24} />
+                        <div className="bg-white p-8 rounded-[3rem] shadow-lg border border-gray-100">
+                            <div className="flex items-center gap-4 mb-10">
+                                <div className="p-4 bg-gradient-to-br from-indigo-600 to-blue-500 rounded-2xl text-white shadow-xl shadow-indigo-100">
+                                    <TrendingUp size={28} />
                                 </div>
                                 <div>
-                                    <h2 className="text-2xl font-black text-gray-900">Profil Lulusan Terkini✨</h2>
-                                    <p className="text-gray-400 text-sm font-medium">Akumulasi kompetensi karakter dari seluruh siswa</p>
+                                    <h2 className="text-2xl font-black text-gray-900 tracking-tight">Kompilasi Karakter Lulusan ✨</h2>
+                                    <p className="text-gray-400 text-sm font-medium">Akumulasi kompetensi karakter dari seluruh ekosistem siswa</p>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                                 {profilesList.map((p, idx) => (
-                                    <div key={idx} className="group p-5 rounded-3xl bg-gray-50 border border-gray-100 hover:bg-white hover:shadow-xl hover:border-transparent transition-all duration-300">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div className="text-2xl">{p.icon}</div>
-                                            <div className="text-3xl font-black text-gray-800">{p.percent}%</div>
+                                    <div key={idx} className="group p-6 rounded-[2.5rem] bg-gray-50 border border-gray-100 hover:bg-white hover:shadow-2xl hover:border-transparent transition-all duration-500">
+                                        <div className="flex justify-between items-start mb-6">
+                                            <div className="p-2 bg-white rounded-xl shadow-sm group-hover:scale-110 transition-transform">{p.icon}</div>
+                                            <div className="text-3xl font-black text-gray-800 tracking-tighter">{p.percent}%</div>
                                         </div>
                                         
                                         {/* Progress Bar */}
-                                        <div className="w-full bg-gray-200 rounded-full h-3 mb-3 overflow-hidden">
+                                        <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4 overflow-hidden">
                                             <div 
-                                                className={`h-3 rounded-full ${p.color} transition-all duration-1000 ease-out group-hover:scale-x-105 origin-left`} 
+                                                className={`h-full rounded-full ${p.color} transition-all duration-[1.5s] ease-out group-hover:brightness-110`} 
                                                 style={{ width: `${p.percent}%` }}
                                             ></div>
                                         </div>
                                         
-                                        <h4 className="font-bold text-gray-600 text-sm uppercase tracking-wide group-hover:text-gray-900">{p.title}</h4>
+                                        <h4 className="font-black text-[10px] text-gray-400 uppercase tracking-[0.15em] group-hover:text-indigo-600 transition-colors">{p.title}</h4>
                                     </div>
                                 ))}
                             </div>
 
-                            <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-100 text-center text-blue-700 text-sm font-medium">
-                                "Data ini mencerminkan kompetensi karakter yang paling sering muncul dalam jurnal harian siswa selama periode aktif."
+                            <div className="mt-12 p-6 bg-indigo-50/50 rounded-[2rem] border border-indigo-100 border-dashed text-center">
+                                <p className="text-indigo-700 text-sm font-bold flex items-center justify-center gap-2 italic">
+                                    <Shield size={16}/> "Data statistik ini dikumpulkan secara otomatis dari verifikasi riwayat harian kokurikuler."
+                                </p>
                             </div>
                         </div>
 

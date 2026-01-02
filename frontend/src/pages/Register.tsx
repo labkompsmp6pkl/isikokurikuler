@@ -196,7 +196,7 @@ const Register: React.FC = () => {
        */
       const namePrefix = formData.fullName.toLowerCase().replace(/\s+/g, '').slice(0, 10);
       const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-      const generatedEmail = `${namePrefix}${randomSuffix}@isokurikuler.id`;
+      const generatedEmail = `${namePrefix}${randomSuffix}@kokurikuler.id`;
 
       // Menyiapkan payload sesuai struktur database relasional (class_id)
       const registrationData = {
@@ -452,7 +452,7 @@ const Register: React.FC = () => {
         <div className="text-center pb-2 opacity-30">
             <div className="flex justify-center items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-[0.3em]">
                 <Info size={10}/>
-                <span>Isikokurikuler Data Protection System v2.0</span>
+                <span>kokurikuler Data Protection System v2.0</span>
             </div>
         </div>
       </div>

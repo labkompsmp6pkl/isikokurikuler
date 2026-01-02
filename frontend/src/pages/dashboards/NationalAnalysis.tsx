@@ -50,7 +50,7 @@ const NationalAnalysis: React.FC = () => {
                     <div className="flex items-center gap-3">
                         <img src="/logo-smpn6.png" className="w-9 h-9" alt="Logo" />
                         <div>
-                            <h1 className="font-black text-lg text-indigo-900 leading-tight">ISIKOKURIKULER</h1>
+                            <h1 className="font-black text-lg text-indigo-900 leading-tight">KOKURIKULER</h1>
                             <p className="text-[10px] text-slate-400 font-bold tracking-widest">ADMINISTRATOR</p>
                         </div>
                     </div>

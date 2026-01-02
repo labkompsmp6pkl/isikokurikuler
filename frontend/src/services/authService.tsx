@@ -7,27 +7,26 @@ import axios from 'axios';
 export interface User {
   id: number;
   name: string;
-  // Tambahkan 'new_user' di sini agar TypeScript mengizinkannya
   role: 'student' | 'teacher' | 'contributor' | 'parent' | 'new_user';
-  classId?: string;
+  classId?: string | number; // Bisa string atau number dari database
 }
 
 export interface RegistrationData {
   fullName: string;
+  email: string; // Tambahkan email untuk registrasi manual
   role: string;
   password?: string;
   nisn?: string;
   nip?: string;
-  class?: string;
+  classId?: string | number; // Sesuaikan dengan backend (classId, bukan class)
   whatsappNumber?: string;
 }
 
-// Tipe data untuk Google Complete Register
 export interface GoogleCompleteData {
   role: string;
   fullName: string;
   nisn?: string;
-  classId?: string;
+  classId?: string | number;
   phoneNumber?: string;
 }
 
@@ -35,8 +34,8 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (loginIdentifier: string, password: string) => Promise<any>;
-  register: (data: RegistrationData) => Promise<any>;
-  completeGoogleRegistration: (data: GoogleCompleteData) => Promise<any>; // Fungsi Baru
+  register: (data: RegistrationData) => Promise<any>; // Diperbarui
+  completeGoogleRegistration: (data: GoogleCompleteData) => Promise<any>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -44,10 +43,8 @@ interface AuthContextType {
 // ==========================================
 // 2. Setup Axios & Environment
 // ==========================================
-// Mengambil URL dari file .env (Pastikan VITE_API_BASE_URL ada di .env Anda)
 export const API_HOST = import.meta.env.VITE_API_BASE_URL || '';
 
-// Export authApi agar bisa dipakai di komponen lain (seperti GoogleRegisterComplete)
 export const authApi = axios.create({
   baseURL: `${API_HOST}/api`,
   headers: {
@@ -55,7 +52,6 @@ export const authApi = axios.create({
   },
 });
 
-// Interceptor: Otomatis pasang Token dari LocalStorage ke setiap Request
 authApi.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -96,13 +92,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(false);
   }, []);
 
+  // Helper untuk simpan state sesi
+  const handleAuthSuccess = (newToken: string, newUser: any) => {
+    setToken(newToken);
+    setUser(newUser);
+    localStorage.setItem('token', newToken);
+    localStorage.setItem('user', JSON.stringify(newUser));
+  };
+
   // --- ACTIONS ---
 
   const login = async (loginIdentifier: string, password: string) => {
     try {
       const response = await authApi.post('/auth/login', { loginIdentifier, password });
       const { token: newToken, user: newUser } = response.data;
-
       handleAuthSuccess(newToken, newUser);
       return response.data;
     } catch (error) {
@@ -113,6 +116,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const register = async (data: RegistrationData) => {
     try {
       const response = await authApi.post('/auth/register', data);
+      
+      // Jika backend dikonfigurasi untuk auto-login setelah register
+      if (response.data.token && response.data.user) {
+        handleAuthSuccess(response.data.token, response.data.user);
+      }
+      
       return response.data;
     } catch (error) {
       throw error;
@@ -121,15 +130,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const completeGoogleRegistration = async (data: GoogleCompleteData) => {
     try {
-      // Token sudah otomatis dihandle oleh interceptor authApi
-      // asalkan token sudah ada di localStorage sebelum fungsi ini dipanggil
       const response = await authApi.post('/auth/google/complete-register', data);
-      
-      // Jika backend mengembalikan token baru/final atau user object
       if (response.data.token) {
          handleAuthSuccess(response.data.token, response.data.user);
       }
-      
       return response.data;
     } catch (error) {
       throw error;
@@ -142,14 +146,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     window.location.href = '/login'; 
-  };
-
-  // Helper untuk simpan state
-  const handleAuthSuccess = (newToken: string, newUser: any) => {
-    setToken(newToken);
-    setUser(newUser);
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(newUser));
   };
 
   const contextValue: AuthContextType = {
@@ -181,9 +177,8 @@ export const useAuth = (): AuthContextType => {
 };
 
 // ==========================================
-// 6. Default Export (Legacy/Direct Usage)
+// 6. Default Export
 // ==========================================
-// Berguna jika Anda butuh fungsi tanpa hook (jarang dipakai di React modern, tapi disediakan untuk backward compatibility)
 export default {
   login: (loginIdentifier: string, password: string) => authApi.post('/auth/login', { loginIdentifier, password }),
   register: (data: RegistrationData) => authApi.post('/auth/register', data),

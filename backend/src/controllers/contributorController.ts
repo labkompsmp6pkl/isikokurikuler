@@ -2,19 +2,28 @@ import { Response } from 'express';
 import pool from '../config/db';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 
-// 1. Ambil Data Kelas & Siswa (Untuk Dropdown)
-export const getContributorData = async (req: AuthenticatedRequest, res: Response) => {
+export const getContributorData = async (req: Request, res: Response) => {
     try {
-        const [classes]: any = await pool.query('SELECT DISTINCT class FROM users WHERE role = "student" AND class IS NOT NULL ORDER BY class ASC');
-        const [students]: any = await pool.query('SELECT id, full_name, class FROM users WHERE role = "student" ORDER BY class ASC, full_name ASC');
-        
-        res.json({ 
-            classes: classes.map((c:any) => c.class),
-            students 
-        });
+        // 1. Ambil Semua Siswa Beserta Nama Kelasnya (JOIN)
+        const [students]: any = await pool.query(`
+            SELECT 
+                u.id, 
+                u.full_name, 
+                c.name as class_name 
+            FROM users u
+            LEFT JOIN classes c ON u.class_id = c.id
+            WHERE u.role = 'student'
+            ORDER BY c.name ASC, u.full_name ASC
+        `);
+
+        // 2. Ambil Daftar Kelas (ID dan Nama)
+        const [classes]: any = await pool.query(`
+            SELECT id, name FROM classes ORDER BY name ASC
+        `);
+
+        res.json({ students, classes });
     } catch (error) {
-        console.error("Error fetching data:", error);
-        res.status(500).json({ message: 'Gagal memuat data.' });
+        res.status(500).json({ message: "Gagal memuat data pendukung" });
     }
 };
 

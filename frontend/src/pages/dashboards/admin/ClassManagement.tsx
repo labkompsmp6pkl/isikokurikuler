@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-    LayoutDashboard, Users, BrainCircuit, LogOut, 
-    Plus, Trash2, Edit, Save, X, Eye, BookOpen, User, GraduationCap, Sparkles, Database, Menu
+    LayoutDashboard, Users, LogOut, 
+    Plus, Trash2, Edit, Save, X, Eye, BookOpen, User, GraduationCap, Sparkles, Database, Menu, Search, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import adminService from '../../../services/adminService';
@@ -10,14 +10,17 @@ import adminService from '../../../services/adminService';
 const ClassManagement: React.FC = () => {
     const navigate = useNavigate();
     
-    // --- LAYOUT STATE (Fixed) ---
+    // --- LAYOUT & DATA STATE ---
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-    // Data State
     const [classes, setClasses] = useState<any[]>([]);
     const [teachers, setTeachers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [dbError, setDbError] = useState(false);
+
+    // --- FILTER & PAGINATION STATE ---
+    const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 6;
 
     // Modal States
     const [showModal, setShowModal] = useState(false);
@@ -80,23 +83,30 @@ const ClassManagement: React.FC = () => {
 
     useEffect(() => { fetchData(); }, []);
 
-    const openCreate = () => { setIsEdit(false); setIsGenerate(false); setFormData({ id: 0, name: '', teacher_id: '' }); setShowModal(true); };
-    const openGenerate = () => { setIsGenerate(true); setShowModal(true); };
-    const openEdit = (cls: any) => { 
-        setIsEdit(true); 
-        setIsGenerate(false);
-        setFormData({ id: cls.id, name: cls.name, teacher_id: cls.teacher_id || '' }); 
-        setShowModal(true); 
-    };
-    
-    const openDetail = async (clsId: number) => {
-        try {
-            const data = await adminService.getClassDetail(clsId);
-            setSelectedClass(data);
-            setShowDetailModal(true);
-        } catch (error) {
-            Swal.fire("Error", "Gagal memuat detail kelas", "error");
-        }
+    // --- LOGIKA FILTER & PAGINATION ---
+    const filteredClasses = classes.filter(cls => 
+        cls.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const totalPages = Math.ceil(filteredClasses.length / itemsPerPage);
+    const indexOfLastItem = currentPage * itemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    const currentClasses = filteredClasses.slice(indexOfFirstItem, indexOfLastItem);
+
+    // Reset ke halaman 1 jika user melakukan pencarian
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
+
+    const getAvailableTeachers = () => {
+        const assignedTeacherIds = classes
+            .map(c => c.teacher_id)
+            .filter(id => id !== null && id !== undefined);
+
+        return teachers.filter(t => {
+            if (isEdit && t.id === formData.teacher_id) return true;
+            return !assignedTeacherIds.includes(t.id);
+        });
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -143,65 +153,39 @@ const ClassManagement: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-[#F3F4F6] font-sans flex text-gray-800">
-            
-            {/* OVERLAY MOBILE */}
             {isSidebarOpen && <div className="fixed inset-0 bg-black/40 z-20 md:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />}
             
-            {/* --- SIDEBAR --- */}
             <aside className={`fixed md:sticky top-0 h-screen w-72 bg-white border-r border-gray-200 z-30 transition-transform duration-300 ease-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-                
-                {/* Header Sidebar */}
                 <div className="p-6 border-b border-gray-100 flex justify-between items-center">
                     <div className="flex items-center gap-3">
                         <img src="/logo-smpn6.png" className="w-9 h-9" alt="Logo" />
                         <div>
                             <h1 className="font-black text-lg text-indigo-900 leading-tight">ISIKOKURIKULER</h1>
-                            <p className="text-[10px] text-gray-500 font-bold tracking-widest">ADMINISTRATOR</p>
+                            <p className="text-[10px] text-gray-500 font-bold tracking-widest uppercase">Admin Panel</p>
                         </div>
                     </div>
-                    {/* Tombol Close Mobile */}
-                    <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-gray-400 hover:text-red-500"><X size={24} /></button>
                 </div>
 
-                {/* Navigasi */}
                 <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-                    <button onClick={() => navigate('/admin/dashboard')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 font-medium transition-all">
-                        <LayoutDashboard size={20}/> <span>Dashboard Utama</span>
+                    <button onClick={() => navigate('/admin/dashboard')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-indigo-50 font-medium transition-all">
+                        <LayoutDashboard size={20}/> Dashboard
                     </button>
-                    <button onClick={() => navigate('/admin/analysis')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 font-medium transition-all">
-                        <BrainCircuit size={20}/> <span>Sintesis AI</span>
+                    <button onClick={() => navigate('/admin/users')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-indigo-50 font-medium transition-all">
+                        <Users size={20}/> Manajemen User
                     </button>
-                    <button onClick={() => navigate('/admin/users')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 font-medium transition-all">
-                        <Users size={20}/> <span>Manajemen User</span>
-                    </button>
-                    {/* Menu Aktif */}
-                    <button onClick={() => navigate('/admin/classes')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 font-medium transition-all">
-                        <BookOpen size={20}/> <span>Manajemen Kelas</span>
+                    <button onClick={() => navigate('/admin/classes')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-600 text-white shadow-lg font-medium transition-all">
+                        <BookOpen size={20}/> Manajemen Kelas
                     </button>
                 </nav>
 
-                {/* Footer Sidebar (Profil & Logout) */}
-                <div className="p-6 border-t border-slate-100 bg-slate-50/50">
-                    <div className="flex flex-col items-center text-center">
-                        <div className="w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center text-white text-xl font-bold mb-3 shadow-md shadow-indigo-200">
-                            A
-                        </div>
-                        <h2 className="font-bold text-slate-800 text-base">Administrator</h2>
-                        <p className="text-xs text-slate-500 font-medium mb-5">Super User</p>
-                        <button 
-                            onClick={handleLogout} 
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-red-600 bg-white border border-red-200 rounded-xl hover:bg-red-50 hover:border-red-300 transition-all shadow-sm"
-                        >
-                            <LogOut size={16} /> Keluar
-                        </button>
-                    </div>
+                <div className="p-4 border-t border-slate-100">
+                    <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-all">
+                        <LogOut size={16} /> Keluar
+                    </button>
                 </div>
             </aside>
 
-            {/* --- MAIN CONTENT --- */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                
-                {/* Mobile Header (Navbar) */}
                 <header className="bg-white border-b border-gray-200 p-4 flex justify-between items-center md:hidden sticky top-0 z-10">
                     <div className="flex items-center gap-2">
                         <img src="/logo-smpn6.png" className="w-8 h-8" alt="Logo" />
@@ -212,73 +196,109 @@ const ClassManagement: React.FC = () => {
 
                 <main className="flex-1 overflow-auto p-4 md:p-8">
                     <div className="max-w-6xl mx-auto pb-20">
-                        
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                             <div>
-                                <h1 className="text-2xl font-black text-slate-800">Manajemen Kelas</h1>
-                                <p className="text-slate-500 text-sm">Atur data kelas, wali kelas, dan siswa.</p>
+                                <h1 className="text-3xl font-black text-slate-800 tracking-tight">Manajemen Kelas</h1>
+                                <p className="text-slate-500 text-sm font-medium">Kelola data kelas, wali kelas, dan daftar siswa per kelas.</p>
                             </div>
-                            
-                            {!dbError && !loading && (
-                                <div className="flex gap-2">
-                                    <button onClick={openGenerate} className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all">
-                                        <Sparkles size={18}/> Generate Otomatis
-                                    </button>
-                                    <button onClick={openCreate} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all">
-                                        <Plus size={18}/> Tambah Kelas
-                                    </button>
-                                </div>
-                            )}
+                            <div className="flex gap-2">
+                                <button onClick={() => { setIsGenerate(true); setShowModal(true); }} className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all">
+                                    <Sparkles size={18}/> Auto-Generate
+                                </button>
+                                <button onClick={() => { setIsEdit(false); setIsGenerate(false); setFormData({ id: 0, name: '', teacher_id: '' }); setShowModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all">
+                                    <Plus size={18}/> Tambah Kelas
+                                </button>
+                            </div>
                         </div>
 
-                        {/* ERROR HANDLING JIKA TABEL BELUM ADA */}
+                        {/* FILTER & SEARCH BAR */}
+                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6 flex items-center gap-3">
+                            <Search className="text-slate-400" size={22}/>
+                            <input 
+                                type="text" 
+                                placeholder="Cari nama kelas (contoh: 7A)..." 
+                                className="flex-1 outline-none font-medium text-slate-700 placeholder-slate-400"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+
                         {dbError ? (
                             <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-r-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
                                 <div>
-                                    <h3 className="text-lg font-bold text-red-800 flex items-center gap-2"><Database size={20}/> Database Kelas Belum Dikonfigurasi</h3>
-                                    <p className="text-red-600 text-sm mt-1">
-                                        Tabel kelas belum ditemukan. Klik tombol di samping untuk membuat tabel dan memindahkan data siswa/guru yang sudah ada secara otomatis.
-                                    </p>
+                                    <h3 className="text-lg font-bold text-red-800 flex items-center gap-2"><Database size={20}/> Database Belum Siap</h3>
+                                    <p className="text-red-600 text-sm mt-1">Lakukan migrasi untuk mengaktifkan fitur Class ID Relational.</p>
                                 </div>
-                                <button 
-                                    onClick={handleFixDatabase}
-                                    className="px-6 py-3 bg-red-600 text-white font-bold rounded-xl shadow-lg hover:bg-red-700 transition-all flex items-center gap-2"
-                                >
-                                    <Sparkles size={18}/> Perbaiki & Migrasi Data Sekarang
+                                <button onClick={handleFixDatabase} className="px-6 py-3 bg-red-600 text-white font-bold rounded-xl shadow-lg hover:bg-red-700 transition-all flex items-center gap-2">
+                                    <Sparkles size={18}/> Migrasi Sekarang
                                 </button>
                             </div>
                         ) : loading ? (
-                            <div className="text-center py-20"><div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-200 border-t-indigo-600 mx-auto"></div></div>
+                            <div className="text-center py-20"><div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent mx-auto"></div></div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {classes.map((cls) => (
-                                    <div key={cls.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all relative">
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div className="bg-indigo-50 text-indigo-700 font-black text-xl px-4 py-2 rounded-xl">
-                                                {cls.name}
+                            <>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {currentClasses.map((cls) => (
+                                        <div key={cls.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-all">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="bg-indigo-50 text-indigo-700 font-black text-2xl px-5 py-2.5 rounded-2xl">
+                                                    {cls.name}
+                                                </div>
+                                                <div className="flex gap-1">
+                                                    <button onClick={() => { setIsEdit(true); setIsGenerate(false); setFormData({ id: cls.id, name: cls.name, teacher_id: cls.teacher_id || '' }); setShowModal(true); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit size={18}/></button>
+                                                    <button onClick={() => handleDelete(cls.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18}/></button>
+                                                </div>
                                             </div>
-                                            <div className="flex gap-1">
-                                                <button onClick={() => openEdit(cls)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Edit size={16}/></button>
-                                                <button onClick={() => handleDelete(cls.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>
+                                            
+                                            <div className="space-y-3 text-sm text-slate-600 mb-6">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><User size={16} className="text-slate-400"/></div>
+                                                    <span>Wali: <span className={`font-bold ${cls.teacher_name ? 'text-slate-800' : 'text-amber-600 italic'}`}>{cls.teacher_name || 'Belum Ada'}</span></span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><GraduationCap size={16} className="text-slate-400"/></div>
+                                                    <span>Siswa: <span className="font-bold text-slate-800">{cls.student_count} Anak</span></span>
+                                                </div>
                                             </div>
-                                        </div>
-                                        
-                                        <div className="space-y-2 text-sm text-slate-600 mb-4">
-                                            <div className="flex items-center gap-2">
-                                                <User size={16} className="text-slate-400"/>
-                                                <span>Wali Kelas: <span className="font-bold text-slate-800">{cls.teacher_name || 'Belum ada'}</span></span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <GraduationCap size={16} className="text-slate-400"/>
-                                                <span>Total Siswa: <span className="font-bold text-slate-800">{cls.student_count}</span></span>
-                                            </div>
-                                        </div>
 
-                                        <button onClick={() => openDetail(cls.id)} className="w-full py-2 bg-slate-50 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-100 flex items-center justify-center gap-2">
-                                            <Eye size={14}/> Lihat Daftar Siswa
+                                            <button onClick={async () => { const data = await adminService.getClassDetail(cls.id); setSelectedClass(data); setShowDetailModal(true); }} className="w-full py-3 bg-slate-900 text-white font-black rounded-2xl text-xs hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-slate-100 uppercase tracking-widest">
+                                                <Eye size={16}/> Detail Siswa
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* PAGINATION CONTROLS */}
+                                {totalPages > 1 && (
+                                    <div className="mt-12 flex justify-center items-center gap-6">
+                                        <button 
+                                            disabled={currentPage === 1}
+                                            onClick={() => setCurrentPage(prev => prev - 1)}
+                                            className="p-3 rounded-2xl bg-white border border-slate-200 disabled:opacity-30 hover:bg-slate-50 transition-all text-indigo-600"
+                                        >
+                                            <ChevronLeft size={24}/>
+                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <span className="bg-indigo-600 text-white w-10 h-10 flex items-center justify-center rounded-xl font-black shadow-lg shadow-indigo-100">{currentPage}</span>
+                                            <span className="text-slate-400 font-bold">/</span>
+                                            <span className="text-slate-600 font-bold">{totalPages}</span>
+                                        </div>
+                                        <button 
+                                            disabled={currentPage === totalPages}
+                                            onClick={() => setCurrentPage(prev => prev + 1)}
+                                            className="p-3 rounded-2xl bg-white border border-slate-200 disabled:opacity-30 hover:bg-slate-50 transition-all text-indigo-600"
+                                        >
+                                            <ChevronRight size={24}/>
                                         </button>
                                     </div>
-                                ))}
+                                )}
+                            </>
+                        )}
+                        
+                        {!loading && filteredClasses.length === 0 && (
+                            <div className="text-center py-20 bg-white rounded-[3rem] border-2 border-dashed border-slate-200">
+                                <BookOpen size={48} className="mx-auto text-slate-200 mb-4"/>
+                                <p className="font-black text-slate-400 uppercase tracking-widest text-sm">Tidak ada kelas ditemukan</p>
                             </div>
                         )}
                     </div>
@@ -288,54 +308,61 @@ const ClassManagement: React.FC = () => {
             {/* MODAL (Create/Edit/Generate) */}
             {showModal && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="font-black text-xl text-slate-800">
-                                {isGenerate ? 'Generate Kelas Otomatis' : (isEdit ? 'Edit Kelas' : 'Tambah Kelas Baru')}
+                    <div className="bg-white rounded-[2rem] w-full max-w-md p-8 shadow-2xl animate-fade-in-up">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="font-black text-2xl text-slate-800 uppercase tracking-tight">
+                                {isGenerate ? 'Gen Kelas' : (isEdit ? 'Update Kelas' : 'Kelas Baru')}
                             </h3>
-                            <button onClick={() => setShowModal(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
+                            <button onClick={() => setShowModal(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={24}/></button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-4">
+                        <form onSubmit={handleSubmit} className="space-y-5">
                             {isGenerate ? (
-                                <div className="grid grid-cols-3 gap-4">
+                                <div className="grid grid-cols-3 gap-3">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tingkat</label>
-                                        <select value={generateData.grade} onChange={e => setGenerateData({...generateData, grade: e.target.value})} className="w-full p-3 border rounded-xl font-bold">
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Tingkat</label>
+                                        <select value={generateData.grade} onChange={e => setGenerateData({...generateData, grade: e.target.value})} className="w-full p-3.5 border rounded-xl font-bold bg-slate-50">
                                             {['7','8','9'].map(g => <option key={g} value={g}>{g}</option>)}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Dari Huruf</label>
-                                        <select value={generateData.start} onChange={e => setGenerateData({...generateData, start: e.target.value})} className="w-full p-3 border rounded-xl font-bold">
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Dari</label>
+                                        <select value={generateData.start} onChange={e => setGenerateData({...generateData, start: e.target.value})} className="w-full p-3.5 border rounded-xl font-bold bg-slate-50">
                                             {['A','B','C','D','E','F','G'].map(l => <option key={l} value={l}>{l}</option>)}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Sampai</label>
-                                        <select value={generateData.end} onChange={e => setGenerateData({...generateData, end: e.target.value})} className="w-full p-3 border rounded-xl font-bold">
-                                            {['A','B','C','D','E','F','G','H','I','J'].map(l => <option key={l} value={l}>{l}</option>)}
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Sampai</label>
+                                        <select value={generateData.end} onChange={e => setGenerateData({...generateData, end: e.target.value})} className="w-full p-3.5 border rounded-xl font-bold bg-slate-50">
+                                            {['E','F','G','H','I','J'].map(l => <option key={l} value={l}>{l}</option>)}
                                         </select>
                                     </div>
                                 </div>
                             ) : (
                                 <>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nama Kelas</label>
-                                        <input type="text" required placeholder="Contoh: 7A" className="w-full p-3 border rounded-xl font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Nama Kelas</label>
+                                        <input type="text" required placeholder="Contoh: 7A" className="w-full p-4 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Wali Kelas</label>
-                                        <select className="w-full p-3 border rounded-xl bg-white" value={formData.teacher_id} onChange={e => setFormData({...formData, teacher_id: e.target.value})}>
-                                            <option value="">-- Pilih Guru --</option>
-                                            {teachers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Pilih Wali Kelas (Opsional)</label>
+                                        <select 
+                                            className="w-full p-4 border border-slate-200 rounded-2xl bg-white font-medium focus:ring-2 focus:ring-indigo-500 outline-none appearance-none" 
+                                            value={formData.teacher_id} 
+                                            onChange={e => setFormData({...formData, teacher_id: e.target.value})}
+                                        >
+                                            <option value="">-- Kosongkan / Pilih Nanti --</option>
+                                            {getAvailableTeachers().map(t => (
+                                                <option key={t.id} value={t.id}>{t.full_name}</option>
+                                            ))}
                                         </select>
+                                        <p className="text-[10px] text-slate-400 mt-2 italic px-1">* Hanya menampilkan guru yang belum ditugaskan.</p>
                                     </div>
                                 </>
                             )}
 
-                            <button type="submit" className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 mt-4 flex justify-center items-center gap-2">
-                                <Save size={18}/> {isGenerate ? 'Generate Sekarang' : 'Simpan'}
+                            <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all flex justify-center items-center gap-2 uppercase tracking-widest text-sm">
+                                <Save size={20}/> SIMPAN DATA
                             </button>
                         </form>
                     </div>
@@ -345,27 +372,38 @@ const ClassManagement: React.FC = () => {
             {/* MODAL DETAIL SISWA */}
             {showDetailModal && selectedClass && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                    <div className="bg-white rounded-[2.5rem] w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+                        <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-indigo-600 text-white">
                             <div>
-                                <h3 className="font-black text-xl text-slate-800">Kelas {selectedClass.name}</h3>
-                                <p className="text-sm text-slate-500">Wali Kelas: {selectedClass.teacher_name || '-'}</p>
+                                <h3 className="font-black text-3xl">Kelas {selectedClass.name}</h3>
+                                <p className="text-indigo-100 font-medium mt-1">Wali Kelas: {selectedClass.teacher_name || 'Tidak Ada'}</p>
                             </div>
-                            <button onClick={() => setShowDetailModal(false)} className="p-2 hover:bg-slate-200 rounded-full"><X size={20}/></button>
+                            <button onClick={() => setShowDetailModal(false)} className="p-3 hover:bg-white/20 rounded-full transition-colors"><X size={28}/></button>
                         </div>
-                        <div className="p-6 overflow-y-auto">
-                            <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Users size={18}/> Daftar Siswa ({selectedClass.students.length})</h4>
+                        <div className="p-8 overflow-y-auto flex-1 custom-scrollbar">
+                            <div className="flex items-center justify-between mb-6">
+                                <h4 className="font-black text-slate-800 text-xl tracking-tight flex items-center gap-3">
+                                    <Users size={24} className="text-indigo-600"/> 
+                                    DAFTAR SISWA ({selectedClass.students.length})
+                                </h4>
+                            </div>
                             {selectedClass.students.length === 0 ? (
-                                <p className="text-slate-400 italic text-center py-4">Belum ada siswa di kelas ini.</p>
+                                <div className="text-center py-12">
+                                    <GraduationCap size={48} className="mx-auto text-slate-200 mb-4" />
+                                    <p className="text-slate-400 font-medium italic">Belum ada siswa yang ditautkan ke kelas ini.</p>
+                                </div>
                             ) : (
-                                <div className="space-y-2">
+                                <div className="grid grid-cols-1 gap-4">
                                     {selectedClass.students.map((s: any) => (
-                                        <div key={s.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                        <div key={s.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 hover:border-indigo-200 hover:bg-white hover:shadow-md transition-all group">
                                             <div>
-                                                <p className="font-bold text-slate-800">{s.full_name}</p>
-                                                <p className="text-xs text-slate-500">{s.nisn}</p>
+                                                <p className="font-black text-slate-800 group-hover:text-indigo-600 transition-colors text-lg leading-none">{s.full_name}</p>
+                                                <div className="flex items-center gap-3 mt-2">
+                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">NISN: {s.nisn || '-'}</span>
+                                                    <span className="w-1 h-1 rounded-full bg-slate-300"></span>
+                                                    <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{s.email}</span>
+                                                </div>
                                             </div>
-                                            <span className="text-xs bg-white border px-2 py-1 rounded text-slate-500">{s.email}</span>
                                         </div>
                                     ))}
                                 </div>

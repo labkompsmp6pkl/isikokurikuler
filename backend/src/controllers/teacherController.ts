@@ -8,9 +8,12 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
     const teacherId = (req as any).user?.id;
 
     try {
-        // 1. Ambil Data Guru & Kelasnya
+        // 1. Ambil Data Guru & Kelasnya menggunakan JOIN ke tabel classes
         const [teacherRows]: any[] = await pool.query(
-            'SELECT class, full_name FROM users WHERE id = ? AND role = \'teacher\'',
+            `SELECT u.full_name, u.class_id, c.name as class_name 
+             FROM users u 
+             LEFT JOIN classes c ON u.class_id = c.id 
+             WHERE u.id = ? AND u.role = 'teacher'`,
             [teacherId]
         );
 
@@ -19,16 +22,18 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
         }
 
         const teacherData = teacherRows[0];
-        const teacherClass = teacherData.class;
+        const teacherClassId = teacherData.class_id;
+        const teacherClassName = teacherData.class_name; // Ini untuk tampilan seperti "7A"
         const teacherName = teacherData.full_name;
 
-        // Cek apakah kolom class masih kosong
-        if (!teacherClass) {
-            return res.status(400).json({ message: 'Anda belum terdaftar sebagai wali kelas. Silakan hubungi Administrator.' });
+        // Cek apakah kolom class_id masih kosong
+        if (!teacherClassId) {
+            return res.status(400).json({ 
+                message: 'Anda belum terdaftar sebagai wali kelas. Silakan hubungi Administrator.' 
+            });
         }
 
-        // 2. Ambil semua siswa di kelas ini BESERTA NAMA ORANG TUA
-        // [UPDATE] Melakukan Self-Join ke tabel users untuk mendapatkan nama parent
+        // 2. Ambil semua siswa di kelas ini (berdasarkan class_id)
         const [students]: any[] = await pool.query(
             `SELECT 
                 s.id, 
@@ -37,9 +42,9 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
                 p.full_name AS parent_name
              FROM users s
              LEFT JOIN users p ON s.parent_id = p.id
-             WHERE s.class = ? AND s.role = 'student' 
+             WHERE s.class_id = ? AND s.role = 'student' 
              ORDER BY s.full_name ASC`,
-            [teacherClass]
+            [teacherClassId]
         );
 
         // 3. Ambil logs yang butuh perhatian (Status Tersimpan atau Disetujui)
@@ -47,12 +52,19 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
             `SELECT cl.*, u.full_name as student_name 
              FROM character_logs cl
              JOIN users u ON cl.student_id = u.id
-             WHERE u.class = ? AND cl.status IN ('Tersimpan', 'Disetujui')
+             WHERE u.class_id = ? AND cl.status IN ('Tersimpan', 'Disetujui')
              ORDER BY cl.log_date DESC`,
-            [teacherClass]
+            [teacherClassId]
         );
 
-        res.json({ teacherClass, teacherName, students, logs });
+        // Kirim response dengan nama kelas yang sudah di-join
+        res.json({ 
+            teacherClass: teacherClassName, 
+            teacherClassId, 
+            teacherName, 
+            students, 
+            logs 
+        });
 
     } catch (error) {
         console.error("Dashboard Error:", error);
@@ -88,27 +100,34 @@ export const validateLog = async (req: Request, res: Response) => {
     }
 };
 
-// --- 2. RIWAYAT & KALENDER ---
 export const getClassHistory = async (req: Request, res: Response) => {
     const teacherId = (req as any).user?.id;
     const { studentId } = req.query;
 
     try {
-        // Ambil kelas guru dari DB
-        const [teacherRows]: any[] = await pool.query('SELECT class FROM users WHERE id = ?', [teacherId]);
-        if (teacherRows.length === 0 || !teacherRows[0].class) {
-             return res.status(403).json({ message: 'Akses ditolak. Kelas tidak ditemukan.' });
-        }
+        // 1. Ambil ID kelas guru dari database
+        const [teacherRows]: any[] = await pool.query(
+            'SELECT class_id FROM users WHERE id = ?', 
+            [teacherId]
+        );
         
-        const teacherClass = teacherRows[0].class;
+        const teacherClassId = teacherRows[0]?.class_id;
 
+        // --- INI PENYEBAB ERROR 403 ---
+        if (!teacherClassId) {
+            return res.status(403).json({ 
+                message: 'Akses ditolak. Anda tidak terdaftar sebagai wali kelas.' 
+            });
+        }
+
+        // 2. Ambil riwayat berdasarkan class_id
         let query = `
             SELECT cl.*, u.full_name as student_name
             FROM character_logs cl
             JOIN users u ON cl.student_id = u.id
-            WHERE u.class = ?
+            WHERE u.class_id = ?
         `;
-        const params: any[] = [teacherClass];
+        const params: any[] = [teacherClassId];
 
         if (studentId) {
             query += ' AND cl.student_id = ?';

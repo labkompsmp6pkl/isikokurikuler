@@ -1,8 +1,7 @@
-import React, { useState, FormEvent } from 'react';
+import React, { useState, FormEvent, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-// IMPORT PENTING: Gunakan hook dan konstanta dari AuthService yang baru
-import { useAuth, API_HOST } from '../services/authService'; 
+import { useAuth, API_HOST, authApi } from '../services/authService'; 
 
 // --- Komponen UI Pendukung ---
 
@@ -23,14 +22,14 @@ const InputField: React.FC<InputFieldProps> = ({ name, placeholder, value, onCha
     required={required}
     value={value}
     onChange={onChange}
-    className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+    className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
   />
 );
 
 type SelectFieldProps = {
   name: string;
   value: string;
-  options: {value: string, label: string}[];
+  options: {value: string | number, label: string}[];
   placeholder: string;
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   required?: boolean;
@@ -43,7 +42,7 @@ const SelectField: React.FC<SelectFieldProps> = ({ name, value, options, placeho
       value={value}
       required={required}
       onChange={onChange}
-      className={`appearance-none block w-full px-3 py-3 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm pr-10 ${!value ? 'text-gray-500' : 'text-gray-900'}`}>
+      className={`appearance-none block w-full px-3 py-3 border border-gray-300 bg-white rounded-xl focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm pr-10 ${!value ? 'text-gray-500' : 'text-gray-900'}`}>
       <option value="" disabled>{placeholder}</option>
       {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
     </select>
@@ -53,35 +52,45 @@ const SelectField: React.FC<SelectFieldProps> = ({ name, value, options, placeho
   </div>
 );
 
-// --- Tipe Data & Opsi ---
+// --- Tipe Data ---
 
 type Role = 'student' | 'teacher' | 'contributor' | 'parent';
 
-const classOptions = [
-  '7A', '7B', '7C', '7D', '7E', '7F',
-  '8A', '8B', '8C', '8D', '8E', '8F',
-  '9A', '9B', '9C', '9D', '9E', '9F',
-].map(c => ({ value: c, label: c }));
-
-// --- Komponen Utama Register ---
+interface ClassData {
+  id: string | number;
+  name: string;
+}
 
 const Register: React.FC = () => {
-  // Panggil fungsi register dari Context
   const { register } = useAuth(); 
-  
+  const navigate = useNavigate();
+
   const [selectedRole, setSelectedRole] = useState<Role>('student');
+  const [classList, setClassList] = useState<ClassData[]>([]);
   const [formData, setFormData] = useState({
     fullName: '',
     nisn: '',
     nip: '',
     whatsappNumber: '',
-    class: '',
+    classId: '', 
     password: '',
     confirmPassword: ''
   });
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
-  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        const response = await authApi.get('/auth/classes-list');
+        const data = response.data.data || response.data;
+        if (Array.isArray(data)) setClassList(data);
+      } catch (err) {
+        console.error("Gagal mengambil daftar kelas:", err);
+      }
+    };
+    fetchClasses();
+  }, []);
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -103,26 +112,35 @@ const Register: React.FC = () => {
     const loadingToast = toast.loading('Mendaftarkan akun...');
 
     try {
+      // Generate email otomatis berdasarkan nama
+      const generatedEmail = `${formData.fullName.toLowerCase().replace(/\s+/g, '')}${Math.floor(1000 + Math.random() * 9000)}@isokurikuler.com`;
+
       const registrationData = {
         role: selectedRole,
         fullName: formData.fullName,
+        email: generatedEmail,
         password: formData.password,
         nisn: selectedRole === 'student' ? formData.nisn : undefined,
         nip: (selectedRole === 'teacher' || selectedRole === 'contributor') ? formData.nip : undefined,
         whatsappNumber: selectedRole === 'parent' ? formData.whatsappNumber : undefined,
-        class: (selectedRole === 'student' || selectedRole === 'teacher') ? (formData.class || undefined) : undefined,
+        classId: (selectedRole === 'student' || selectedRole === 'teacher') ? formData.classId : undefined,
       };
       
-      // Menggunakan fungsi register dari context
-      await register(registrationData);
+      const response = await register(registrationData);
       
       toast.dismiss(loadingToast);
-      toast.success('Pendaftaran berhasil! Silakan masuk.');
-      navigate('/login');
+      toast.success('Pendaftaran berhasil!');
+      
+      if (response.user) {
+        const target = response.user.role === 'student' ? '/student/beranda' : `/${response.user.role}/dashboard`;
+        navigate(target);
+      } else {
+        navigate('/login');
+      }
 
     } catch (err: any) {
       toast.dismiss(loadingToast);
-      const errorMessage = err.response?.data?.message || 'Pendaftaran gagal. Silakan coba lagi.';
+      const errorMessage = err.response?.data?.message || 'Pendaftaran gagal.';
       toast.error(errorMessage);
       setError(errorMessage);
       setLoading(false);
@@ -130,88 +148,96 @@ const Register: React.FC = () => {
   };
 
   const renderRoleSpecificFields = () => {
-    switch (selectedRole) {
-      case 'student':
-        return (
+    const mappedClassOptions = classList.map(c => ({ value: c.id, label: c.name }));
+
+    return (
+      <>
+        <InputField name="fullName" placeholder="Nama Lengkap" value={formData.fullName} onChange={handleFormChange} />
+
+        {selectedRole === 'student' && (
           <>
-            <InputField name="fullName" placeholder="Nama Lengkap" value={formData.fullName} onChange={handleFormChange} />
-            <InputField name="nisn" placeholder="NISN (Nomor Induk Siswa Nasional)" value={formData.nisn} onChange={handleFormChange} />
-            <SelectField name="class" value={formData.class} options={classOptions} placeholder="Pilih Kelas" onChange={handleFormChange} />
+            <InputField name="nisn" placeholder="NISN (10 Digit)" value={formData.nisn} onChange={handleFormChange} />
+            <SelectField 
+              name="classId" 
+              value={formData.classId} 
+              options={mappedClassOptions} 
+              placeholder="Pilih Kelas" 
+              onChange={handleFormChange} 
+            />
           </>
-        );
-      case 'teacher':
-        return (
+        )}
+
+        {selectedRole === 'teacher' && (
           <>
-            <InputField name="fullName" placeholder="Nama Lengkap" value={formData.fullName} onChange={handleFormChange} />
-            <InputField name="nip" placeholder="NIP (Nomor Induk Pegawai)" value={formData.nip} onChange={handleFormChange} />
-            <SelectField name="class" value={formData.class} options={classOptions} placeholder="Pilih Kelas Wali (Opsional)" required={false} onChange={handleFormChange} />
+            <InputField name="nip" placeholder="NIP / Identitas Guru" value={formData.nip} onChange={handleFormChange} />
+            <SelectField 
+              name="classId" 
+              value={formData.classId} 
+              options={mappedClassOptions} 
+              placeholder="Pilih Kelas Wali (Opsional)" 
+              required={false} 
+              onChange={handleFormChange} 
+            />
           </>
-        );
-      case 'contributor':
-          return (
-            <>
-              <InputField name="fullName" placeholder="Nama Lengkap" value={formData.fullName} onChange={handleFormChange} />
-              <InputField name="nip" placeholder="NIP (Nomor Induk Pegawai)" value={formData.nip} onChange={handleFormChange} />
-            </>
-          );
-      case 'parent':
-        return (
-          <>
-            <InputField name="fullName" placeholder="Nama Lengkap Orang Tua/Wali" value={formData.fullName} onChange={handleFormChange} />
-            <InputField name="whatsappNumber" placeholder="Nomor WhatsApp (Contoh: 08123456789)" value={formData.whatsappNumber} onChange={handleFormChange} />
-          </>
-        );
-      default:
-        return null;
-    }
+        )}
+
+        {selectedRole === 'contributor' && (
+          <InputField name="nip" placeholder="NIP / Kode Pegawai" value={formData.nip} onChange={handleFormChange} />
+        )}
+
+        {selectedRole === 'parent' && (
+          <InputField name="whatsappNumber" placeholder="Nomor WhatsApp" value={formData.whatsappNumber} onChange={handleFormChange} />
+        )}
+      </>
+    );
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-xl p-8 md:p-10 space-y-8 bg-white shadow-xl rounded-2xl">
-
         <div className="text-center">
           <img className="mx-auto h-20 w-auto" src="/logo-smpn6.png" alt="Logo SMPN 6 Pekalongan" />
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">Buat Akun Baru</h2>
+          <h2 className="mt-6 text-3xl font-extrabold text-gray-900 tracking-tight">Buat Akun Baru</h2>
           <p className="mt-2 text-sm text-gray-600">Daftar untuk mengakses fitur Isokurikuler.</p>
         </div>
 
-        {/* --- GOOGLE REGISTER BUTTON --- */}
-        <div className="mt-2">
-            <a 
-                // PERBAIKAN: Gunakan API_HOST agar dinamis sesuai .env
-                href={`${API_HOST}/api/auth/google`} 
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-            >
-                <img 
-                    className="h-5 w-5" 
-                    src="https://www.svgrepo.com/show/475656/google-color.svg" 
-                    alt="Google Logo" 
-                />
-                <span>Daftar dengan Google</span>
-            </a>
+        {/* --- GOOGLE REGISTER SECTION --- */}
+        <div className="mt-4">
+          <a 
+            href={`${API_HOST}/api/auth/google`} 
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+          >
+            <img 
+              className="h-5 w-5" 
+              src="https://www.svgrepo.com/show/475656/google-color.svg" 
+              alt="Google Logo" 
+            />
+            <span>Daftar dengan Google</span>
+          </a>
 
-            <div className="relative mt-6">
-                <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-300"></div>
-                </div>
-                <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-gray-500">Atau daftar manual</span>
-                </div>
+          <div className="relative mt-8 mb-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200"></div>
             </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-white text-gray-500 uppercase tracking-widest text-[10px] font-bold">Atau daftar manual</span>
+            </div>
+          </div>
         </div>
-        {/* ----------------------------- */}
 
         <form onSubmit={handleRegister} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Saya mendaftar sebagai:</label>
+            <label className="block text-sm font-medium text-gray-700 mb-3">Saya mendaftar sebagai:</label>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {(['student', 'teacher', 'parent', 'contributor'] as Role[]).map(role => (
                 <button 
                   key={role} 
                   type="button" 
-                  onClick={() => setSelectedRole(role)} 
-                  className={`w-full text-center px-4 py-2 text-sm font-semibold rounded-lg border transition-colors duration-200 ${selectedRole === role ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-100'}`}>
+                  onClick={() => {
+                    setSelectedRole(role);
+                    setFormData(prev => ({ ...prev, classId: '', nisn: '', nip: '', whatsappNumber: '' }));
+                  }} 
+                  className={`w-full text-center px-2 py-2 text-xs font-bold rounded-xl border transition-all ${selectedRole === role ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
                   {role.charAt(0).toUpperCase() + role.slice(1)}
                 </button>
               ))}
@@ -220,19 +246,27 @@ const Register: React.FC = () => {
 
           {renderRoleSpecificFields()}
 
-          <InputField name="password" placeholder="Password" type="password" value={formData.password} onChange={handleFormChange} />
+          <InputField name="password" placeholder="Buat Password" type="password" value={formData.password} onChange={handleFormChange} />
           <InputField name="confirmPassword" placeholder="Konfirmasi Password" type="password" value={formData.confirmPassword} onChange={handleFormChange} />
 
-          {error && <p className="text-sm text-red-600 text-center pt-1">{error}</p>}
+          {error && <p className="text-xs text-red-600 text-center bg-red-50 p-2 rounded-lg">{error}</p>}
 
           <div>
-            <button type="submit" disabled={loading} className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 disabled:cursor-not-allowed transition duration-150 ease-in-out">
-              {loading ? 'MEMPROSES PENDAFTARAN...' : 'DAFTAR SEKARANG'}
+            <button 
+              type="submit" 
+              disabled={loading} 
+              className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold rounded-xl text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 transition-all shadow-lg shadow-blue-100"
+            >
+              {loading ? 'MEMPROSES...' : 'DAFTAR SEKARANG'}
             </button>
           </div>
 
-          <p className="text-center text-sm text-gray-600 pt-3">
-            Sudah punya akun? <Link to="/login" className="font-medium text-blue-600 hover:text-blue-500 hover:underline">Masuk di sini</Link>
+          {/* TOMBOL KEMBALI KE LOGIN */}
+          <p className="text-center text-sm text-gray-600 pt-2">
+            Sudah punya akun?{' '}
+            <Link to="/login" className="font-bold text-blue-600 hover:text-blue-500 hover:underline">
+              Masuk di sini
+            </Link>
           </p>
         </form>
       </div>

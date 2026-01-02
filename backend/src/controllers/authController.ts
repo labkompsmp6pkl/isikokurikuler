@@ -15,25 +15,25 @@ export const login = async (req: Request, res: Response) => {
     const isPhoneNumber = /^\d{10,}$/.test(loginIdentifier);
 
     if (isPhoneNumber) {
-        const parentQuery = `SELECT * FROM users WHERE whatsapp_number = ? AND role = 'parent' LIMIT 1`;
-        const [parentRows]: any[] = await pool.query(parentQuery, [loginIdentifier]);
-        if (parentRows.length > 0) user = parentRows[0];
+      const parentQuery = `SELECT * FROM users WHERE whatsapp_number = ? AND role = 'parent' LIMIT 1`;
+      const [parentRows]: any[] = await pool.query(parentQuery, [loginIdentifier]);
+      if (parentRows.length > 0) user = parentRows[0];
     }
 
     if (!user) {
-        const query = `
+      const query = `
           SELECT * FROM users 
           WHERE email = ? OR nisn = ? OR nip = ? OR whatsapp_number = ?
           LIMIT 1
         `;
-        const [rows]: any[] = await pool.query(query, [loginIdentifier, loginIdentifier, loginIdentifier, loginIdentifier]);
-        user = rows[0];
+      const [rows]: any[] = await pool.query(query, [loginIdentifier, loginIdentifier, loginIdentifier, loginIdentifier]);
+      user = rows[0];
     }
 
     if (!user) return res.status(401).json({ message: 'Akun tidak ditemukan.' });
 
     // Cek Password (Handle Bcrypt dari PHP/Laravel format $2y$ ke $2a$)
-    const userPasswordHash = user.password ? user.password.replace('$2y$', '$2a$') : ''; 
+    const userPasswordHash = user.password ? user.password.replace('$2y$', '$2a$') : '';
     if (!userPasswordHash) return res.status(401).json({ message: 'Akun ini terdaftar via Google. Silakan login via Google.' });
 
     const isPasswordValid = await bcrypt.compare(password, userPasswordHash);
@@ -54,8 +54,7 @@ export const login = async (req: Request, res: Response) => {
         fullName: user.full_name,
         role: user.role,
         nip: user.nip,
-        // PASTIKAN INI class_id, bukan class
-        classId: user.class_id, 
+        classId: user.class_id, // Menggunakan class_id sesuai struktur DB terbaru
       }
     });
 
@@ -65,7 +64,7 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
-// --- 2. REGISTRASI MANUAL (DIPERBAIKI) ---
+// --- 2. REGISTRASI MANUAL ---
 export const register = async (req: Request, res: Response) => {
   const { role, fullName, email, password, nisn, classId, nip, whatsappNumber } = req.body;
   const connection = await pool.getConnection();
@@ -92,24 +91,24 @@ export const register = async (req: Request, res: Response) => {
     );
     const newUserId = result.insertId;
 
-    // 5. Update Data Spesifik per Role (Mirip dengan logic Google)
+    // 5. Update Data Spesifik per Role
     if (role === 'student') {
-        if (!nisn || !classId) throw new Error("NISN dan Kelas wajib diisi.");
-        const [checkNisn]: any = await connection.query('SELECT id FROM users WHERE nisn = ?', [nisn]);
-        if (checkNisn.length > 0) throw new Error("NISN sudah terdaftar.");
-        await connection.query('UPDATE users SET nisn = ?, class_id = ? WHERE id = ?', [nisn, classId, newUserId]);
+      if (!nisn || !classId) throw new Error("NISN dan Kelas wajib diisi.");
+      const [checkNisn]: any = await connection.query('SELECT id FROM users WHERE nisn = ?', [nisn]);
+      if (checkNisn.length > 0) throw new Error("NISN sudah terdaftar.");
+      await connection.query('UPDATE users SET nisn = ?, class_id = ? WHERE id = ?', [nisn, classId, newUserId]);
 
     } else if (role === 'teacher') {
-        if (!nip) throw new Error("NIP wajib diisi.");
-        await connection.query('UPDATE users SET nip = ?, class_id = ? WHERE id = ?', [nip, classId || null, newUserId]);
+      if (!nip) throw new Error("NIP wajib diisi.");
+      await connection.query('UPDATE users SET nip = ?, class_id = ? WHERE id = ?', [nip, classId || null, newUserId]);
 
     } else if (role === 'parent') {
-        if (!whatsappNumber) throw new Error("Nomor WhatsApp wajib diisi.");
-        await connection.query('UPDATE users SET whatsapp_number = ? WHERE id = ?', [whatsappNumber, newUserId]);
+      if (!whatsappNumber) throw new Error("Nomor WhatsApp wajib diisi.");
+      await connection.query('UPDATE users SET whatsapp_number = ? WHERE id = ?', [whatsappNumber, newUserId]);
 
     } else if (role === 'contributor') {
-        if (!nip) throw new Error("NIP/Identitas wajib diisi.");
-        await connection.query('UPDATE users SET nip = ? WHERE id = ?', [nip, newUserId]);
+      if (!nip) throw new Error("NIP/Identitas wajib diisi.");
+      await connection.query('UPDATE users SET nip = ? WHERE id = ?', [nip, newUserId]);
     }
 
     await connection.commit();
@@ -121,8 +120,8 @@ export const register = async (req: Request, res: Response) => {
       { expiresIn: '1d' }
     );
 
-    res.status(201).json({ 
-      message: "Registrasi berhasil", 
+    res.status(201).json({
+      message: "Registrasi berhasil",
       token,
       user: { id: newUserId, role, fullName, email }
     });
@@ -162,9 +161,9 @@ export const googleCallbackHandler = async (req: Request, res: Response) => {
     }
 
     const tempToken = jwt.sign(
-        { email: email, googleId: googleId, fullName: displayName, role: 'new_user', isNewUser: true },
-        process.env.JWT_SECRET as string,
-        { expiresIn: '1h' } 
+      { email: email, googleId: googleId, fullName: displayName, role: 'new_user', isNewUser: true },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '1h' }
     );
 
     return res.redirect(`${frontendBaseUrl}/google-register-complete?token=${tempToken}`);
@@ -182,56 +181,56 @@ export const completeGoogleRegistration = async (req: Request, res: Response) =>
   const userToken = (req as any).user as UserPayload;
 
   if (!userToken || !userToken.email || !userToken.googleId) {
-      return res.status(401).json({ message: "Sesi Google tidak valid." });
+    return res.status(401).json({ message: "Sesi Google tidak valid." });
   }
 
   const { email, googleId } = userToken;
   const connection = await pool.getConnection();
 
   try {
-      await connection.beginTransaction();
+    await connection.beginTransaction();
 
-      const [checkUser]: any = await connection.query('SELECT id FROM users WHERE email = ?', [email]);
-      if (checkUser.length > 0) throw new Error("Email ini sudah terdaftar.");
+    const [checkUser]: any = await connection.query('SELECT id FROM users WHERE email = ?', [email]);
+    if (checkUser.length > 0) throw new Error("Email ini sudah terdaftar.");
 
-      const [result]: any = await connection.query(
-          `INSERT INTO users (full_name, email, role, google_id, password) VALUES (?, ?, ?, ?, NULL)`,
-          [fullName.trim(), email, role, googleId]
-      );
-      const newUserId = result.insertId;
+    const [result]: any = await connection.query(
+      `INSERT INTO users (full_name, email, role, google_id, password) VALUES (?, ?, ?, ?, NULL)`,
+      [fullName.trim(), email, role, googleId]
+    );
+    const newUserId = result.insertId;
 
-      if (role === 'student') {
-          if (!nisn || !classId) throw new Error("NISN dan Kelas wajib diisi.");
-          const [checkNisn]: any = await connection.query('SELECT id FROM users WHERE nisn = ?', [nisn]);
-          if (checkNisn.length > 0) throw new Error("NISN sudah terdaftar.");
-          await connection.query('UPDATE users SET nisn = ?, class_id = ? WHERE id = ?', [nisn.trim(), classId, newUserId]);
-      } else if (role === 'teacher') {
-          await connection.query('UPDATE users SET nip = ?, class_id = ? WHERE id = ?', [nip.trim(), classId || null, newUserId]);
-      } else if (role === 'parent') {
-          const cleanPhone = phoneNumber.replace(/\D/g, '');
-          await connection.query('UPDATE users SET whatsapp_number = ? WHERE id = ?', [cleanPhone, newUserId]);
-      } else if (role === 'contributor') {
-          await connection.query('UPDATE users SET nip = ? WHERE id = ?', [nip.trim(), newUserId]);
-      }
+    if (role === 'student') {
+      if (!nisn || !classId) throw new Error("NISN dan Kelas wajib diisi.");
+      const [checkNisn]: any = await connection.query('SELECT id FROM users WHERE nisn = ?', [nisn]);
+      if (checkNisn.length > 0) throw new Error("NISN sudah terdaftar.");
+      await connection.query('UPDATE users SET nisn = ?, class_id = ? WHERE id = ?', [nisn.trim(), classId, newUserId]);
+    } else if (role === 'teacher') {
+      await connection.query('UPDATE users SET nip = ?, class_id = ? WHERE id = ?', [nip.trim(), classId || null, newUserId]);
+    } else if (role === 'parent') {
+      const cleanPhone = phoneNumber.replace(/\D/g, '');
+      await connection.query('UPDATE users SET whatsapp_number = ? WHERE id = ?', [cleanPhone, newUserId]);
+    } else if (role === 'contributor') {
+      await connection.query('UPDATE users SET nip = ? WHERE id = ?', [nip.trim(), newUserId]);
+    }
 
-      await connection.commit();
+    await connection.commit();
 
-      const finalToken = jwt.sign(
-          { id: newUserId, role, name: fullName },
-          process.env.JWT_SECRET as string,
-          { expiresIn: '1d' }
-      );
+    const finalToken = jwt.sign(
+      { id: newUserId, role, name: fullName },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '1d' }
+    );
 
-      res.status(201).json({ 
-          message: 'Registrasi berhasil', 
-          token: finalToken,
-          user: { id: newUserId, role, fullName, email } 
-      });
+    res.status(201).json({
+      message: 'Registrasi berhasil',
+      token: finalToken,
+      user: { id: newUserId, role, fullName, email }
+    });
 
   } catch (error: any) {
-      await connection.rollback();
-      res.status(400).json({ message: error.message });
+    await connection.rollback();
+    res.status(400).json({ message: error.message });
   } finally {
-      connection.release();
+    connection.release();
   }
 };

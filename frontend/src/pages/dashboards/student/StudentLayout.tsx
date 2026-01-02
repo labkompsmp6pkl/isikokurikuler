@@ -72,7 +72,7 @@ const StudentLayout: React.FC = () => {
               <img src="/logo-smpn6.png" alt="Logo SMPN 6" className="w-8 h-8 object-contain" />
             </div>
             <div className="flex flex-col">
-              <span className="font-black text-blue-900 leading-none text-sm tracking-tighter">KOKURIKULER</span>
+              <span className="font-black text-blue-900 leading-none text-sm tracking-tighter">ISOKURIKULER</span>
               <span className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-[0.2em]">SMPN 6 Pekalongan</span>
             </div>
           </div>
@@ -114,9 +114,10 @@ const StudentLayout: React.FC = () => {
             </div>
           </div>
 
+          {/* PERUBAHAN: Teks tombol menjadi "Logout" */}
           <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-black text-red-600 bg-white border border-red-100 hover:bg-red-600 hover:text-white rounded-2xl transition-all shadow-sm active:scale-95 group">
             <LogOut size={18} className="group-hover:-translate-x-1 transition-transform" />
-            <span>Keluar Aplikasi</span>
+            <span>Logout</span>
           </button>
         </div>
       </aside>
@@ -128,7 +129,7 @@ const StudentLayout: React.FC = () => {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <img src="/logo-smpn6.png" alt="Logo" className="w-7 h-7" />
-              <span className="font-black text-blue-900 text-xs tracking-tighter uppercase">kokurikuler</span>
+              <span className="font-black text-blue-900 text-xs tracking-tighter uppercase">Isokurikuler</span>
             </div>
             <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-blue-600 bg-blue-50 rounded-xl active:scale-90 transition-transform shadow-sm">
               <Menu size={24} />

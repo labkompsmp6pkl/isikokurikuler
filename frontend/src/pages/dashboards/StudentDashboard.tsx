@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import Swal from 'sweetalert2';
+import { useSearchParams } from 'react-router-dom'; 
+import toast from 'react-hot-toast'; 
 import { useAuth } from '../../services/authService';
 import characterService from '../../services/characterService';
 import Spinner from './student/components/Spinner';
@@ -9,11 +10,14 @@ import {
   learningOptions, 
   socialOptions 
 } from './student/components/options';
-import { Star, CheckCircle2, Trophy, CalendarDays } from 'lucide-react'; // Icon Baru
+import { Star, CheckCircle2, Trophy, CalendarDays, BarChart3 } from 'lucide-react';
 
 const StudentDashboard: React.FC = () => {
   useAuth();
   
+  const [searchParams] = useSearchParams();
+  const urlDate = searchParams.get('date');
+
   const getLocalDateString = () => {
     const now = new Date();
     const year = now.getFullYear();
@@ -22,16 +26,13 @@ const StudentDashboard: React.FC = () => {
     return `${year}-${month}-${day}`;
   };
 
-  // State Lama
   const [activeTab, setActiveTab] = useState<'plan' | 'execution'>('plan');
-  const [date, setDate] = useState(getLocalDateString()); 
+  const [date, setDate] = useState(urlDate || getLocalDateString()); 
+  
   const [loading, setLoading] = useState(false);
   const [apiData, setApiData] = useState<any>(null);
-  
-  // State Baru (Dashboard & Misi)
   const [dashData, setDashData] = useState<any>(null);
 
-  // Form State (Tetap)
   const [formData, setFormData] = useState<any>({
     wake_up_time: '',
     worship_activities: [],
@@ -49,12 +50,28 @@ const StudentDashboard: React.FC = () => {
   const [isPlanSubmitted, setIsPlanSubmitted] = useState(false);
   const [isExecutionSubmitted, setIsExecutionSubmitted] = useState(false);
 
+  // --- HITUNG PROGRESS BAR ---
+  const calculateProgress = () => {
+    let count = 0;
+    if (formData.wake_up_time) count++;
+    if ((formData.worship_activities && formData.worship_activities.length > 0) || formData.worship_detail) count++;
+    if (formData.sport_activities || formData.sport_detail) count++;
+    if (formData.meal_text) count++;
+    if ((formData.study_activities && formData.study_activities.length > 0) || formData.study_detail) count++;
+    if ((formData.social_activities && formData.social_activities.length > 0) || formData.social_detail) count++;
+    if (formData.sleep_time) count++;
+    return count;
+  };
+
+  const currentProgress = calculateProgress();
+  const progressPercent = (currentProgress / 7) * 100;
+
   useEffect(() => {
-    const today = getLocalDateString();
-    setDate(today); 
-    fetchLog(today);
-    fetchDashboardData(); // Ambil Misi & Poin
-  }, []);
+    const targetDate = urlDate || getLocalDateString();
+    setDate(targetDate); 
+    fetchLog(targetDate);
+    fetchDashboardData();
+  }, [urlDate]); 
 
   const fetchLog = async (currentDate: string) => {
     setLoading(true);
@@ -64,8 +81,12 @@ const StudentDashboard: React.FC = () => {
       if (data) {
         setIsPlanSubmitted(!!data.is_plan_submitted);
         setIsExecutionSubmitted(!!data.is_execution_submitted);
+        
+        // Logika Tab Otomatis
         if (data.is_plan_submitted && !data.is_execution_submitted) {
             setActiveTab('execution');
+        } else {
+            setActiveTab('plan'); 
         }
       } else {
         setIsPlanSubmitted(false);
@@ -79,7 +100,6 @@ const StudentDashboard: React.FC = () => {
     }
   };
 
-  // [BARU] Ambil Data Misi & Poin
   const fetchDashboardData = async () => {
       try {
           const data = await characterService.getStudentDashboard();
@@ -87,47 +107,67 @@ const StudentDashboard: React.FC = () => {
       } catch (error) { console.error(error); }
   };
 
-  // [BARU] Handler Selesaikan Misi
   const handleCompleteMission = async (missionId: number) => {
-      const success = await characterService.completeMission(missionId);
-      if (success) {
-          Swal.fire('Kerja Bagus!', 'Misi berhasil diselesaikan.', 'success');
-          fetchDashboardData(); // Refresh agar misi hilang dari list
+      const toastId = 'mission-complete';
+      toast.loading('Memproses...', { id: toastId });
+      
+      try {
+          const success = await characterService.completeMission(missionId);
+          if (success) {
+              toast.success('Misi selesai! Kerja bagus.', { id: toastId });
+              fetchDashboardData(); 
+          } else {
+              toast.error('Gagal menyelesaikan misi.', { id: toastId });
+          }
+      } catch (e) {
+          toast.error('Terjadi kesalahan koneksi.', { id: toastId });
       }
   };
 
-  // ... (SISA KODE FORM LOGIC LAMA TETAP SAMA) ...
   useEffect(() => {
     if (!apiData) { resetForm(); return; }
-    if (activeTab === 'plan') {
-      setFormData({
-        wake_up_time: apiData.plan_wake_up_time || '',
-        worship_activities: parseJsonIfNeeded(apiData.plan_worship_activities),
-        worship_detail: apiData.plan_worship_detail || '',
-        sport_activities: apiData.plan_sport_activities || '',
-        sport_detail: apiData.plan_sport_detail || '',
-        meal_text: apiData.plan_meal_text || '',
-        study_activities: parseJsonIfNeeded(apiData.plan_study_activities),
-        study_detail: apiData.plan_study_detail || '',
-        social_activities: parseJsonIfNeeded(apiData.plan_social_activities),
-        social_detail: apiData.plan_social_detail || '',
-        sleep_time: apiData.plan_sleep_time || '',
-      });
-    } else {
-      setFormData({
-        wake_up_time: apiData.wake_up_time || '',
-        worship_activities: parseJsonIfNeeded(apiData.worship_activities),
-        worship_detail: apiData.worship_detail || '',
-        sport_activities: apiData.sport_activities || '',
-        sport_detail: apiData.sport_detail || '',
-        meal_text: apiData.meal_text || '',
-        study_activities: parseJsonIfNeeded(apiData.study_activities),
-        study_detail: apiData.study_detail || '',
-        social_activities: parseJsonIfNeeded(apiData.social_activities),
-        social_detail: apiData.social_detail || '',
-        sleep_time: apiData.sleep_time || '',
-      });
-    }
+    
+    // Mapping Data dari API ke Form
+    const sourceData = activeTab === 'plan' ? {
+        wake_up_time: apiData.plan_wake_up_time,
+        worship_activities: apiData.plan_worship_activities,
+        worship_detail: apiData.plan_worship_detail,
+        sport_activities: apiData.plan_sport_activities,
+        sport_detail: apiData.plan_sport_detail,
+        meal_text: apiData.plan_meal_text,
+        study_activities: apiData.plan_study_activities,
+        study_detail: apiData.plan_study_detail,
+        social_activities: apiData.plan_social_activities,
+        social_detail: apiData.plan_social_detail,
+        sleep_time: apiData.plan_sleep_time,
+    } : {
+        wake_up_time: apiData.wake_up_time,
+        worship_activities: apiData.worship_activities,
+        worship_detail: apiData.worship_detail,
+        sport_activities: apiData.sport_activities,
+        sport_detail: apiData.sport_detail,
+        meal_text: apiData.meal_text,
+        study_activities: apiData.study_activities,
+        study_detail: apiData.study_detail,
+        social_activities: apiData.social_activities,
+        social_detail: apiData.social_detail,
+        sleep_time: apiData.sleep_time,
+    };
+
+    setFormData({
+      wake_up_time: sourceData.wake_up_time || '',
+      worship_activities: parseJsonIfNeeded(sourceData.worship_activities),
+      worship_detail: sourceData.worship_detail || '',
+      sport_activities: sourceData.sport_activities || '',
+      sport_detail: sourceData.sport_detail || '',
+      meal_text: sourceData.meal_text || '',
+      study_activities: parseJsonIfNeeded(sourceData.study_activities),
+      study_detail: sourceData.study_detail || '',
+      social_activities: parseJsonIfNeeded(sourceData.social_activities),
+      social_detail: sourceData.social_detail || '',
+      sleep_time: sourceData.sleep_time || '',
+    });
+
   }, [activeTab, apiData]);
 
   const parseJsonIfNeeded = (data: any) => {
@@ -152,13 +192,50 @@ const StudentDashboard: React.FC = () => {
     });
   };
 
+  // --- VALIDASI FORM ---
+  const validateForm = () => {
+    // Validasi ini berlaku untuk kedua mode (Plan & Execution)
+    // Pastikan semua field terisi sebelum simpan
+    
+    if (!formData.wake_up_time) return "Jam Bangun Pagi belum diisi!";
+    
+    if (formData.worship_activities.length === 0) return "Pilih minimal satu aktivitas Beribadah!";
+    if (!formData.worship_detail || !formData.worship_detail.trim()) return "Detail Beribadah belum diisi!";
+    
+    if (!formData.sport_activities) return "Pilih jenis Olahraga!";
+    if (!formData.sport_detail || !formData.sport_detail.trim()) return "Detail Olahraga belum diisi!";
+    
+    if (!formData.meal_text || !formData.meal_text.trim()) return "Menu Makan Sehat belum diisi!";
+    
+    if (formData.study_activities.length === 0) return "Pilih minimal satu topik Belajar!";
+    if (!formData.study_detail || !formData.study_detail.trim()) return "Detail Belajar belum diisi!";
+    
+    if (formData.social_activities.length === 0) return "Pilih minimal satu aktivitas Bermasyarakat!";
+    if (!formData.social_detail || !formData.social_detail.trim()) return "Detail Bermasyarakat belum diisi!";
+    
+    if (!formData.sleep_time) return "Jam Tidur belum diisi!";
+
+    return null; // Lolos Validasi
+  };
+
   const handleSave = async () => {
+    const toastId = 'save-journal'; 
+
+    // 1. Cek apakah boleh mengisi Eksekusi
     if (activeTab === 'execution' && !isPlanSubmitted) {
-        Swal.fire('Gagal', 'Anda harus mengisi Rencana terlebih dahulu!', 'error');
+        toast.error('Isi Rencana terlebih dahulu!', { id: toastId });
         return;
     }
+
+    // 2. Validasi Kelengkapan Data (Harus Full)
+    const errorMsg = validateForm();
+    if (errorMsg) {
+        toast.error(errorMsg, { id: toastId });
+        return;
+    }
+    
     const payload: any = { log_date: date, mode: activeTab };
-    // Mapping field sesuai mode (Plan vs Execution)
+    
     if (activeTab === 'plan') {
         payload.plan_wake_up_time = formData.wake_up_time;
         payload.plan_worship_activities = formData.worship_activities;
@@ -186,11 +263,15 @@ const StudentDashboard: React.FC = () => {
     }
 
     try {
+      toast.loading('Menyimpan data...', { id: toastId });
       await characterService.saveCharacterLog(payload);
-      Swal.fire('Sukses', `Data ${activeTab === 'plan' ? 'Rencana' : 'Eksekusi'} berhasil disimpan!`, 'success');
+      
+      const typeText = activeTab === 'plan' ? 'Rencana' : 'Eksekusi';
+      toast.success(`Data ${typeText} berhasil disimpan!`, { id: toastId });
+      
       fetchLog(date); 
     } catch (error) {
-      Swal.fire('Error', 'Gagal menyimpan data', 'error');
+      toast.error('Gagal menyimpan data.', { id: toastId });
     }
   };
 
@@ -209,7 +290,7 @@ const StudentDashboard: React.FC = () => {
 
   const renderPlanLabel = (field: string, isArray = false) => {
     if (activeTab !== 'execution') return null;
-    if (!apiData) return <span className="text-red-500 text-xs italic ml-2">⚠️ Rencana belum diisi!</span>;
+    if (!apiData) return <span className="text-rose-500 text-xs italic ml-2">⚠️ Rencana belum diisi!</span>;
     const planKey = 'plan_' + field;
     let val = apiData[planKey];
     if (isArray && Array.isArray(val)) val = val.join(', ');
@@ -238,7 +319,8 @@ const StudentDashboard: React.FC = () => {
     }
   }
 
-  const formattedDate = new Date().toLocaleDateString('id-ID', {
+  const displayDateObj = new Date(date);
+  const displayDateStr = displayDateObj.toLocaleDateString('id-ID', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
 
@@ -249,17 +331,25 @@ const StudentDashboard: React.FC = () => {
       
       {/* Header & Info Tanggal */}
       <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">Input Karakter Harian</h2>
-        <div className="flex items-center gap-2 text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-100">
-          <span className="text-xl">📅</span>
-          <span className="font-bold text-lg">{formattedDate}</span>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-1">
+                    {urlDate ? `Jurnal Tanggal ${urlDate}` : 'Input Karakter Harian'}
+                </h2>
+                <p className="text-sm text-gray-500">
+                    {urlDate ? 'Mengisi/Melihat data masa lalu' : 'Isi kegiatanmu hari ini'}
+                </p>
+            </div>
+            <div className="flex items-center gap-2 text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                <span className="text-xl">📅</span>
+                <span className="font-bold text-lg">{displayDateStr}</span>
+            </div>
         </div>
       </div>
 
       {/* --- FITUR KREASI: MISI & STATISTIK --- */}
-      {dashData && (
+      {!urlDate && dashData && (
           <div className="mb-8 space-y-4">
-              {/* Statistik Poin */}
               <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl p-5 text-white shadow-lg flex items-center justify-between">
                   <div>
                       <p className="text-xs font-bold text-orange-100 uppercase tracking-wider">Total Poin Sikap</p>
@@ -268,7 +358,6 @@ const StudentDashboard: React.FC = () => {
                   <Trophy size={48} className="text-orange-200 opacity-50"/>
               </div>
 
-              {/* Daftar Misi */}
               {dashData.missions.length > 0 ? (
                   <div className="bg-white border-2 border-orange-100 rounded-2xl p-5 shadow-sm">
                       <h3 className="text-lg font-black text-gray-800 mb-3 flex items-center gap-2">
@@ -297,16 +386,11 @@ const StudentDashboard: React.FC = () => {
                           ))}
                       </div>
                   </div>
-              ) : (
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 text-center text-gray-400 text-sm">
-                      Belum ada misi aktif saat ini.
-                  </div>
-              )}
+              ) : null}
           </div>
       )}
-      {/* --------------------------------------- */}
-
-      {/* Tabs */}
+      
+      {/* Tabs Switcher */}
       <div className="flex gap-4 mb-6">
         <button
           onClick={() => setActiveTab('plan')}
@@ -330,6 +414,27 @@ const StudentDashboard: React.FC = () => {
         </button>
       </div>
 
+      {/* --- PROGRESS BAR (Indikator Kelengkapan) --- */}
+      <div className="mb-6 bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+          <div className="flex justify-between items-center mb-2">
+              <div className="flex items-center gap-2">
+                  <BarChart3 size={18} className={activeTab === 'plan' ? 'text-blue-600' : 'text-green-600'} />
+                  <span className="text-sm font-bold text-slate-700 capitalize">
+                      {activeTab === 'plan' ? 'Progress Rencana' : 'Progress Eksekusi'}
+                  </span>
+              </div>
+              <span className={`text-lg font-black ${activeTab === 'plan' ? 'text-blue-600' : 'text-green-600'}`}>
+                  {currentProgress}/7
+              </span>
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+              <div
+                  className={`h-3 rounded-full transition-all duration-700 ease-out ${activeTab === 'plan' ? 'bg-blue-500' : 'bg-green-500'}`}
+                  style={{ width: `${progressPercent}%` }}
+              ></div>
+          </div>
+      </div>
+
       {/* Pesan Status Disabled */}
       {isFormDisabled && (
         <div className={`p-4 rounded-xl mb-6 text-center border-l-4 font-medium shadow-sm animate-pulse ${
@@ -341,7 +446,7 @@ const StudentDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* FORM CONTENT (SAMA SEPERTI SEBELUMNYA) */}
+      {/* FORM FIELDS */}
       <fieldset disabled={isFormDisabled} className={`space-y-6 ${isFormDisabled ? 'opacity-70 grayscale-[0.5]' : ''}`}>
         
         {/* 1. Bangun Pagi */}

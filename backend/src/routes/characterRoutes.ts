@@ -1,5 +1,4 @@
-import { Router } from 'express';
-// Import nama fungsi yang BENAR sesuai controller di atas
+import { Router, RequestHandler } from 'express'; // 1. Import RequestHandler
 import { getDailyLog, saveCharacterLog, getHistory } from '../controllers/characterController';
 import { authMiddleware } from '../middleware/authMiddleware';
 
@@ -12,15 +11,24 @@ const router = Router();
 // ============================================================================
 
 // 1. Get Log Harian (Bisa untuk hari ini atau tanggal tertentu via ?date=...)
-// Menggantikan getTodayLog dan getLogByDate
-router.get('/log', authMiddleware, getDailyLog);
+router.get(
+    '/log', 
+    authMiddleware as RequestHandler, 
+    getDailyLog as RequestHandler
+);
 
 // 2. Simpan atau Update Log (Rencana / Eksekusi)
-// Menggantikan route '/save' agar sesuai RESTful (/log method POST)
-// Frontend saya sebelumnya menggunakan POST ke /api/character/log
-router.post('/log', authMiddleware, saveCharacterLog);
+router.post(
+    '/log', 
+    authMiddleware as RequestHandler, 
+    saveCharacterLog as RequestHandler
+);
 
 // 3. Get Semua Riwayat (Untuk Kalender)
-router.get('/history', authMiddleware, getHistory);
+router.get(
+    '/history', 
+    authMiddleware as RequestHandler, 
+    getHistory as RequestHandler
+);
 
 export default router;

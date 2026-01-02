@@ -1,39 +1,51 @@
-import { Router } from 'express';
+import { Router, RequestHandler } from 'express'; // 1. Pastikan import RequestHandler
 import { authMiddleware, roleMiddleware } from '../middleware/authMiddleware'; 
-import { getAdminDashboardStats, generateNationalAnalysis,
-    getUsers,       // Baru
-    getUserById,    // Baru
-    createUser,     // Baru
-    updateUser,     // Baru
-    deleteUser,      // Baru
+import { 
+    getAdminDashboardStats, generateNationalAnalysis,
+    getUsers, getUserById, createUser, updateUser, deleteUser,
     getClasses, createClass, generateClasses, updateClass, deleteClass, getClassDetail, getTeachersList,
     setupClassDatabase
- } from '../controllers/adminController';
+} from '../controllers/adminController';
 
 const router = Router();
 
-// Middleware: Hanya Admin yang boleh akses
-router.use(authMiddleware);
-router.get('/classes', getClasses);
-router.get('/teachers-list', getTeachersList);
-router.use(roleMiddleware(['admin']));
+// ==================================================================
+// 1. GLOBAL AUTH (Semua route di file ini butuh login)
+// ==================================================================
+// FIX: Tambahkan 'as RequestHandler' untuk mengatasi error TS2769
+router.use(authMiddleware as RequestHandler);
 
-// Route Dashboard Statistik
-router.get('/dashboard-stats', getAdminDashboardStats);
-router.post('/generate-analysis', generateNationalAnalysis);
+// ==================================================================
+// 2. PUBLIC / COMMON ROUTES (Login User Tapi Bukan Admin Bisa Akses)
+// ==================================================================
+// Route ini ditaruh SEBELUM roleMiddleware agar user biasa/guru bisa akses (jika memang diizinkan)
+router.get('/classes', getClasses as RequestHandler);
+router.get('/teachers-list', getTeachersList as RequestHandler);
 
-router.get('/users', getUsers);
-router.get('/users/:id', getUserById);
-router.post('/users', createUser);
-router.put('/users/:id', updateUser);
-router.delete('/users/:id', deleteUser);
+// ==================================================================
+// 3. ADMIN ONLY ROUTES (Gerbang Khusus Admin)
+// ==================================================================
+// FIX: Tambahkan 'as RequestHandler' di sini juga
+router.use(roleMiddleware(['admin']) as RequestHandler);
 
-router.post('/classes', createClass);
-router.post('/classes/setup', setupClassDatabase); // <--- Route Baru untuk Fix Database
-router.post('/classes/generate', generateClasses);
-router.put('/classes/:id', updateClass);
-router.delete('/classes/:id', deleteClass);
-router.get('/classes/:id', getClassDetail);
-router.get('/teachers-list', getTeachersList);
+// --- Dashboard & Stats ---
+router.get('/dashboard-stats', getAdminDashboardStats as RequestHandler);
+router.post('/generate-analysis', generateNationalAnalysis as RequestHandler);
+
+// --- User Management ---
+router.get('/users', getUsers as RequestHandler);
+router.get('/users/:id', getUserById as RequestHandler);
+router.post('/users', createUser as RequestHandler);
+router.put('/users/:id', updateUser as RequestHandler);
+router.delete('/users/:id', deleteUser as RequestHandler);
+
+// --- Class Management ---
+router.post('/classes', createClass as RequestHandler);
+router.post('/classes/setup', setupClassDatabase as RequestHandler);
+router.post('/classes/generate', generateClasses as RequestHandler);
+router.put('/classes/:id', updateClass as RequestHandler);
+router.delete('/classes/:id', deleteClass as RequestHandler);
+router.get('/classes/:id', getClassDetail as RequestHandler);
+
 
 export default router;

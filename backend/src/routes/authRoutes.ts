@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, RequestHandler } from 'express'; // 1. Import RequestHandler
 import { 
     login, 
     register, 
@@ -6,31 +6,32 @@ import {
     completeGoogleRegistration 
 } from '../controllers/authController';
 import passport from 'passport';
-import { authMiddleware } from '../middleware/authMiddleware'; // Pastikan path ini benar
+import { authMiddleware } from '../middleware/authMiddleware'; 
 
 const router = Router();
 
 // Auth Manual
-router.post('/login', login);
-router.post('/register', register);
+// Tambahkan 'as RequestHandler' untuk menghindari error tipe pada req/res
+router.post('/login', login as RequestHandler);
+router.post('/register', register as RequestHandler);
 
 // Auth Google
 // 1. Redirect ke Google
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }) as RequestHandler);
 
+// 2. Callback Handler
 router.get(
   '/google/callback',
-  // session: false SANGAT PENTING jika Anda menggunakan JWT manual di controller
-  passport.authenticate('google', { session: false, failureRedirect: '/login' }),
-  googleCallbackHandler
+  passport.authenticate('google', { session: false, failureRedirect: '/login' }) as RequestHandler,
+  googleCallbackHandler as RequestHandler
 );
 
-// 3. API Submit Data Lengkap (Frontend memanggil ini)
-// PENTING: Tambahkan 'authMiddleware' agar req.user terisi dari token sementara
+// 3. API Submit Data Lengkap
+// PENTING: Tambahkan 'as RequestHandler' pada middleware dan controller
 router.post(
-    '/google/complete-register', // Samakan path dengan Frontend
-    authMiddleware, 
-    completeGoogleRegistration
+    '/google/complete-register', 
+    authMiddleware as RequestHandler, // <--- PERBAIKAN UTAMA DI SINI
+    completeGoogleRegistration as RequestHandler // <--- Controller juga di-cast agar aman
 );
 
 export default router;

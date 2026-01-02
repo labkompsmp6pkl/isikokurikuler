@@ -19,7 +19,7 @@ router.use(authMiddleware as RequestHandler);
 // 2. PUBLIC / COMMON ROUTES (Login User Tapi Bukan Admin Bisa Akses)
 // ==================================================================
 // Route ini ditaruh SEBELUM roleMiddleware agar user biasa/guru bisa akses (jika memang diizinkan)
-router.get('/classes-list', getClasses as RequestHandler);
+router.get('/classes', getClasses as RequestHandler);
 router.get('/teachers-list', getTeachersList as RequestHandler);
 
 // ==================================================================

@@ -7,6 +7,7 @@ import {
 } from '../controllers/authController';
 import passport from 'passport';
 import { authMiddleware } from '../middleware/authMiddleware'; 
+import { getClasses } from '../controllers/adminController';
 
 const router = Router();
 
@@ -14,7 +15,7 @@ const router = Router();
 // Tambahkan 'as RequestHandler' untuk menghindari error tipe pada req/res
 router.post('/login', login as RequestHandler);
 router.post('/register', register as RequestHandler);
-
+router.get('/classes-list', getClasses as RequestHandler);
 // Auth Google
 // 1. Redirect ke Google
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }) as RequestHandler);

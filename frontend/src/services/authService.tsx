@@ -7,8 +7,9 @@ import axios from 'axios';
 export interface User {
   id: number;
   name: string;
-  role: 'student' | 'teacher' | 'contributor' | 'parent';
-  classId?: string; // Tambahan agar sesuai kebutuhan
+  // Tambahkan 'new_user' di sini agar TypeScript mengizinkannya
+  role: 'student' | 'teacher' | 'contributor' | 'parent' | 'new_user';
+  classId?: string;
 }
 
 export interface RegistrationData {

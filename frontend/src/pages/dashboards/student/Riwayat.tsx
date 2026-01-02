@@ -24,6 +24,13 @@ const Riwayat: React.FC = () => {
       setLoading(false);
     }
   };
+  
+  const formatDateLocal = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
   // Styling Kalender
   const tileClassName = ({ date, view }: any) => {
@@ -33,10 +40,9 @@ const Riwayat: React.FC = () => {
                       date.getMonth() === today.getMonth() &&
                       date.getFullYear() === today.getFullYear();
 
-      const offsetDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-      const dateStr = offsetDate.toISOString().split('T')[0];
+      const dateStr = formatDateLocal(date);
       
-      const log = logs.find((l: any) => l.log_date.startsWith(dateStr));
+      const log = logs.find((l: any) => l.log_date === dateStr);
       
       if (log) {
           // Status Priority
@@ -52,9 +58,8 @@ const Riwayat: React.FC = () => {
 
   const onDateChange = (date: any) => {
     setSelectedDate(date);
-    const offsetDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-    const dateStr = offsetDate.toISOString().split('T')[0];
-    const log = logs.find((l: any) => l.log_date.startsWith(dateStr));
+    const dateStr = formatDateLocal(date);
+    const log = logs.find((l: any) => l.log_date === dateStr);
     setSelectedLog(log || null);
   };
 

@@ -68,11 +68,11 @@ const HistoryCalendar: React.FC = () => {
     }, []);
 
     const handleDateClick = (value: Date) => {
-        // Konversi tanggal klik ke format YYYY-MM-DD lokal
-        const offsetDate = new Date(value.getTime() - (value.getTimezoneOffset() * 60000));
-        const dateStr = offsetDate.toISOString().split('T')[0];
+        // Gunakan helper function agar konsisten
+        const dateStr = formatDateLocal(value);
 
-        const logForDate = logs.find(log => log.log_date.startsWith(dateStr));
+        // Langsung cek kesamaan string (karena backend sudah mengirim string)
+        const logForDate = logs.find(log => log.log_date === dateStr);
         
         if (logForDate) {
             setSelectedLog(logForDate);
@@ -80,13 +80,20 @@ const HistoryCalendar: React.FC = () => {
             toast('Tidak ada kegiatan pada tanggal ini', { icon: '📅' });
         }
     };
+    
+    const formatDateLocal = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
 
     // Fungsi Render Konten dalam Tanggal
     const tileContent = ({ date, view }: { date: Date, view: string }) => {
         if (view === 'month') {
-            const offsetDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-            const dateStr = offsetDate.toISOString().split('T')[0];
-            const log = logs.find(l => l.log_date.startsWith(dateStr));
+            const dateStr = formatDateLocal(date);
+            // Cek match string langsung
+            const log = logs.find(l => l.log_date === dateStr);
 
             if (log) {
                 let statusClass = '';

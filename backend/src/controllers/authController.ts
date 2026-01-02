@@ -8,6 +8,9 @@ import { UserPayload } from '../middleware/authMiddleware';
 export const login = async (req: Request, res: Response) => {
   const { loginIdentifier, password } = req.body;
 
+  // Pesan Error Umum (Generic) untuk keamanan
+  const LOGIN_FAIL_MSG = 'ID Pengguna atau Password salah.';
+
   try {
     let user = null;
 
@@ -30,16 +33,21 @@ export const login = async (req: Request, res: Response) => {
       user = rows[0];
     }
 
-    if (!user) return res.status(401).json({ message: 'Akun tidak ditemukan.' });
+    // SECURITY UPDATE: Jangan beri tahu jika akun tidak ditemukan
+    if (!user) return res.status(401).json({ message: LOGIN_FAIL_MSG });
 
     // Cek Password (Handle Bcrypt dari PHP/Laravel format $2y$ ke $2a$)
     const userPasswordHash = user.password ? user.password.replace('$2y$', '$2a$') : '';
+    
+    // Jika user login manual tapi password kosong (biasanya user Google), beri pesan spesifik atau generik (pilih salah satu, di sini kita beri petunjuk sedikit agar UX tetap baik tapi aman)
     if (!userPasswordHash) return res.status(401).json({ message: 'Akun ini terdaftar via Google. Silakan login via Google.' });
 
     const isPasswordValid = await bcrypt.compare(password, userPasswordHash);
-    if (!isPasswordValid) return res.status(401).json({ message: 'Password salah.' });
+    
+    // SECURITY UPDATE: Jangan beri tahu "Password Salah", gunakan pesan yang sama
+    if (!isPasswordValid) return res.status(401).json({ message: LOGIN_FAIL_MSG });
 
-    // Buat Token
+    // Buat Token (Login Sukses)
     const token = jwt.sign(
       { id: user.id, role: user.role, name: user.full_name },
       process.env.JWT_SECRET as string,
@@ -54,13 +62,13 @@ export const login = async (req: Request, res: Response) => {
         fullName: user.full_name,
         role: user.role,
         nip: user.nip,
-        classId: user.class_id, // Menggunakan class_id sesuai struktur DB terbaru
+        classId: user.class_id,
       }
     });
 
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Terjadi kesalahan pada server.' });
   }
 };
 

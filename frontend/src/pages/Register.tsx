@@ -19,11 +19,11 @@ import {
   RefreshCw,
   AlertCircle,
   Trophy,
-  CheckCircle2
+  CheckCircle2,
 } from 'lucide-react';
 
 // ==========================================
-// 1. KOMPONEN UI PENDUKUNG
+// 1. KOMPONEN UI PENDUKUNG (Styled for Consistency)
 // ==========================================
 
 type InputFieldProps = {
@@ -40,7 +40,7 @@ const InputField: React.FC<InputFieldProps> = ({
   name, placeholder, value, onChange, type = 'text', required = true, icon 
 }) => (
   <div className="relative group">
-    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-colors">
+    <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-400 group-focus-within:text-violet-600 transition-colors">
       {icon}
     </div>
     <input 
@@ -50,7 +50,7 @@ const InputField: React.FC<InputFieldProps> = ({
       required={required}
       value={value}
       onChange={onChange}
-      className="appearance-none block w-full pl-11 pr-4 py-4 border-2 border-slate-50 placeholder-slate-400 text-slate-900 rounded-2xl focus:outline-none focus:border-indigo-500 bg-slate-50 focus:bg-white transition-all font-bold text-sm"
+      className="appearance-none block w-full pl-16 pr-6 py-5 border-2 border-transparent bg-slate-50 hover:border-violet-100 focus:border-violet-500 rounded-[2rem] focus:outline-none focus:bg-white text-slate-900 transition-all font-bold text-sm shadow-inner focus:shadow-violet-100/50 placeholder:text-slate-300"
     />
   </div>
 );
@@ -69,7 +69,7 @@ const SelectField: React.FC<SelectFieldProps> = ({
   name, value, options, placeholder, onChange, required = true, icon 
 }) => (
   <div className="relative group">
-    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-colors">
+    <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-400 group-focus-within:text-violet-600 transition-colors">
       {icon}
     </div>
     <select 
@@ -77,39 +77,37 @@ const SelectField: React.FC<SelectFieldProps> = ({
       value={value}
       required={required}
       onChange={onChange}
-      className={`appearance-none block w-full pl-11 pr-10 py-4 border-2 border-slate-50 rounded-2xl focus:outline-none focus:border-indigo-500 bg-slate-50 focus:bg-white transition-all font-bold text-sm cursor-pointer ${!value ? 'text-slate-400' : 'text-slate-900'}`}
+      className={`appearance-none block w-full pl-16 pr-12 py-5 border-2 border-transparent bg-slate-50 hover:border-violet-100 focus:border-violet-500 rounded-[2rem] focus:outline-none focus:bg-white transition-all font-bold text-sm cursor-pointer shadow-inner focus:shadow-violet-100/50 ${!value ? 'text-slate-400' : 'text-slate-900'}`}
     >
       <option value="" disabled>{placeholder}</option>
       {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
     </select>
-    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400 group-focus-within:text-indigo-600">
+    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-6 text-slate-400 group-focus-within:text-violet-600">
       <ChevronDown size={20} />
     </div>
   </div>
 );
 
 // ==========================================
-// 2. TIPE DATA
-// ==========================================
-
-type Role = 'student' | 'teacher' | 'contributor' | 'parent';
-
-interface ClassData {
-  id: number;
-  name: string;
-}
-
-// ==========================================
-// 3. MAIN COMPONENT
+// 2. MAIN COMPONENT
 // ==========================================
 
 const Register: React.FC = () => {
   const { register: authRegister } = useAuth(); 
   const navigate = useNavigate();
 
-  const [selectedRole, setSelectedRole] = useState<Role>('student');
-  const [classList, setClassList] = useState<ClassData[]>([]);
+  // Role tetap menggunakan nilai Inggris untuk logika internal/backend
+  const [selectedRole, setSelectedRole] = useState<'student' | 'teacher' | 'contributor' | 'parent'>('student');
+  const [classList, setClassList] = useState<any[]>([]);
   
+  // Mapping untuk Label Tampilan (Bahasa Indonesia)
+  const roleOptions = [
+    { id: 'student', label: 'Siswa', icon: <GraduationCap size={24}/> },
+    { id: 'teacher', label: 'Guru', icon: <ShieldCheck size={24}/> },
+    { id: 'parent', label: 'Orang Tua', icon: <Heart size={24}/> },
+    { id: 'contributor', label: 'Kontributor', icon: <Trophy size={24}/> }
+  ] as const;
+
   const [formData, setFormData] = useState({
     fullName: '',
     nisn: '',
@@ -124,7 +122,6 @@ const Register: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [isClassLoading, setIsClassLoading] = useState<boolean>(true);
 
-  // --- Fetch Data Kelas ---
   useEffect(() => {
     const fetchClasses = async () => {
       setIsClassLoading(true);
@@ -170,13 +167,12 @@ const Register: React.FC = () => {
     const loadingToast = toast.loading('Mendaftarkan akun...');
 
     try {
-      // Auto-generate email unik
       const namePrefix = formData.fullName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
       const randomSuffix = Math.floor(1000 + Math.random() * 9000);
       const generatedEmail = `${namePrefix}${randomSuffix}@isokurikuler.id`;
 
       const registrationData = {
-        role: selectedRole,
+        role: selectedRole, // Kirim role (student/teacher/dll) ke backend
         fullName: formData.fullName.trim(),
         email: generatedEmail,
         password: formData.password,
@@ -189,7 +185,7 @@ const Register: React.FC = () => {
       const response = await authRegister(registrationData);
       
       toast.dismiss(loadingToast);
-      toast.success('Pendaftaran Berhasil!', { icon: '🎉' });
+      toast.success('Pendaftaran Berhasil!', { icon: '🎉', style: { borderRadius: '20px', fontWeight: 'bold' } });
       
       if (response.user) {
         const target = response.user.role === 'student' ? '/student/beranda' : `/${response.user.role}/dashboard`;
@@ -202,7 +198,7 @@ const Register: React.FC = () => {
       toast.dismiss(loadingToast);
       const msg = err.response?.data?.message || 'Gagal mendaftar. Data mungkin sudah ada.';
       setError(msg);
-      toast.error("Registrasi Gagal");
+      toast.error("Registrasi Gagal", { style: { borderRadius: '20px', fontWeight: 'bold' } });
       setLoading(false);
     }
   };
@@ -215,17 +211,17 @@ const Register: React.FC = () => {
           placeholder="Nama Lengkap (Sesuai Identitas)" 
           value={formData.fullName} 
           onChange={handleFormChange}
-          icon={<User size={20}/>}
+          icon={<User size={22}/>}
         />
 
         {selectedRole === 'student' && (
           <>
             <InputField 
               name="nisn" 
-              placeholder="NISN (10 Digit)" 
+              placeholder="NISN (Nomor Induk Siswa Nasional)" 
               value={formData.nisn} 
               onChange={handleFormChange}
-              icon={<ShieldCheck size={20}/>}
+              icon={<ShieldCheck size={22}/>}
             />
             <SelectField 
               name="classId" 
@@ -233,7 +229,7 @@ const Register: React.FC = () => {
               options={mappedClassOptions} 
               placeholder={isClassLoading ? "Memuat kelas..." : "Pilih Kelas"} 
               onChange={handleFormChange}
-              icon={<GraduationCap size={20}/>}
+              icon={<GraduationCap size={22}/>}
             />
           </>
         )}
@@ -245,7 +241,7 @@ const Register: React.FC = () => {
               placeholder="NIP / Identitas Pegawai" 
               value={formData.nip} 
               onChange={handleFormChange}
-              icon={<ShieldCheck size={20}/>}
+              icon={<ShieldCheck size={22}/>}
             />
             <SelectField 
               name="classId" 
@@ -254,7 +250,7 @@ const Register: React.FC = () => {
               placeholder="Wali Kelas (Opsional)" 
               required={false}
               onChange={handleFormChange}
-              icon={<GraduationCap size={20}/>}
+              icon={<GraduationCap size={22}/>}
             />
           </>
         )}
@@ -265,7 +261,7 @@ const Register: React.FC = () => {
             placeholder="NIP / Kode Identitas" 
             value={formData.nip} 
             onChange={handleFormChange}
-            icon={<ShieldCheck size={20}/>}
+            icon={<ShieldCheck size={22}/>}
           />
         )}
 
@@ -275,7 +271,7 @@ const Register: React.FC = () => {
             placeholder="No. WhatsApp (08xxx)" 
             value={formData.whatsappNumber} 
             onChange={handleFormChange}
-            icon={<Smartphone size={20}/>}
+            icon={<Smartphone size={22}/>}
           />
         )}
       </div>
@@ -283,77 +279,74 @@ const Register: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6 selection:bg-indigo-100 selection:text-indigo-900 font-sans">
+    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6 selection:bg-violet-100 selection:text-violet-900 font-sans relative overflow-hidden">
       
       {/* Background Decor */}
-      <div className="fixed top-[-10%] right-[-5%] w-[30%] h-[30%] bg-indigo-100 rounded-full blur-[80px] opacity-60 pointer-events-none"></div>
-      <div className="fixed bottom-[-10%] left-[-5%] w-[30%] h-[30%] bg-blue-100 rounded-full blur-[80px] opacity-60 pointer-events-none"></div>
+      <div className="fixed top-[-10%] right-[-5%] w-[40%] h-[40%] bg-violet-100/50 rounded-full blur-[100px] pointer-events-none"></div>
+      <div className="fixed bottom-[-10%] left-[-5%] w-[40%] h-[40%] bg-fuchsia-100/50 rounded-full blur-[100px] pointer-events-none"></div>
 
-      <div className="w-full max-w-xl bg-white p-10 md:p-14 rounded-[3rem] shadow-2xl border border-slate-100 relative z-10">
+      <div className="w-full max-w-2xl bg-white/80 backdrop-blur-xl p-10 md:p-14 rounded-[4rem] shadow-2xl shadow-slate-200/50 border border-white/60 relative z-10 my-10">
         
         {/* HEADER */}
         <div className="text-center mb-10">
-          <div className="inline-flex p-4 bg-indigo-50 rounded-[2rem] mb-6 shadow-sm">
+          <div className="inline-flex p-4 bg-gradient-to-tr from-violet-50 to-white rounded-[2.5rem] mb-6 shadow-sm ring-4 ring-white">
             <img src="/logo-smpn6.png" alt="Logo SMPN 6" className="w-16 h-16 object-contain" />
           </div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-1">KOKURIKULER</h1>
-          <p className="text-sm font-bold text-indigo-600 tracking-[0.2em] uppercase">SMPN 6 PEKALONGAN</p>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">Buat Akun Baru</h1>
+          <p className="text-slate-500 font-bold">Bergabung bersama komunitas belajar <span className="text-violet-600">SMPN 6 Pekalongan</span>.</p>
         </div>
 
         {/* GOOGLE REGISTER */}
-        <div className="mb-10">
+        <div className="mb-12">
           <a 
             href={`${API_HOST}/api/auth/google`} 
-            className="group w-full flex items-center justify-center gap-4 py-4 px-6 border-2 border-slate-100 rounded-2xl bg-white hover:bg-slate-50 hover:border-slate-200 transition-all active:scale-[0.98] shadow-sm"
+            className="group w-full flex items-center justify-center gap-4 py-5 px-6 border-2 border-slate-100 rounded-[2.5rem] bg-white hover:bg-slate-50 hover:border-violet-100 hover:shadow-xl hover:shadow-violet-100/30 transition-all active:scale-[0.98]"
           >
             <img 
               src="https://www.svgrepo.com/show/475656/google-color.svg" 
               alt="Google" 
-              className="w-6 h-6 group-hover:scale-110 transition-transform" 
+              className="w-7 h-7 group-hover:scale-110 transition-transform duration-300" 
             />
-            <span className="font-bold text-slate-700 text-sm">Daftar Cepat dengan Google</span>
+            <span className="font-bold text-slate-700 text-base">Daftar Cepat dengan Google</span>
           </a>
 
-          <div className="relative flex items-center justify-center mt-8">
+          <div className="relative flex items-center justify-center mt-10">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-100"></div>
+              <div className="w-full border-t-2 border-slate-100 rounded-full"></div>
             </div>
-            <div className="relative bg-white px-4">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Atau Daftar Manual</span>
+            <div className="relative bg-white px-6 py-1 rounded-full border border-slate-50">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Pendaftaran Manual</span>
             </div>
           </div>
         </div>
 
         {/* FORM REGISTER */}
-        <form onSubmit={handleRegister} className="space-y-8">
+        <form onSubmit={handleRegister} className="space-y-10">
           
           {/* Role Selector Grid */}
           <div className="space-y-4">
-            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-              <UserPlus size={14}/> Pilih Peran Anda
+            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-4 flex items-center gap-2">
+              <UserPlus size={14} className="text-violet-500"/> Pilih Peran Anda
             </label>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {(['student', 'teacher', 'parent', 'contributor'] as Role[]).map(role => (
+              {roleOptions.map((role) => (
                 <button 
-                  key={role} 
+                  key={role.id} 
                   type="button" 
                   onClick={() => {
-                    setSelectedRole(role);
+                    setSelectedRole(role.id as any);
                     setFormData(prev => ({ ...prev, classId: '', nisn: '', nip: '', whatsappNumber: '' }));
                     setError('');
                   }} 
                   className={`
-                    w-full flex flex-col items-center justify-center gap-2 py-4 px-2 rounded-2xl border-2 transition-all duration-300
-                    ${selectedRole === role 
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200 scale-105' 
-                      : 'bg-slate-50 text-slate-400 border-slate-50 hover:border-slate-200 hover:text-slate-600'}
+                    w-full flex flex-col items-center justify-center gap-3 py-5 px-2 rounded-[2rem] border-2 transition-all duration-300
+                    ${selectedRole === role.id 
+                      ? 'bg-violet-600 text-white border-violet-600 shadow-xl shadow-violet-200 scale-105' 
+                      : 'bg-white text-slate-400 border-slate-100 hover:border-violet-100 hover:text-violet-500 hover:shadow-md'}
                   `}
                 >
-                  {role === 'student' && <GraduationCap size={20}/>}
-                  {role === 'teacher' && <ShieldCheck size={20}/>}
-                  {role === 'parent' && <Heart size={20}/>}
-                  {role === 'contributor' && <Trophy size={20}/>}
-                  <span className="text-[10px] font-black uppercase tracking-wider">{role}</span>
+                  {role.icon}
+                  <span className="text-[10px] font-black uppercase tracking-wider">{role.label}</span>
                 </button>
               ))}
             </div>
@@ -363,7 +356,7 @@ const Register: React.FC = () => {
           <div className="space-y-4">
             {renderRoleSpecificFields()}
             
-            <div className="h-px bg-slate-100 w-full my-2"></div>
+            <div className="h-px bg-slate-100 w-full my-4"></div>
 
             <InputField 
               name="password" 
@@ -371,7 +364,7 @@ const Register: React.FC = () => {
               type="password" 
               value={formData.password} 
               onChange={handleFormChange}
-              icon={<Lock size={20}/>}
+              icon={<Lock size={22}/>}
             />
             <InputField 
               name="confirmPassword" 
@@ -379,14 +372,14 @@ const Register: React.FC = () => {
               type="password" 
               value={formData.confirmPassword} 
               onChange={handleFormChange}
-              icon={<CheckCircle2 size={20}/>}
+              icon={<CheckCircle2 size={22}/>}
             />
           </div>
 
           {/* Error Message */}
           {error && (
-            <div className="bg-rose-50 text-rose-600 text-xs font-bold p-4 rounded-2xl flex items-center gap-3 border border-rose-100 animate-shake">
-              <AlertCircle size={18} />
+            <div className="bg-rose-50 text-rose-600 text-xs font-bold p-5 rounded-[2rem] flex items-center gap-3 border border-rose-100 animate-shake">
+              <AlertCircle size={20} className="shrink-0" />
               {error}
             </div>
           )}
@@ -395,30 +388,33 @@ const Register: React.FC = () => {
           <button 
             type="submit" 
             disabled={loading} 
-            className="group w-full py-5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-200 hover:bg-indigo-700 active:scale-[0.98] transition-all flex justify-center items-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed"
+            className="group w-full py-5 bg-violet-600 text-white font-black text-lg rounded-[2.5rem] shadow-xl shadow-violet-200 hover:bg-violet-700 hover:shadow-2xl hover:shadow-violet-300 hover:-translate-y-1 active:scale-[0.98] transition-all flex justify-center items-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {loading ? (
               <>
-                <RefreshCw className="animate-spin" size={20} />
-                <span>MEMPROSES...</span>
+                <RefreshCw className="animate-spin" size={24} />
+                <span className="tracking-widest text-sm">MEMPROSES DATA...</span>
               </>
             ) : (
               <>
                 <span>DAFTAR SEKARANG</span>
-                <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform"/>
+                <div className="bg-white/20 p-1.5 rounded-full group-hover:bg-white/30 transition-colors">
+                    <ArrowRight size={20} className="group-hover:translate-x-0.5 transition-transform"/>
+                </div>
               </>
             )}
           </button>
 
           {/* Footer Link */}
           <div className="text-center">
-            <p className="text-sm font-medium text-slate-500">
+            <p className="text-sm font-bold text-slate-500">
               Sudah punya akun?{' '}
               <Link 
                 to="/login" 
-                className="text-indigo-600 font-black hover:text-indigo-800 hover:underline transition-all"
+                className="text-violet-600 font-black hover:text-violet-800 transition-all relative group"
               >
                 Masuk di sini
+                <span className="absolute -bottom-0.5 left-0 w-0 h-0.5 bg-violet-600 group-hover:w-full transition-all duration-300"></span>
               </Link>
             </p>
           </div>

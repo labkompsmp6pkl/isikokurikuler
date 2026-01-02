@@ -10,16 +10,13 @@ interface ApprovalModalProps {
 }
 
 const ApprovalModal: React.FC<ApprovalModalProps> = ({ log, onClose, onApprove, isProcessing }) => {
-    // Safety check jika log null (walau harusnya tidak terjadi krn conditional rendering di parent)
     if (!log) return null;
 
-    // --- HELPER 1: Format Jam ---
     const formatTime = (timeStr?: string) => {
         if (!timeStr) return '-';
         return timeStr.substring(0, 5);
     };
 
-    // --- HELPER 2: Parsing & Render Section ---
     const renderActivitySection = (
         title: string, 
         icon: React.ReactNode, 
@@ -28,10 +25,7 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ log, onClose, onApprove, 
         colorTheme: string
     ) => {
         let items: string[] = [];
-
-        // Normalisasi data activities menjadi array string
         if (Array.isArray(activities)) {
-            // Filter undefined/null values dalam array
             items = activities.filter((item): item is string => !!item);
         } else if (typeof activities === 'string') {
             try {
@@ -43,12 +37,10 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ log, onClose, onApprove, 
             }
         }
 
-        // Normalisasi detail
         const safeDetail = detail || ''; 
         const hasList = items.length > 0;
         const hasDetail = safeDetail.trim() !== '' && safeDetail !== '-';
 
-        // Jika kosong total
         if (!hasList && !hasDetail) {
             return (
                 <div className={`p-4 rounded-xl border border-gray-100 bg-gray-50 opacity-60`}>
@@ -68,7 +60,6 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ log, onClose, onApprove, 
                     <h4 className="font-bold text-gray-800 text-sm uppercase">{title}</h4>
                 </div>
                 <div className="pl-7">
-                    {/* List Items */}
                     {hasList && (
                         <div className="flex flex-wrap gap-2 mb-2">
                             {items.map((item, idx) => (
@@ -78,8 +69,6 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ log, onClose, onApprove, 
                             ))}
                         </div>
                     )}
-                    
-                    {/* Detail Text */}
                     {hasDetail && (
                         <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded-lg italic border border-gray-100">
                             "{safeDetail}"
@@ -97,8 +86,8 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ log, onClose, onApprove, 
                 {/* Header */}
                 <div className="bg-white p-5 border-b border-gray-200 rounded-t-2xl flex justify-between items-center sticky top-0 z-10">
                     <div>
-                        <h3 className="text-xl font-black text-gray-800">Tinjau Kegiatan</h3>
-                        <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider">
+                        <h3 className="text-xl font-black text-gray-800">Konfirmasi Validasi</h3>
+                        <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">
                             {new Date(log.log_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                         </p>
                     </div>
@@ -109,6 +98,9 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ log, onClose, onApprove, 
 
                 {/* Content */}
                 <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar">
+                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-800 text-sm font-medium mb-2">
+                        Pastikan Anda telah memeriksa kegiatan ananda dengan seksama sebelum menyetujuinya.
+                    </div>
                     
                     {/* Waktu */}
                     <div className="grid grid-cols-2 gap-3">
@@ -126,75 +118,20 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({ log, onClose, onApprove, 
                         </div>
                     </div>
 
-                    {/* Ibadah */}
-                    {renderActivitySection(
-                        "Ibadah", 
-                        <Heart size={18} className="text-emerald-600"/>, 
-                        log.worship_activities, 
-                        log.worship_detail, 
-                        "border-emerald-500"
-                    )}
-
-                    {/* Olahraga */}
-                    {renderActivitySection(
-                        "Olahraga", 
-                        <Activity size={18} className="text-blue-600"/>, 
-                        [log.sport_activities].filter((x): x is string => !!x), // Fix array conversion
-                        log.sport_detail || log.exercise_details, // Support fallback name
-                        "border-blue-500"
-                    )}
-
-                    {/* Makan Sehat */}
-                    {renderActivitySection(
-                        "Makan Sehat", 
-                        <Coffee size={18} className="text-green-600"/>, 
-                        [], // Makan biasanya cuma detail
-                        log.meal_text || log.healthy_food_notes, 
-                        "border-green-500"
-                    )}
-
-                    {/* Belajar */}
-                    {renderActivitySection(
-                        "Belajar", 
-                        <BookOpen size={18} className="text-purple-600"/>, 
-                        log.study_activities, 
-                        log.study_detail || log.learning_details, 
-                        "border-purple-500"
-                    )}
-
-                    {/* Sosial */}
-                    {renderActivitySection(
-                        "Sosial", 
-                        <User size={18} className="text-teal-600"/>, 
-                        log.social_activities, 
-                        log.social_detail || log.social_activity_notes, 
-                        "border-teal-500"
-                    )}
-
+                    {renderActivitySection("Ibadah", <Heart size={18} className="text-emerald-600"/>, log.worship_activities, log.worship_detail, "border-emerald-500")}
+                    {renderActivitySection("Olahraga", <Activity size={18} className="text-blue-600"/>, [log.sport_activities].filter((x): x is string => !!x), log.sport_detail, "border-blue-500")}
+                    {renderActivitySection("Makan Sehat", <Coffee size={18} className="text-green-600"/>, [], log.meal_text, "border-green-500")}
+                    {renderActivitySection("Belajar", <BookOpen size={18} className="text-purple-600"/>, log.study_activities, log.study_detail, "border-purple-500")}
+                    {renderActivitySection("Sosial", <User size={18} className="text-teal-600"/>, log.social_activities, log.social_detail, "border-teal-500")}
                 </div>
 
                 {/* Footer */}
                 <div className="p-5 border-t border-gray-200 bg-white rounded-b-2xl flex gap-3">
-                    <button 
-                        onClick={onClose} 
-                        className="flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors"
-                        disabled={isProcessing}
-                    >
+                    <button onClick={onClose} className="flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors" disabled={isProcessing}>
                         Batal
                     </button>
-                    <button 
-                        onClick={onApprove} 
-                        className="flex-[2] py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg hover:shadow-indigo-200 flex justify-center items-center gap-2"
-                        disabled={isProcessing}
-                    >
-                        {isProcessing ? (
-                            <span className="animate-pulse">Memproses...</span>
-                        ) : (
-                            <>
-                                <CheckCircle size={20} />
-                                Setujui Kegiatan
-                            </>
-                        )}
+                    <button onClick={onApprove} className="flex-[2] py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-lg hover:shadow-emerald-200 flex justify-center items-center gap-2" disabled={isProcessing}>
+                        {isProcessing ? <span className="animate-pulse">Memproses...</span> : <><CheckCircle size={20} /> Saya Setuju & Validasi</>}
                     </button>
                 </div>
             </div>

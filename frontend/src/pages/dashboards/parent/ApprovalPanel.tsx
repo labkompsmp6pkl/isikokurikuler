@@ -9,16 +9,15 @@ interface ApprovalPanelProps {
   onApproveSuccess: (updatedLog: CharacterLog) => void; 
 }
 
-// Komponen Item Log Individual
 const LogItem: React.FC<{ log: CharacterLog, onSelect: (log: CharacterLog) => void }> = ({ log, onSelect }) => {
     const isApproved = log.status === 'Disetujui';
     
     return (
         <div className={`flex items-center justify-between p-4 rounded-xl border transition-all duration-200 ${
-            isApproved ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200 hover:shadow-md'
+            isApproved ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-gray-200 hover:shadow-md'
         }`}>
             <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-full ${isApproved ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'}`}>
+                <div className={`p-3 rounded-full ${isApproved ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
                     {isApproved ? <CheckSquare size={20} /> : <Clock size={20} />}
                 </div>
                 <div>
@@ -26,7 +25,7 @@ const LogItem: React.FC<{ log: CharacterLog, onSelect: (log: CharacterLog) => vo
                         {new Date(log.log_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                     </p>
                     <div className="flex items-center text-xs font-bold text-gray-500 mt-1 uppercase tracking-wide">
-                        STATUS: <span className={`ml-1 ${isApproved ? 'text-green-600' : 'text-yellow-600'}`}>{log.status}</span>
+                        STATUS: <span className={`ml-1 ${isApproved ? 'text-emerald-600' : 'text-amber-600'}`}>{log.status}</span>
                     </div>
                 </div>
             </div>
@@ -34,7 +33,7 @@ const LogItem: React.FC<{ log: CharacterLog, onSelect: (log: CharacterLog) => vo
             {!isApproved && (
                  <button 
                     onClick={() => onSelect(log)}
-                    className="px-5 py-2.5 text-sm font-bold text-white bg-indigo-600 rounded-lg shadow-md hover:bg-indigo-700 active:scale-95 transition-all"
+                    className="px-5 py-2.5 text-sm font-bold text-white bg-emerald-600 rounded-lg shadow-md hover:bg-emerald-700 active:scale-95 transition-all"
                 >
                     Tinjau
                 </button>
@@ -43,7 +42,6 @@ const LogItem: React.FC<{ log: CharacterLog, onSelect: (log: CharacterLog) => vo
     );
 };
 
-// Komponen Utama Panel
 const ApprovalPanel: React.FC<ApprovalPanelProps> = ({ logs, onApproveSuccess }) => {
   const [selectedLog, setSelectedLog] = useState<CharacterLog | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -51,7 +49,6 @@ const ApprovalPanel: React.FC<ApprovalPanelProps> = ({ logs, onApproveSuccess })
   const handleSelectLog = (log: CharacterLog) => setSelectedLog(log);
   const handleCloseModal = () => setSelectedLog(null);
 
-  // Fungsi Approve
   const handleApproveLog = async () => {
     if (!selectedLog || isProcessing) return;
 
@@ -59,14 +56,11 @@ const ApprovalPanel: React.FC<ApprovalPanelProps> = ({ logs, onApproveSuccess })
     const toastId = toast.loading('Menyetujui log...');
 
     try {
-        // [FIX] Mengambil response yang berisi { message, log }
         const response = await parentService.approveLog(selectedLog.id);
         
-        // [FIX] Mengirim hanya objek 'log' ke parent component
         if (response && response.log) {
             onApproveSuccess(response.log); 
         } else {
-            // Fallback jika struktur berbeda (misal langsung mengembalikan log)
             onApproveSuccess(response as unknown as CharacterLog);
         }
         
@@ -80,13 +74,12 @@ const ApprovalPanel: React.FC<ApprovalPanelProps> = ({ logs, onApproveSuccess })
     }
   };
 
-  // Filter logs yang belum disetujui (Status: 'Tersimpan')
   const pendingLogs = logs.filter(log => log.status === 'Tersimpan');
 
   if (pendingLogs.length === 0) {
     return (
         <div className="text-center py-12 px-6 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-            <div className="bg-green-100 text-green-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="bg-emerald-100 text-emerald-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckSquare size={32} />
             </div>
             <h3 className="text-xl font-black text-gray-800">Semua Beres!</h3>
@@ -101,7 +94,6 @@ const ApprovalPanel: React.FC<ApprovalPanelProps> = ({ logs, onApproveSuccess })
         <LogItem key={log.id} log={log} onSelect={handleSelectLog} />
       ))}
 
-      {/* Render Modal Hanya Jika Ada Selected Log */}
       {selectedLog && (
           <ApprovalModal 
             log={selectedLog}

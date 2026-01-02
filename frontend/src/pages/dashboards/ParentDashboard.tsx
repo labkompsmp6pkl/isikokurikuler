@@ -6,7 +6,8 @@ import {
   CalendarDays, 
   LogOut, 
   Menu, 
-  X} from 'lucide-react';
+  X
+} from 'lucide-react';
 
 import parentService, { ParentDashboardData, StudentPreviewData } from '../../services/parentService';
 import { useAuth, authApi } from '../../services/authService'; 
@@ -41,7 +42,7 @@ const LinkStudentForm: React.FC<LinkFormProps> = ({ onLinkSuccess, onLogout }) =
     const handleCheckNisn = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!nisn.trim()) {
-            setError('NISN tidak boleh kosong.');
+            toast.error('NISN tidak boleh kosong', { id: 'nisn-empty' });
             return;
         }
         setIsLoading(true);
@@ -52,7 +53,7 @@ const LinkStudentForm: React.FC<LinkFormProps> = ({ onLinkSuccess, onLogout }) =
             setStep('preview');
         } catch (err: any) {
             setError(err.response?.data?.message || 'Siswa tidak ditemukan.');
-            toast.error('Data tidak ditemukan');
+            toast.error('Data siswa tidak ditemukan', { id: 'nisn-error' });
         } finally {
             setIsLoading(false);
         }
@@ -77,30 +78,30 @@ const LinkStudentForm: React.FC<LinkFormProps> = ({ onLinkSuccess, onLogout }) =
         <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 relative font-sans">
              <div className="absolute top-6 right-6">
                 <button type="button" onClick={onLogout} className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors">
-                    <LogOut size={18} /> Keluar
+                    <LogOut size={18} /> Logout
                 </button>
             </div>
             <div className="w-full max-w-md bg-white shadow-2xl shadow-slate-200 rounded-[2rem] overflow-hidden">
-                <div className="bg-indigo-600 p-8 text-center text-white">
+                <div className="bg-emerald-600 p-8 text-center text-white">
                     <h2 className="text-2xl font-black mb-1">Hubungkan Akun</h2>
-                    <p className="text-indigo-100 text-sm">Pantau perkembangan karakter ananda.</p>
+                    <p className="text-emerald-100 text-sm">Pantau perkembangan karakter ananda.</p>
                 </div>
                 <div className="p-8">
                     {step === 'input' ? (
                         <form onSubmit={handleCheckNisn} className="space-y-6">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Masukkan NISN Siswa</label>
-                                <input type="text" value={nisn} onChange={(e) => setNisn(e.target.value)} placeholder="Contoh: 0056xxxxxx" className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:ring-0 focus:border-indigo-500 font-bold text-slate-800 transition-all text-center text-lg tracking-widest outline-none" disabled={isLoading} autoFocus />
+                                <input type="text" value={nisn} onChange={(e) => setNisn(e.target.value)} placeholder="Contoh: 0056xxxxxx" className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:ring-0 focus:border-emerald-500 font-bold text-slate-800 transition-all text-center text-lg tracking-widest outline-none" disabled={isLoading} autoFocus />
                             </div>
-                            <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-bold rounded-xl shadow-lg hover:bg-indigo-700 transition-all disabled:opacity-70" disabled={isLoading}>
+                            <button type="submit" className="w-full py-4 bg-emerald-600 text-white font-bold rounded-xl shadow-lg hover:bg-emerald-700 transition-all disabled:opacity-70" disabled={isLoading}>
                                 {isLoading ? 'Mencari...' : 'Cari Data Siswa'}
                             </button>
                         </form>
                     ) : (
                         <div className="animate-in fade-in zoom-in duration-300">
                             {previewData && (
-                                <div className="bg-indigo-50 border-2 border-indigo-100 p-6 rounded-2xl mb-6 text-center">
-                                    <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest mb-3">Hasil Pencarian</p>
+                                <div className="bg-emerald-50 border-2 border-emerald-100 p-6 rounded-2xl mb-6 text-center">
+                                    <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-3">Hasil Pencarian</p>
                                     <h3 className="text-xl font-black text-slate-800 mb-1">{previewData.fullName}</h3>
                                     <p className="text-slate-500 font-bold italic">Siswa Kelas {previewData.class}</p>
                                 </div>
@@ -140,7 +141,6 @@ const ParentDashboard: React.FC = () => {
             const resData = await parentService.getDashboardData();
             setDashboardData(resData);
             
-            // LOGIC FIX: Sinkronisasi Nama Kelas berdasarkan class_id
             if (resData?.student?.classId) {
                 const response = await authApi.get('/auth/classes-list');
                 const classes = response.data.data || response.data;
@@ -173,7 +173,8 @@ const ParentDashboard: React.FC = () => {
     }
 
     const pendingCount = dashboardData.logs.filter(l => l.status === 'Tersimpan').length;
-    const parentInitial = user.fullName.charAt(0).toUpperCase();
+    // Menggunakan inisial Siswa untuk avatar, bukan Orang Tua
+    const studentInitial = dashboardData.student.full_name.charAt(0).toUpperCase();
     const displayClass = classNameFromApi || dashboardData.student.class || '-';
 
     const navItems = [
@@ -199,12 +200,12 @@ const ParentDashboard: React.FC = () => {
 
                 <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto">
                     {navItems.map((item) => (
-                        <button key={item.id} type="button" onClick={() => { setActiveTab(item.id as any); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors font-medium ${activeTab === item.id ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}>
+                        <button key={item.id} type="button" onClick={() => { setActiveTab(item.id as any); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors font-medium ${activeTab === item.id ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}>
                             <div className="flex items-center gap-3">
                                 {item.icon}
                                 <span>{item.label}</span>
                             </div>
-                            {item.badge ? <span className="bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">{item.badge}</span> : null}
+                            {item.badge ? <span className="bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">{item.badge}</span> : null}
                         </button>
                     ))}
                 </nav>
@@ -212,25 +213,28 @@ const ParentDashboard: React.FC = () => {
                 {/* PROFIL SIDEBAR BAWAH */}
                 <div className="p-4 border-t border-gray-100 bg-gray-50">
                     <div className="flex items-center gap-3 mb-4 px-2">
-                        <div className="w-10 h-10 shrink-0 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold shadow-md uppercase">
-                            {parentInitial}
+                        <div className="w-10 h-10 shrink-0 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold shadow-md uppercase">
+                            {studentInitial}
                         </div>
                         <div className="overflow-hidden w-full">
-                            <p className="text-sm font-bold text-gray-800 truncate leading-tight">{user.fullName}</p>
+                            {/* NAMA SISWA MENJADI UTAMA */}
+                            <p className="text-sm font-bold text-gray-800 truncate leading-tight">{dashboardData.student.full_name}</p>
                             <div className="mt-1 flex flex-col">
-                                <span className="text-[10px] font-semibold text-gray-500 truncate">Ananda: {dashboardData.student.full_name}</span>
-                                <span className="text-[10px] font-bold text-indigo-600 mt-0.5 uppercase tracking-wider">Kelas {displayClass}</span>
+                                {/* Keterangan Wali Murid */}
+                                <span className="text-[10px] font-semibold text-gray-500 truncate">Wali Murid: {user.fullName}</span>
+                                <span className="text-[10px] font-bold text-emerald-600 mt-0.5 uppercase tracking-wider">Kelas {displayClass}</span>
                             </div>
                         </div>
                     </div>
+                    {/* TOMBOL LOGOUT */}
                     <button type="button" onClick={handleLogout} className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-100 hover:bg-red-50 hover:border-red-200 rounded-lg transition-all shadow-sm">
-                        <LogOut size={18} /> <span>Keluar Aplikasi</span>
+                        <LogOut size={18} /> <span>Logout</span>
                     </button>
                 </div>
             </aside>
 
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                {/* NAVBAR MOBILE DENGAN DETAIL AKUN */}
+                {/* NAVBAR MOBILE */}
                 <header className="md:hidden bg-white border-b border-gray-200 p-4 sticky top-0 z-10 shadow-sm">
                     <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
@@ -240,16 +244,16 @@ const ParentDashboard: React.FC = () => {
                         <button onClick={() => setIsSidebarOpen(true)} className="text-gray-600 p-1"><Menu size={24} /></button>
                     </div>
                     
-                    {/* INFO AKUN NAVBAR MOBILE */}
                     <div className="flex items-center gap-3 pt-2 border-t border-gray-100 mt-2">
-                        <div className="w-9 h-9 shrink-0 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-xs uppercase">
-                            {parentInitial}
+                        <div className="w-9 h-9 shrink-0 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs uppercase">
+                            {studentInitial}
                         </div>
                         <div className="flex-1 overflow-hidden">
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">Wali Murid</p>
-                            <p className="text-xs font-black text-gray-800 truncate mt-1">{user.fullName}</p>
+                            {/* Navbar Mobile: Menampilkan Nama Siswa sebagai highlight */}
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">Ananda</p>
+                            <p className="text-xs font-black text-gray-800 truncate mt-1">{dashboardData.student.full_name}</p>
                         </div>
-                        <div className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-[10px] font-black uppercase">
+                        <div className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-black uppercase">
                             {displayClass}
                         </div>
                     </div>
@@ -268,10 +272,10 @@ const ParentDashboard: React.FC = () => {
 
                         {activeTab === 'beranda' && (
                             <div className="space-y-8 animate-fade-in">
-                                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
+                                <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
                                     <div className="relative z-10">
                                         <h1 className="text-3xl font-black mb-4 leading-tight tracking-tighter">7 Kebiasaan <span className="text-yellow-300 italic">Indonesia Hebat</span></h1>
-                                        <p className="text-indigo-100 text-lg font-medium max-w-2xl opacity-90">Mari kita bimbing ananda {dashboardData.student.full_name} untuk membangun kebiasaan positif setiap hari.</p>
+                                        <p className="text-emerald-100 text-lg font-medium max-w-2xl opacity-90">Mari kita bimbing ananda {dashboardData.student.full_name} untuk membangun kebiasaan positif setiap hari.</p>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -290,18 +294,15 @@ const ParentDashboard: React.FC = () => {
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden animate-slide-up">
                                 <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
                                     <h3 className="text-lg font-bold text-gray-800 uppercase tracking-widest">Daftar Jurnal Pending</h3>
-                                    <span className="bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">{pendingCount} Jurnal</span>
+                                    <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">{pendingCount} Jurnal</span>
                                 </div>
                                 <div className="p-6"><ApprovalPanel logs={dashboardData.logs} onApproveSuccess={handleApprovalSuccess} /></div>
                             </div>
                         )}
 
                         {activeTab === 'kalender' && (
-                            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in">
-                                <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-                                    <h3 className="text-lg font-bold text-gray-800 uppercase tracking-widest">Timeline Aktivitas</h3>
-                                </div>
-                                <div className="p-4 md:p-8"><HistoryCalendar /></div>
+                            <div className="space-y-6">
+                                <HistoryCalendar />
                             </div>
                         )}
                     </div>

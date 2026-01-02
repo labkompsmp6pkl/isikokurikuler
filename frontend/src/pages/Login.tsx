@@ -3,14 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth, API_HOST } from '../services/authService';
 import { 
-  LogIn, 
   User, 
   Lock, 
   Eye, 
   EyeOff, 
   Loader2, 
   ArrowRight,
-  ShieldCheck 
+  ShieldCheck
 } from 'lucide-react';
 
 const Login: React.FC = () => {
@@ -39,129 +38,120 @@ const Login: React.FC = () => {
       toast.dismiss(toastId);
       toast.success(`Selamat datang, ${user.fullName.split(' ')[0]}!`, {
         icon: '👋',
-        style: { borderRadius: '15px', fontWeight: 'bold' }
+        style: { borderRadius: '20px', fontWeight: 'bold' }
       });
 
-      // Redirect Logic berdasarkan Role
+      // Redirect Logic
       setTimeout(() => {
         switch (user.role) {
-          case 'student':
-            navigate('/student/beranda', { replace: true });
-            break;
-          case 'teacher':
-            navigate('/teacher/dashboard', { replace: true });
-            break;
-          case 'parent':
-            navigate('/parent/dashboard', { replace: true });
-            break;
-          case 'contributor':
-            navigate('/contributor/dashboard', { replace: true });
-            break;
-          case 'admin':
-            navigate('/admin/dashboard', { replace: true });
-            break;
-          default:
-            navigate('/login');
+          case 'student': navigate('/student/beranda', { replace: true }); break;
+          case 'teacher': navigate('/teacher/dashboard', { replace: true }); break;
+          case 'parent': navigate('/parent/dashboard', { replace: true }); break;
+          case 'contributor': navigate('/contributor/dashboard', { replace: true }); break;
+          case 'admin': navigate('/admin/dashboard', { replace: true }); break;
+          default: navigate('/login');
         }
-      }, 500);
+      }, 800);
 
     } catch (err: any) {
       toast.dismiss(toastId);
       const msg = err.response?.data?.message || 'Login gagal. Periksa kembali data Anda.';
-      toast.error(msg, { style: { borderRadius: '15px' } });
+      toast.error(msg, { style: { borderRadius: '20px', fontWeight: 'bold' } });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4 selection:bg-indigo-100 selection:text-indigo-900 font-sans">
+    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6 selection:bg-violet-100 selection:text-violet-900 font-sans relative overflow-hidden">
       
-      {/* Dekorasi Latar Belakang (Opsional, agar mirip register) */}
-      <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-50 rounded-full blur-3xl opacity-60 pointer-events-none"></div>
-      <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-50 rounded-full blur-3xl opacity-60 pointer-events-none"></div>
+      {/* Dekorasi Latar Belakang - Style Konsisten */}
+      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-violet-200/40 rounded-full blur-[120px] pointer-events-none animate-pulse"></div>
+      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-fuchsia-200/40 rounded-full blur-[120px] pointer-events-none animate-pulse"></div>
 
-      <div className="w-full max-w-md bg-white p-8 md:p-12 rounded-[3rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] border border-slate-100 relative z-10">
+      <div className="w-full max-w-lg bg-white/80 backdrop-blur-xl p-10 md:p-14 rounded-[3.5rem] shadow-2xl shadow-violet-100/50 border border-white/50 relative z-10">
         
         {/* HEADER */}
-        <div className="text-center mb-10">
-          <div className="inline-flex p-4 bg-indigo-50 rounded-[2rem] mb-6 shadow-sm">
-            <img src="/logo-smpn6.png" alt="Logo SMPN 6" className="w-16 h-16 object-contain" />
+        <div className="text-center mb-12">
+          <div className="inline-flex p-5 bg-gradient-to-br from-violet-50 to-fuchsia-50 rounded-[2.5rem] mb-8 shadow-inner ring-4 ring-white">
+            <img src="/logo-smpn6.png" alt="Logo SMPN 6" className="w-20 h-20 object-contain drop-shadow-md" />
           </div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Selamat Datang</h1>
-          <p className="text-slate-500 font-medium">Masuk untuk melanjutkan aktivitas Isikokurikuler Anda.</p>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tighter mb-3 flex justify-center items-center gap-2">
+            Masuk Akun 
+          </h1>
+          <p className="text-slate-500 font-medium text-lg leading-relaxed">Selamat datang kembali di portal <span className="text-violet-600 font-black">Kokurikuler SMPN 6 Pekalongan</span>.</p>
         </div>
 
-        {/* GOOGLE LOGIN */}
-        <div className="mb-8">
+        {/* GOOGLE LOGIN - Style Tombol Rounded Besar */}
+        <div className="mb-10">
           <a
             href={`${API_HOST}/api/auth/google`}
-            className="group w-full flex items-center justify-center gap-4 py-4 px-6 border-2 border-slate-100 rounded-2xl bg-white hover:bg-slate-50 hover:border-slate-200 transition-all active:scale-[0.98] shadow-sm"
+            className="group w-full flex items-center justify-center gap-4 py-5 px-6 border-2 border-slate-100 rounded-[2rem] bg-white hover:bg-slate-50 hover:border-violet-100 hover:shadow-lg hover:shadow-violet-100 transition-all active:scale-[0.98]"
           >
             <img 
               src="https://www.svgrepo.com/show/475656/google-color.svg" 
               alt="Google" 
-              className="w-6 h-6 group-hover:scale-110 transition-transform" 
+              className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" 
             />
-            <span className="font-bold text-slate-700 text-sm">Masuk dengan Google</span>
+            <span className="font-bold text-slate-700 text-base">Lanjutkan dengan Google</span>
           </a>
         </div>
 
         {/* DIVIDER */}
-        <div className="relative flex items-center justify-center mb-8">
+        <div className="relative flex items-center justify-center mb-10">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-100"></div>
+            <div className="w-full border-t-2 border-slate-100 rounded-full"></div>
           </div>
-          <div className="relative bg-white px-4">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Atau Login Manual</span>
+          <div className="relative bg-white px-6 py-1 rounded-full border border-slate-50">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Akses Manual</span>
           </div>
         </div>
 
         {/* LOGIN FORM */}
-        <form onSubmit={handleLogin} className="space-y-5">
+        <form onSubmit={handleLogin} className="space-y-6">
           
           {/* Input Identifier */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-black text-slate-400 uppercase tracking-wider ml-1">Email / NISN / NIP</label>
+          <div className="space-y-2">
+            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-4">ID Pengguna (NoTelp / NISN / NIP)</label>
             <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-colors">
-                <User size={20} />
+              <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-400 group-focus-within:text-violet-600 transition-colors">
+                <User size={22} />
               </div>
               <input
                 type="text"
-                placeholder="Masukkan ID Pengguna"
+                placeholder="Contoh: 0054xxxxx"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-50 rounded-2xl font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500 transition-all placeholder:text-slate-400 placeholder:font-medium"
+                className="w-full pl-16 pr-6 py-5 bg-slate-50 border-2 border-transparent hover:border-violet-100 focus:border-violet-500 rounded-[2rem] font-bold text-slate-800 outline-none focus:bg-white transition-all placeholder:text-slate-300 shadow-inner focus:shadow-violet-100/50"
                 required
               />
             </div>
           </div>
 
           {/* Input Password */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between items-center ml-1 mr-1">
-              <label className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Password</label>
-              <a href="#" className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors">Lupa Password?</a>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center px-4">
+              <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Kata Sandi</label>
+              <a href="#" className="text-[11px] font-bold text-violet-600 hover:text-violet-800 transition-colors hover:underline decoration-2 underline-offset-4">Lupa Password?</a>
             </div>
             <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-colors">
-                <Lock size={20} />
+              <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-400 group-focus-within:text-violet-600 transition-colors">
+                <Lock size={22} />
               </div>
               <input
                 type={showPassword ? "text" : "password"}
-                placeholder="Masukkan Password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-12 pr-12 py-4 bg-slate-50 border-2 border-slate-50 rounded-2xl font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500 transition-all placeholder:text-slate-400 placeholder:font-medium"
+                className="w-full pl-16 pr-14 py-5 bg-slate-50 border-2 border-transparent hover:border-violet-100 focus:border-violet-500 rounded-[2rem] font-bold text-slate-800 outline-none focus:bg-white transition-all placeholder:text-slate-300 shadow-inner focus:shadow-violet-100/50"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                className="absolute inset-y-0 right-0 pr-6 flex items-center text-slate-400 hover:text-violet-600 transition-colors"
               >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                {showPassword ? <EyeOff size={22} /> : <Eye size={22} />}
               </button>
             </div>
           </div>
@@ -170,40 +160,43 @@ const Login: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-2xl hover:-translate-y-1 active:scale-95 active:translate-y-0 transition-all flex items-center justify-center gap-3 mt-4 disabled:opacity-70 disabled:cursor-not-allowed"
+            className="w-full py-5 bg-violet-600 text-white font-black text-lg rounded-[2rem] shadow-xl shadow-violet-200 hover:bg-violet-700 hover:shadow-2xl hover:shadow-violet-300 hover:-translate-y-1 active:scale-95 active:translate-y-0 transition-all flex items-center justify-center gap-3 mt-6 disabled:opacity-70 disabled:cursor-not-allowed group"
           >
             {loading ? (
               <>
-                <Loader2 size={20} className="animate-spin" />
-                <span>MEMPROSES...</span>
+                <Loader2 size={24} className="animate-spin" />
+                <span className="tracking-widest text-sm">MEMPROSES...</span>
               </>
             ) : (
               <>
-                <LogIn size={20} />
                 <span>MASUK SEKARANG</span>
+                <div className="bg-white/20 p-1.5 rounded-full group-hover:bg-white/30 transition-colors">
+                    <ArrowRight size={20} />
+                </div>
               </>
             )}
           </button>
         </form>
 
         {/* Footer Link */}
-        <div className="mt-10 text-center">
-          <p className="text-sm font-medium text-slate-500">
+        <div className="mt-12 text-center">
+          <p className="text-sm font-bold text-slate-500">
             Belum memiliki akun?{' '}
             <Link 
               to="/register" 
-              className="text-indigo-600 font-black hover:text-indigo-800 hover:underline transition-all inline-flex items-center gap-1 group"
+              className="text-violet-600 font-black hover:text-violet-800 transition-all inline-flex items-center gap-1 group relative"
             >
-              Daftar di sini <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform"/>
+              Daftar Sekarang
+              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-violet-600 group-hover:w-full transition-all duration-300"></span>
             </Link>
           </p>
         </div>
 
-        {/* Security Badge */}
-        <div className="mt-12 flex justify-center opacity-30">
-            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                <ShieldCheck size={12} />
-                <span>SMPN 6 PEKALONGAN</span>
+        {/* Security Badge - Style Minimalis */}
+        <div className="mt-16 flex justify-center opacity-40 hover:opacity-100 transition-opacity duration-500">
+            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
+                <ShieldCheck size={14} className="text-violet-400"/>
+                <span>SMPN 6 PEKALONGAN &bull; SECURE</span>
             </div>
         </div>
 

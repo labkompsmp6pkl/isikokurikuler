@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, authApi } from '../services/authService'; 
+import toast from 'react-hot-toast';
 
 interface ClassOption {
-  id: string;
-  name: string;
+  id: string | number; // class_id dari database
+  name: string;        // Nama kelas (misal: 7A)
 }
 
 const GoogleRegisterComplete = () => {
@@ -19,21 +20,18 @@ const GoogleRegisterComplete = () => {
   const [role, setRole] = useState('student');
   const [fullName, setFullName] = useState('');
   const [identityNumber, setIdentityNumber] = useState(''); 
-  const [phoneNumber, setPhoneNumber] = useState('');     
-  const [selectedClass, setSelectedClass] = useState(''); 
+  const [phoneNumber, setPhoneNumber] = useState('');      
+  const [selectedClassId, setSelectedClassId] = useState(''); // Menyimpan ID Kelas
   const [classList, setClassList] = useState<ClassOption[]>([]);
 
   useEffect(() => {
     const initialize = async () => {
       try {
         // --- 1. GUARD CLAUSE (Mencegah Loop) ---
-        // Cek apakah user sebenarnya sudah terdaftar
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
           const user = JSON.parse(storedUser);
-          // Jika role sudah ada dan bukan 'new_user', langsung ke dashboard
           if (user.role && user.role !== 'new_user') {
-            console.log("User sudah memiliki role, mengalihkan...");
             const target = user.role === 'student' ? '/student/beranda' : `/${user.role}/dashboard`;
             navigate(target, { replace: true });
             return;
@@ -46,7 +44,6 @@ const GoogleRegisterComplete = () => {
         
         if (urlToken) {
           localStorage.setItem('token', urlToken);
-          // Opsional: Jika backend mengirim data user singkat di URL, simpan juga di sini
         } else {
           const localToken = localStorage.getItem('token');
           if (!localToken) {
@@ -55,13 +52,14 @@ const GoogleRegisterComplete = () => {
           }
         }
 
-        // --- 3. AMBIL DATA KELAS ---
+        // --- 3. AMBIL DATA KELAS (class_id & name) ---
         try {
             const response = await authApi.get('/auth/classes-list');
             const data = response.data.data || response.data;
             setClassList(Array.isArray(data) ? data : []);
         } catch (classErr) {
             console.error("Gagal load kelas:", classErr);
+            toast.error("Gagal memuat daftar kelas.");
         }
 
       } catch (err: any) {
@@ -80,19 +78,34 @@ const GoogleRegisterComplete = () => {
     setLoading(true);
 
     try {
-      const payload: any = { role, fullName };
-      if (['student', 'teacher', 'contributor'].includes(role)) payload.nisn = identityNumber; 
-      if (['student', 'teacher'].includes(role)) payload.classId = selectedClass;
-      if (role === 'parent') payload.phoneNumber = phoneNumber;
+      // Menyiapkan Payload sesuai kebutuhan database relasional
+      const payload: any = { 
+        role, 
+        fullName: fullName.trim() 
+      };
 
-      // 1. Kirim data ke backend (Backend harus mengembalikan token & user baru)
+      if (role === 'student') {
+        payload.nisn = identityNumber;
+        payload.classId = selectedClassId; // Mengirimkan class_id (integer)
+      } else if (role === 'teacher') {
+        payload.nip = identityNumber;
+        payload.classId = selectedClassId; // Wali kelas opsional diisi class_id
+      } else if (role === 'contributor') {
+        payload.nip = identityNumber;
+      } else if (role === 'parent') {
+        payload.phoneNumber = phoneNumber.replace(/\D/g, ''); // Hanya angka
+      }
+
+      // 1. Kirim ke Backend
       const response = await completeGoogleRegistration(payload);
       
-      // 2. Update LocalStorage secara manual untuk memastikan sinkronisasi instan
+      // 2. Sinkronisasi LocalStorage
       localStorage.setItem('token', response.token);
       localStorage.setItem('user', JSON.stringify(response.user));
 
-      // 3. Arahkan ke dashboard spesifik dengan REPLACE agar tidak bisa back ke form
+      toast.success("Pendaftaran Berhasil!");
+
+      // 3. Redirection
       setTimeout(() => {
         if (role === 'student') navigate('/student/beranda', { replace: true });
         else if (role === 'teacher') navigate('/teacher/dashboard', { replace: true });
@@ -101,118 +114,125 @@ const GoogleRegisterComplete = () => {
       }, 100);
 
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Gagal menyimpan pendaftaran');
+      const msg = err.response?.data?.message || 'Gagal menyimpan pendaftaran';
+      setError(msg);
+      toast.error(msg);
       setLoading(false);
     }
   };
 
   if (initLoading) return (
-    <div className="flex flex-col items-center justify-center h-screen">
+    <div className="flex flex-col items-center justify-center h-screen bg-gray-50">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-      <p className="text-gray-600">Menyiapkan pendaftaran...</p>
+      <p className="text-gray-600 font-medium">Menyiapkan pendaftaran...</p>
     </div>
   );
 
   return (
-    <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded shadow-md border border-gray-200">
-      <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Selesaikan Pendaftaran</h2>
-      
-      {error && (
-        <div className="bg-red-50 text-red-700 p-3 rounded mb-4 text-sm border-l-4 border-red-500">
-          {error}
+    <div className="min-h-screen bg-gray-50 py-10 px-4">
+      <div className="max-w-md mx-auto p-8 bg-white rounded-2xl shadow-xl border border-gray-100">
+        <div className="text-center mb-8">
+          <img src="/logo-smpn6.png" alt="Logo" className="w-16 h-16 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-800">Lengkapi Profil</h2>
+          <p className="text-gray-500 text-sm">Satu langkah lagi untuk memulai</p>
         </div>
-      )}
-      
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-bold mb-1 text-gray-700">Daftar Sebagai</label>
-          <select 
-            className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
-            value={role} 
-            onChange={(e) => setRole(e.target.value)}
-          >
-            <option value="student">Siswa</option>
-            <option value="teacher">Guru</option>
-            <option value="parent">Orang Tua</option>
-            <option value="contributor">Kontributor</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-bold mb-1 text-gray-700">Nama Lengkap</label>
-          <input 
-            className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
-            type="text" 
-            value={fullName} 
-            onChange={(e) => setFullName(e.target.value)} 
-            placeholder="Masukkan nama lengkap"
-            required 
-          />
-        </div>
-
-        {['student', 'teacher', 'contributor'].includes(role) && (
-          <div>
-            <label className="block text-sm font-bold mb-1 text-gray-700">
-              {role === 'student' ? 'NISN' : 'NIP / Kode Identitas'}
-            </label>
-            <input 
-              className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
-              type="text" 
-              value={identityNumber} 
-              onChange={(e) => setIdentityNumber(e.target.value)} 
-              placeholder={role === 'student' ? "10 digit NISN" : "Masukkan NIP/Identitas"}
-              required 
-            />
+        
+        {error && (
+          <div className="bg-red-50 text-red-700 p-3 rounded-xl mb-6 text-sm border border-red-100 flex items-center gap-2">
+            <span className="font-bold">⚠️</span> {error}
           </div>
         )}
-
-        {['student', 'teacher'].includes(role) && (
+        
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Peran */}
           <div>
-            <label className="block text-sm font-bold mb-1 text-gray-700">Kelas</label>
+            <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-gray-500 ml-1">Daftar Sebagai</label>
             <select 
-              className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
-              value={selectedClass} 
-              onChange={(e) => setSelectedClass(e.target.value)} 
-              required
+              className="w-full border-2 border-gray-100 p-3 rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all bg-gray-50 font-medium" 
+              value={role} 
+              onChange={(e) => setRole(e.target.value)}
             >
-              <option value="">-- Pilih Kelas --</option>
-              {classList.map(cls => (
-                <option key={cls.id} value={cls.id}>{cls.name}</option>
-              ))}
+              <option value="student">Siswa</option>
+              <option value="teacher">Guru</option>
+              <option value="parent">Orang Tua</option>
+              <option value="contributor">Kontributor</option>
             </select>
           </div>
-        )}
 
-        {role === 'parent' && (
+          {/* Nama */}
           <div>
-            <label className="block text-sm font-bold mb-1 text-gray-700">No. WhatsApp</label>
+            <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-gray-500 ml-1">Nama Lengkap</label>
             <input 
-              className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
+              className="w-full border-2 border-gray-100 p-3 rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all bg-gray-50 font-medium" 
               type="text" 
-              value={phoneNumber} 
-              onChange={(e) => setPhoneNumber(e.target.value)} 
-              placeholder="Contoh: 08123456789"
+              value={fullName} 
+              onChange={(e) => setFullName(e.target.value)} 
+              placeholder="Sesuai ijazah/identitas"
               required 
             />
           </div>
-        )}
 
-        <button 
-          type="submit" 
-          disabled={loading} 
-          className="w-full bg-blue-600 text-white p-3 rounded font-bold hover:bg-blue-700 transition-colors disabled:bg-gray-400 mt-4"
-        >
-          {loading ? (
-            <span className="flex items-center justify-center">
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Memproses...
-            </span>
-          ) : 'Selesaikan Pendaftaran'}
-        </button>
-      </form>
+          {/* Identitas (NISN/NIP) */}
+          {['student', 'teacher', 'contributor'].includes(role) && (
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-gray-500 ml-1">
+                {role === 'student' ? 'NISN (10 Digit)' : 'NIP / Kode Identitas'}
+              </label>
+              <input 
+                className="w-full border-2 border-gray-100 p-3 rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all bg-gray-50 font-medium" 
+                type="text" 
+                value={identityNumber} 
+                onChange={(e) => setIdentityNumber(e.target.value)} 
+                placeholder={role === 'student' ? "Contoh: 0081234567" : "Masukkan NIP anda"}
+                required 
+              />
+            </div>
+          )}
+
+          {/* Dropdown Kelas menggunakan class_id */}
+          {['student', 'teacher'].includes(role) && (
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-gray-500 ml-1">
+                {role === 'student' ? 'Pilih Kelas' : 'Wali Kelas (Opsional)'}
+              </label>
+              <select 
+                className="w-full border-2 border-gray-100 p-3 rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all bg-gray-50 font-medium" 
+                value={selectedClassId} 
+                onChange={(e) => setSelectedClassId(e.target.value)} 
+                required={role === 'student'}
+              >
+                <option value="">-- Pilih Kelas --</option>
+                {classList.map(cls => (
+                  <option key={cls.id} value={cls.id}>{cls.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* WhatsApp untuk Orang Tua */}
+          {role === 'parent' && (
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-gray-500 ml-1">No. WhatsApp</label>
+              <input 
+                className="w-full border-2 border-gray-100 p-3 rounded-xl focus:border-blue-500 focus:bg-white outline-none transition-all bg-gray-50 font-medium" 
+                type="text" 
+                value={phoneNumber} 
+                onChange={(e) => setPhoneNumber(e.target.value)} 
+                placeholder="Contoh: 08123456789"
+                required 
+              />
+            </div>
+          )}
+
+          <button 
+            type="submit" 
+            disabled={loading} 
+            className="w-full bg-blue-600 text-white p-4 rounded-xl font-black text-sm uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all disabled:bg-gray-300 mt-6 active:scale-95"
+          >
+            {loading ? 'Sedang Memproses...' : 'Simpan & Masuk Dashboard'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 };

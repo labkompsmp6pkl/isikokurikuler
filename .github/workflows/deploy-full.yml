@@ -7,10 +7,10 @@ on:
 
 jobs:
   # --------------------------------------------------------
-  # TUGAS 1: DEPLOY FRONTEND (ISOLATION ZIP METHOD)
+  # TUGAS 1: DEPLOY FRONTEND (REACT)
   # --------------------------------------------------------
   web-deploy:
-    name: 🚀 Deploy Frontend (Fix Stuck)
+    name: 🚀 Deploy Frontend
     runs-on: ubuntu-latest
     steps:
       - name: 🚚 Get latest code
@@ -21,89 +21,54 @@ jobs:
         with:
           node-version: '20'
 
-      - name: 📦 Build Frontend
+      - name: 📦 Install Dependencies (Client)
+        working-directory: ./frontend
+        run: npm install
+      
+      # --- [BAGIAN BARU] MEMBUAT .ENV.PRODUCTION OTOMATIS ---
+      - name: ⚙️ Create .env.production
         working-directory: ./frontend
         run: |
-          npm install
+          # Kita buat file .env.production yang berisi URL Backend cPanel
           echo "VITE_API_BASE_URL=${{ secrets.VITE_API_URL_PROD }}" > .env.production
-          npm run build
+          # Cek isinya (Opsional, untuk debug)
+          cat .env.production
 
-      # 1. BUAT FOLDER KHUSUS UNTUK UPLOAD (ISOLASI)
-      - name: 📁 Prepare Upload Directory
-        run: mkdir final_frontend_upload
-
-      # 2. BUAT .HTACCESS & ZIP DI DALAM DIST
-      - name: 📄 Create .htaccess & Zip
-        working-directory: ./frontend/dist
+      - name: 🏗️ Build Frontend
+        working-directory: ./frontend
+        run: npm run build
+      
+      - name: 📄 Create .htaccess manually
         run: |
-          # Buat htaccess
+          cd frontend/dist
           echo "<IfModule mod_rewrite.c>" > .htaccess
-          echo "RewriteEngine On" >> .htaccess
-          echo "RewriteBase /" >> .htaccess
-          echo "RewriteRule ^index\.html$ - [L]" >> .htaccess
-          echo "RewriteCond %{REQUEST_FILENAME} !-f" >> .htaccess
-          echo "RewriteCond %{REQUEST_FILENAME} !-d" >> .htaccess
-          echo "RewriteCond %{REQUEST_FILENAME} !-l" >> .htaccess
-          echo "RewriteRule . /index.html [L]" >> .htaccess
+          echo "  RewriteEngine On" >> .htaccess
+          echo "  RewriteBase /" >> .htaccess
+          echo "  RewriteRule ^index\.html$ - [L]" >> .htaccess
+          echo "  RewriteCond %{REQUEST_FILENAME} !-f" >> .htaccess
+          echo "  RewriteCond %{REQUEST_FILENAME} !-d" >> .htaccess
+          echo "  RewriteCond %{REQUEST_FILENAME} !-l" >> .htaccess
+          echo "  RewriteRule . /index.html [L]" >> .htaccess
           echo "</IfModule>" >> .htaccess
-          
-          # Zip semua isi folder dist ke file frontend.zip
-          zip -r -q frontend.zip .
 
-      # 3. PINDAHKAN ZIP KE FOLDER ISOLASI & BUAT SCRIPT PHP DISANA
-      - name: 🐘 Setup Isolation Folder
-        run: |
-          # Pindahkan zip dari dist ke folder isolasi
-          mv ./frontend/dist/frontend.zip ./final_frontend_upload/
-          
-          # Masuk ke folder isolasi untuk buat script php
-          cd final_frontend_upload
-          
-          # Buat script unzip
-          cat <<EOF > unzip_frontend.php
-          <?php
-          \$zipFile = 'frontend.zip';
-          if (file_exists(\$zipFile)) {
-              \$zip = new ZipArchive;
-              if (\$zip->open(\$zipFile) === TRUE) {
-                  \$zip->extractTo('./');
-                  \$zip->close();
-                  echo "SUCCESS_UNZIP";
-                  unlink(\$zipFile); // Hapus zip
-                  unlink(__FILE__); // Hapus script ini
-              } else {
-                  http_response_code(500); echo "FAIL_OPEN_ZIP";
-              }
-          } else { http_response_code(404); echo "ZIP_NOT_FOUND"; }
-          ?>
-          EOF
-
-      # 4. UPLOAD FOLDER ISOLASI (HANYA BERISI 2 FILE: ZIP & PHP)
-      - name: 📂 Upload ZIP Only
+      - name: 📂 Upload to Public HTML
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_FTP_USER }}
           password: ${{ secrets.CPANEL_FTP_PASS }}
-          # Perhatikan ini: Kita upload folder isolasi, BUKAN folder dist
-          local-dir: ./final_frontend_upload/
-          server-dir: ./kokurikuler.smpn6pekalongan.org/
-          dangerous-clean-slate: false
+          local-dir: ./frontend/dist/
+          server-dir: ./kokurikuler.smpn6pekalongan.org/ 
+          dangerous-clean-slate: true 
           protocol: ftp
           port: 21
-          timeout: 600000
-
-      # 5. EKSEKUSI UNZIP
-      - name: 🔓 Trigger Unzip on Server
-        run: |
-          echo "Unzipping..."
-          curl -L --fail https://kokurikuler.smpn6pekalongan.org/unzip_frontend.php
-
-  # --------------------------------------------------------
-  # TUGAS 2: DEPLOY BACKEND (TETAP SAMA SEPERTI SEBELUMNYA)
+          security: loose
+          
+# --------------------------------------------------------
+  # TUGAS 2: DEPLOY BACKEND (DENGAN AUTO-GENERATE HTACCESS)
   # --------------------------------------------------------
   server-deploy:
-    name: 🚀 Deploy Backend
+    name: 🚀 Deploy Backend (Final & Complete)
     needs: web-deploy
     runs-on: ubuntu-latest
     steps:
@@ -121,11 +86,13 @@ jobs:
           npm install
           npm run build
           rm -rf node_modules
-          npm install --production --omit=dev
+          npm install --production
 
-      - name: 📄 Create .htaccess & Config
+      # --- [BAGIAN PENTING] MEMBUAT .HTACCESS OTOMATIS ---
+      - name: 📄 Create .htaccess from Secret Config
         working-directory: ./backend
         run: |
+          # Kita gunakan 'cat <<EOF' agar rapi untuk banyak baris
           cat <<EOF > .htaccess
           # DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
           PassengerAppRoot "/home/smpnpeka/backendkokurikuler.smpn6pekalongan.org"
@@ -134,57 +101,40 @@ jobs:
           PassengerAppType node
           PassengerStartupFile dist/index.js
           # DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END
-          
+
           RewriteEngine On
           RewriteCond %{HTTPS} off
           RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
           EOF
-
-      - name: 📂 Prepare Isolation for Backend
-        run: mkdir final_backend_upload
-
-      - name: 🗜️ Zip Backend & Script
+          
+          # ⚠️ PENTING: 
+          # Pastikan path "/home/smpnpeka/..." di atas SESUAI dengan 
+          # yang ada di file .htaccess cPanel Anda saat ini.
+          
+      - name: 🗜️ Bungkus ZIP (Sertakan .htaccess)
         working-directory: ./backend
         run: |
-          # Zip backend
-          zip -r -q backend.zip dist node_modules package.json .htaccess
+          # Perhatikan: Kita MENAMBAHKAN .htaccess ke dalam perintah zip
+          zip -r backend_update.zip dist package.json package-lock.json .htaccess
           
-          # Pindahkan ke folder isolasi
-          mv backend.zip ../final_backend_upload/
+          mkdir ../final_upload
+          mv backend_update.zip ../final_upload/
+          cp unzip_backend.php ../final_upload/
 
-      - name: 🐘 Create Backend Unzip Script
-        working-directory: ./final_backend_upload
-        run: |
-          cat <<EOF > unzip_backend.php
-          <?php
-          \$zipFile = 'backend.zip';
-          if (file_exists(\$zipFile)) {
-              \$zip = new ZipArchive;
-              if (\$zip->open(\$zipFile) === TRUE) {
-                  \$zip->extractTo('./');
-                  \$zip->close();
-                  unlink(\$zipFile);
-                  if (!is_dir('tmp')) { mkdir('tmp'); }
-                  file_put_contents('tmp/restart.txt', time());
-                  echo "SUCCESS_BACKEND_UPDATE";
-                  unlink(__FILE__);
-              } else { http_response_code(500); echo "FAIL"; }
-          } else { http_response_code(404); echo "NOT_FOUND"; }
-          ?>
-          EOF
-
-      - name: 📂 Upload Backend ZIP Only
+      - name: 📂 Upload Folder Isolasi
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_FTP_USER }}
           password: ${{ secrets.CPANEL_FTP_PASS }}
-          local-dir: ./final_backend_upload/
+          local-dir: ./final_upload/
           server-dir: ./backendkokurikuler.smpn6pekalongan.org/
-          dangerous-clean-slate: false
           protocol: ftp
           port: 21
-          timeout: 600000
-
-      - name: 🔓 Execute Backend Unzip
-        run: curl -L --fail https://backendkokurikuler.smpn6pekalongan.org/unzip_backend.php
+          security: loose
+          
+      - name: 🔓 Eksekusi Unzip
+        run: |
+          echo "Memanggil script unzip..."
+          # Gunakan HTTPS agar aman
+          curl -L https://backendkokurikuler.smpn6pekalongan.org/unzip_backend.php

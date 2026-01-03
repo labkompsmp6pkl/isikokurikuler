@@ -3,7 +3,8 @@ import {
     login, 
     register, 
     googleCallbackHandler, 
-    completeGoogleRegistration 
+    completeGoogleRegistration,
+    getStudentsList
 } from '../controllers/authController';
 import passport from 'passport';
 import { authMiddleware } from '../middleware/authMiddleware'; 
@@ -19,7 +20,7 @@ router.get('/classes-list', getClasses as RequestHandler);
 // Auth Google
 // 1. Redirect ke Google
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }) as RequestHandler);
-
+router.get('/students-list', getStudentsList as RequestHandler);
 // 2. Callback Handler
 router.get(
   '/google/callback',

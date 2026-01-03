@@ -4,7 +4,8 @@ import {
     getContributorData, 
     submitBehaviorScore, 
     assignMission, 
-    getHistory 
+    getHistory,
+    createMissionSchedule
 } from '../controllers/contributorController';
 
 const router = Router();
@@ -20,5 +21,6 @@ router.get('/data', getContributorData as unknown as RequestHandler);
 router.get('/history', getHistory as RequestHandler);
 router.post('/score', submitBehaviorScore as RequestHandler);
 router.post('/mission', assignMission as RequestHandler);
+router.post('/mission-schedule', createMissionSchedule as RequestHandler);
 
 export default router;

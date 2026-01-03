@@ -3,7 +3,8 @@ import {
     getCharacterLogs, 
     upsertCharacterLog, 
     getStudentDashboardData, 
-    completeMission 
+    completeMission,
+    getStudentMissions 
 } from '../controllers/studentController';
 import { authMiddleware, roleMiddleware } from '../middleware/authMiddleware';
 
@@ -22,6 +23,7 @@ router.post('/', upsertCharacterLog as RequestHandler);
 // Fitur Baru (Dashboard & Misi)
 // FIX: Cast controller ke RequestHandler
 router.get('/dashboard', getStudentDashboardData as RequestHandler);
-router.post('/mission/complete', completeMission as RequestHandler);
+router.get('/missions', getStudentMissions as RequestHandler);
+router.post('/missions/complete', completeMission as RequestHandler);
 
 export default router;

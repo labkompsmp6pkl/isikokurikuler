@@ -10,7 +10,7 @@ import {
   learningOptions, 
   socialOptions 
 } from './student/components/options';
-import { Star, CheckCircle2, Trophy, CalendarDays, BarChart3 } from 'lucide-react';
+import { Trophy, BarChart3 } from 'lucide-react';
 
 const StudentDashboard: React.FC = () => {
   useAuth();
@@ -107,51 +107,34 @@ const StudentDashboard: React.FC = () => {
       } catch (error) { console.error(error); }
   };
 
-  const handleCompleteMission = async (missionId: number) => {
-      const toastId = 'mission-complete';
-      toast.loading('Memproses...', { id: toastId });
-      
-      try {
-          const success = await characterService.completeMission(missionId);
-          if (success) {
-              toast.success('Misi selesai! Kerja bagus.', { id: toastId });
-              fetchDashboardData(); 
-          } else {
-              toast.error('Gagal menyelesaikan misi.', { id: toastId });
-          }
-      } catch (e) {
-          toast.error('Terjadi kesalahan koneksi.', { id: toastId });
-      }
-  };
-
   useEffect(() => {
     if (!apiData) { resetForm(); return; }
     
     // Mapping Data dari API ke Form
     const sourceData = activeTab === 'plan' ? {
-        wake_up_time: apiData.plan_wake_up_time,
-        worship_activities: apiData.plan_worship_activities,
-        worship_detail: apiData.plan_worship_detail,
-        sport_activities: apiData.plan_sport_activities,
-        sport_detail: apiData.plan_sport_detail,
-        meal_text: apiData.plan_meal_text,
-        study_activities: apiData.plan_study_activities,
-        study_detail: apiData.plan_study_detail,
-        social_activities: apiData.plan_social_activities,
-        social_detail: apiData.plan_social_detail,
-        sleep_time: apiData.plan_sleep_time,
+      wake_up_time: apiData.plan_wake_up_time,
+      worship_activities: apiData.plan_worship_activities,
+      worship_detail: apiData.plan_worship_detail,
+      sport_activities: apiData.plan_sport_activities,
+      sport_detail: apiData.plan_sport_detail,
+      meal_text: apiData.plan_meal_text,
+      study_activities: apiData.plan_study_activities,
+      study_detail: apiData.plan_study_detail,
+      social_activities: apiData.plan_social_activities,
+      social_detail: apiData.plan_social_detail,
+      sleep_time: apiData.plan_sleep_time,
     } : {
-        wake_up_time: apiData.wake_up_time,
-        worship_activities: apiData.worship_activities,
-        worship_detail: apiData.worship_detail,
-        sport_activities: apiData.sport_activities,
-        sport_detail: apiData.sport_detail,
-        meal_text: apiData.meal_text,
-        study_activities: apiData.study_activities,
-        study_detail: apiData.study_detail,
-        social_activities: apiData.social_activities,
-        social_detail: apiData.social_detail,
-        sleep_time: apiData.sleep_time,
+      wake_up_time: apiData.wake_up_time,
+      worship_activities: apiData.worship_activities,
+      worship_detail: apiData.worship_detail,
+      sport_activities: apiData.sport_activities,
+      sport_detail: apiData.sport_detail,
+      meal_text: apiData.meal_text,
+      study_activities: apiData.study_activities,
+      study_detail: apiData.study_detail,
+      social_activities: apiData.social_activities,
+      social_detail: apiData.social_detail,
+      sleep_time: apiData.sleep_time,
     };
 
     setFormData({
@@ -194,40 +177,28 @@ const StudentDashboard: React.FC = () => {
 
   // --- VALIDASI FORM ---
   const validateForm = () => {
-    // Validasi ini berlaku untuk kedua mode (Plan & Execution)
-    // Pastikan semua field terisi sebelum simpan
-    
     if (!formData.wake_up_time) return "Jam Bangun Pagi belum diisi!";
-    
     if (formData.worship_activities.length === 0) return "Pilih minimal satu aktivitas Beribadah!";
     if (!formData.worship_detail || !formData.worship_detail.trim()) return "Detail Beribadah belum diisi!";
-    
     if (!formData.sport_activities) return "Pilih jenis Olahraga!";
     if (!formData.sport_detail || !formData.sport_detail.trim()) return "Detail Olahraga belum diisi!";
-    
     if (!formData.meal_text || !formData.meal_text.trim()) return "Menu Makan Sehat belum diisi!";
-    
     if (formData.study_activities.length === 0) return "Pilih minimal satu topik Belajar!";
     if (!formData.study_detail || !formData.study_detail.trim()) return "Detail Belajar belum diisi!";
-    
     if (formData.social_activities.length === 0) return "Pilih minimal satu aktivitas Bermasyarakat!";
     if (!formData.social_detail || !formData.social_detail.trim()) return "Detail Bermasyarakat belum diisi!";
-    
     if (!formData.sleep_time) return "Jam Tidur belum diisi!";
-
-    return null; // Lolos Validasi
+    return null;
   };
 
   const handleSave = async () => {
     const toastId = 'save-journal'; 
 
-    // 1. Cek apakah boleh mengisi Eksekusi
     if (activeTab === 'execution' && !isPlanSubmitted) {
         toast.error('Isi Rencana terlebih dahulu!', { id: toastId });
         return;
     }
 
-    // 2. Validasi Kelengkapan Data (Harus Full)
     const errorMsg = validateForm();
     if (errorMsg) {
         toast.error(errorMsg, { id: toastId });
@@ -265,10 +236,8 @@ const StudentDashboard: React.FC = () => {
     try {
       toast.loading('Menyimpan data...', { id: toastId });
       await characterService.saveCharacterLog(payload);
-      
       const typeText = activeTab === 'plan' ? 'Rencana' : 'Eksekusi';
       toast.success(`Data ${typeText} berhasil disimpan!`, { id: toastId });
-      
       fetchLog(date); 
     } catch (error) {
       toast.error('Gagal menyimpan data.', { id: toastId });
@@ -347,7 +316,7 @@ const StudentDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* --- FITUR KREASI: MISI & STATISTIK --- */}
+      {/* --- FITUR KREASI: STATISTIK POIN SIKAP --- */}
       {!urlDate && dashData && (
           <div className="mb-8 space-y-4">
               <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl p-5 text-white shadow-lg flex items-center justify-between">
@@ -357,36 +326,6 @@ const StudentDashboard: React.FC = () => {
                   </div>
                   <Trophy size={48} className="text-orange-200 opacity-50"/>
               </div>
-
-              {dashData.missions.length > 0 ? (
-                  <div className="bg-white border-2 border-orange-100 rounded-2xl p-5 shadow-sm">
-                      <h3 className="text-lg font-black text-gray-800 mb-3 flex items-center gap-2">
-                          <Star className="text-orange-500" fill="currentColor"/> Misi & Tantangan
-                      </h3>
-                      <div className="space-y-3">
-                          {dashData.missions.map((m: any) => (
-                              <div key={m.id} className="p-4 bg-orange-50 rounded-xl border border-orange-200 flex justify-between items-center gap-4">
-                                  <div>
-                                      <span className="text-[10px] font-bold bg-white text-orange-600 px-2 py-0.5 rounded border border-orange-100 mb-1 inline-block">
-                                          {m.habit_category} • {m.contributor_name}
-                                      </span>
-                                      <h4 className="font-bold text-gray-800 text-sm">{m.title}</h4>
-                                      <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
-                                          <CalendarDays size={12}/> Deadline: {new Date(m.due_date).toLocaleDateString('id-ID')}
-                                      </div>
-                                  </div>
-                                  <button 
-                                      onClick={() => handleCompleteMission(m.id)}
-                                      className="shrink-0 bg-white text-orange-600 p-2 rounded-full border-2 border-orange-200 hover:bg-orange-500 hover:text-white hover:border-orange-500 transition-all shadow-sm"
-                                      title="Tandai Selesai"
-                                  >
-                                      <CheckCircle2 size={20}/>
-                                  </button>
-                              </div>
-                          ))}
-                      </div>
-                  </div>
-              ) : null}
           </div>
       )}
       

@@ -173,7 +173,6 @@ const ParentDashboard: React.FC = () => {
     }
 
     const pendingCount = dashboardData.logs.filter(l => l.status === 'Tersimpan').length;
-    // Menggunakan inisial Siswa untuk avatar, bukan Orang Tua
     const studentInitial = dashboardData.student.full_name.charAt(0).toUpperCase();
     const displayClass = classNameFromApi || dashboardData.student.class || '-';
 
@@ -184,12 +183,15 @@ const ParentDashboard: React.FC = () => {
     ];
 
     return (
-        <div className="min-h-screen bg-gray-50 flex font-sans">
+        <div className="min-h-screen bg-gray-50 flex font-sans text-slate-800">
+            
+            {/* OVERLAY MOBILE: Z-INDEX 40 (DI ATAS HEADER, DI BAWAH SIDEBAR) */}
             {isSidebarOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden" onClick={() => setIsSidebarOpen(false)} />
+                <div className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsSidebarOpen(false)} />
             )}
 
-            <aside className={`fixed md:sticky top-0 h-screen w-64 bg-white border-r border-gray-200 z-30 transition-transform duration-300 ease-in-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+            {/* SIDEBAR: Z-INDEX 50 (PALING ATAS) */}
+            <aside className={`fixed md:sticky top-0 h-screen w-64 bg-white border-r border-gray-200 z-50 transition-transform duration-300 ease-in-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
                 <div className="p-6 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <img src="/logo-smpn6.png" alt="Logo" className="w-8 h-8" />
@@ -198,7 +200,7 @@ const ParentDashboard: React.FC = () => {
                     <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-gray-400 hover:text-red-500"><X size={24} /></button>
                 </div>
 
-                <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto">
+                <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto custom-scrollbar">
                     {navItems.map((item) => (
                         <button key={item.id} type="button" onClick={() => { setActiveTab(item.id as any); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors font-medium ${activeTab === item.id ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}>
                             <div className="flex items-center gap-3">
@@ -210,102 +212,98 @@ const ParentDashboard: React.FC = () => {
                     ))}
                 </nav>
 
-                {/* PROFIL SIDEBAR BAWAH */}
                 <div className="p-4 border-t border-gray-100 bg-gray-50">
                     <div className="flex items-center gap-3 mb-4 px-2">
                         <div className="w-10 h-10 shrink-0 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold shadow-md uppercase">
                             {studentInitial}
                         </div>
                         <div className="overflow-hidden w-full">
-                            {/* NAMA SISWA MENJADI UTAMA */}
                             <p className="text-sm font-bold text-gray-800 truncate leading-tight">{dashboardData.student.full_name}</p>
                             <div className="mt-1 flex flex-col">
-                                {/* Keterangan Wali Murid */}
                                 <span className="text-[10px] font-semibold text-gray-500 truncate">Wali Murid: {user.fullName}</span>
                                 <span className="text-[10px] font-bold text-emerald-600 mt-0.5 uppercase tracking-wider">Kelas {displayClass}</span>
                             </div>
                         </div>
                     </div>
-                    {/* TOMBOL LOGOUT */}
                     <button type="button" onClick={handleLogout} className="w-full flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-100 hover:bg-red-50 hover:border-red-200 rounded-lg transition-all shadow-sm">
                         <LogOut size={18} /> <span>Logout</span>
                     </button>
                 </div>
             </aside>
 
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                {/* NAVBAR MOBILE */}
-                <header className="md:hidden bg-white border-b border-gray-200 p-4 sticky top-0 z-10 shadow-sm">
+            {/* MAIN CONTENT WRAPPER */}
+            <div className="flex-1 flex flex-col min-w-0">
+                
+                {/* HEADER MOBILE (STICKY): Z-INDEX 30 (DI BAWAH OVERLAY) */}
+                <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-gray-200 p-4 shadow-sm transition-all">
                     <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                             <img src="/logo-smpn6.png" alt="Logo" className="w-8 h-8" />
                             <span className="font-bold text-gray-800 text-sm tracking-tight">KOKURIKULER</span>
                         </div>
-                        <button onClick={() => setIsSidebarOpen(true)} className="text-gray-600 p-1"><Menu size={24} /></button>
+                        <button onClick={() => setIsSidebarOpen(true)} className="text-gray-600 p-1 bg-gray-50 rounded-lg active:scale-95 transition-transform"><Menu size={24} /></button>
                     </div>
                     
                     <div className="flex items-center gap-3 pt-2 border-t border-gray-100 mt-2">
-                        <div className="w-9 h-9 shrink-0 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs uppercase">
+                        <div className="w-9 h-9 shrink-0 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm">
                             {studentInitial}
                         </div>
                         <div className="flex-1 overflow-hidden">
-                            {/* Navbar Mobile: Menampilkan Nama Siswa sebagai highlight */}
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">Ananda</p>
                             <p className="text-xs font-black text-gray-800 truncate mt-1">{dashboardData.student.full_name}</p>
                         </div>
-                        <div className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-black uppercase">
+                        <div className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-black uppercase shadow-sm">
                             {displayClass}
                         </div>
                     </div>
                 </header>
 
-                <main className="flex-1 overflow-auto p-4 md:p-8">
-                    <div className="max-w-5xl mx-auto pb-20">
-                        <div className="mb-6">
-                            <h2 className="text-2xl font-black text-gray-800 tracking-tight">
-                                {activeTab === 'beranda' && 'Dukungan Ayah & Bunda'}
-                                {activeTab === 'validasi' && 'Konfirmasi Jurnal'}
-                                {activeTab === 'kalender' && 'Riwayat Aktivitas'}
-                            </h2>
-                            <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-[0.2em]">Ananda: {dashboardData.student.full_name}</p>
-                        </div>
-
-                        {activeTab === 'beranda' && (
-                            <div className="space-y-8 animate-fade-in">
-                                <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
-                                    <div className="relative z-10">
-                                        <h1 className="text-3xl font-black mb-4 leading-tight tracking-tighter">7 Kebiasaan <span className="text-yellow-300 italic">Indonesia Hebat</span></h1>
-                                        <p className="text-emerald-100 text-lg font-medium max-w-2xl opacity-90">Mari kita bimbing ananda {dashboardData.student.full_name} untuk membangun kebiasaan positif setiap hari.</p>
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {parentHabits.map((habit, idx) => (
-                                        <div key={idx} className={`p-6 rounded-2xl border transition-all hover:shadow-md ${habit.color}`}>
-                                            <div className="text-4xl mb-4">{habit.icon}</div>
-                                            <h3 className="font-black text-lg mb-2">{habit.title}</h3>
-                                            <p className="text-sm font-medium leading-relaxed opacity-80">{habit.desc}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {activeTab === 'validasi' && (
-                            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden animate-slide-up">
-                                <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-                                    <h3 className="text-lg font-bold text-gray-800 uppercase tracking-widest">Daftar Jurnal Pending</h3>
-                                    <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">{pendingCount} Jurnal</span>
-                                </div>
-                                <div className="p-6"><ApprovalPanel logs={dashboardData.logs} onApproveSuccess={handleApprovalSuccess} /></div>
-                            </div>
-                        )}
-
-                        {activeTab === 'kalender' && (
-                            <div className="space-y-6">
-                                <HistoryCalendar />
-                            </div>
-                        )}
+                {/* CONTENT AREA */}
+                <main className="p-4 md:p-8 max-w-5xl mx-auto w-full pb-20">
+                    <div className="mb-6">
+                        <h2 className="text-2xl font-black text-gray-800 tracking-tight">
+                            {activeTab === 'beranda' && 'Dukungan Ayah & Bunda'}
+                            {activeTab === 'validasi' && 'Konfirmasi Jurnal'}
+                            {activeTab === 'kalender' && 'Riwayat Aktivitas'}
+                        </h2>
+                        <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-[0.2em]">Ananda: {dashboardData.student.full_name}</p>
                     </div>
+
+                    {activeTab === 'beranda' && (
+                        <div className="space-y-8 animate-fade-in">
+                            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
+                                <div className="relative z-10">
+                                    <h1 className="text-3xl font-black mb-4 leading-tight tracking-tighter">7 Kebiasaan <span className="text-yellow-300 italic">Indonesia Hebat</span></h1>
+                                    <p className="text-emerald-100 text-lg font-medium max-w-2xl opacity-90">Mari kita bimbing ananda {dashboardData.student.full_name} untuk membangun kebiasaan positif setiap hari.</p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {parentHabits.map((habit, idx) => (
+                                    <div key={idx} className={`p-6 rounded-2xl border transition-all hover:shadow-md ${habit.color}`}>
+                                        <div className="text-4xl mb-4">{habit.icon}</div>
+                                        <h3 className="font-black text-lg mb-2">{habit.title}</h3>
+                                        <p className="text-sm font-medium leading-relaxed opacity-80">{habit.desc}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'validasi' && (
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden animate-slide-up">
+                            <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+                                <h3 className="text-lg font-bold text-gray-800 uppercase tracking-widest">Daftar Jurnal Pending</h3>
+                                <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">{pendingCount} Jurnal</span>
+                            </div>
+                            <div className="p-6"><ApprovalPanel logs={dashboardData.logs} onApproveSuccess={handleApprovalSuccess} /></div>
+                        </div>
+                    )}
+
+                    {activeTab === 'kalender' && (
+                        <div className="space-y-6">
+                            <HistoryCalendar />
+                        </div>
+                    )}
                 </main>
             </div>
         </div>

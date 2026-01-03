@@ -146,18 +146,65 @@ export const getStudentDashboardData = async (req: AuthenticatedRequest, res: Re
     }
 };
 
-// [BARU] Selesaikan Misi
+// 2. Siswa Menyelesaikan Misi
 export const completeMission = async (req: AuthenticatedRequest, res: Response) => {
     const studentId = req.user?.id;
-    const { missionId } = req.body;
+    const { scheduleId } = req.body;
 
     try {
-        await pool.query(
-            'UPDATE missions SET is_completed = 1 WHERE id = ? AND student_id = ?',
-            [missionId, studentId]
+        // Cek duplikasi hari ini
+        const [check]: any = await pool.query(
+            `SELECT id FROM mission_completions WHERE mission_schedule_id = ? AND student_id = ? AND DATE(completed_at) = CURDATE()`,
+            [scheduleId, studentId]
         );
-        res.json({ message: 'Misi selesai!' });
+
+        if (check.length > 0) return res.status(400).json({ message: 'Misi sudah diselesaikan hari ini.' });
+
+        await pool.query(
+            `INSERT INTO mission_completions (mission_schedule_id, student_id) VALUES (?, ?)`,
+            [scheduleId, studentId]
+        );
+
+        res.json({ message: 'Misi berhasil diselesaikan! Poin bertambah.' });
     } catch (error) {
-        res.status(500).json({ message: 'Gagal update misi.' });
+        res.status(500).json({ message: 'Gagal menyelesaikan misi.' });
+    }
+};
+
+export const getStudentMissions = async (req: AuthenticatedRequest, res: Response) => {
+    const studentId = req.user?.id;
+    
+    try {
+        // Ambil class_id siswa
+        const [userRows]: any = await pool.query('SELECT class_id FROM users WHERE id = ?', [studentId]);
+        if (userRows.length === 0) return res.status(404).json({ message: 'User not found' });
+        
+        const classId = userRows[0].class_id;
+        
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const todayName = days[new Date().getDay()];
+
+        // QUERY UPDATED: Join dengan tabel users (u) untuk ambil nama kontributor
+        const query = `
+            SELECT 
+                ms.*, 
+                u.full_name as contributor_name,  -- AMBIL NAMA LENGKAP
+                (SELECT COUNT(*) FROM mission_completions mc 
+                 WHERE mc.mission_schedule_id = ms.id 
+                 AND mc.student_id = ? 
+                 AND DATE(mc.completed_at) = CURDATE()) as is_completed
+            FROM mission_schedules ms
+            JOIN users u ON ms.contributor_id = u.id -- JOIN KE USERS
+            WHERE ms.target_class = ?
+            AND (ms.frequency = 'daily' OR ms.day_of_week = ?)
+            ORDER BY is_completed ASC, ms.id DESC
+        `;
+
+        const [missions] = await pool.query(query, [studentId, classId, todayName]);
+        res.json(missions);
+
+    } catch (error) {
+        console.error("Error get missions:", error);
+        res.status(500).json({ message: 'Gagal memuat misi.' });
     }
 };

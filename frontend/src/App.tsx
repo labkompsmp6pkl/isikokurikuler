@@ -23,6 +23,7 @@ import StudentLayout from './pages/dashboards/student/StudentLayout';
 import Beranda from './pages/dashboards/student/Beranda';
 import StudentDashboard from './pages/dashboards/StudentDashboard'; 
 import Riwayat from './pages/dashboards/student/Riwayat';
+import StudentMissions from './pages/dashboards/student/StudentMissions';
 
 // Google Auth Pages
 import GoogleSuccess from './pages/GoogleSuccess';
@@ -116,6 +117,7 @@ const App: React.FC = () => {
           <Route path="beranda" element={<Beranda />} />
           <Route path="journal" element={<StudentDashboard />} />
           <Route path="history" element={<Riwayat />} />
+          <Route path="misi" element={<StudentMissions />} />
         </Route>
 
         {/* Catch-all */}

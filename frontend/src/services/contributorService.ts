@@ -35,7 +35,7 @@ const getHistory = async () => {
   }
 };
 
-// 3. Kirim Penilaian Sikap
+// 3. Kirim Penilaian Sikap (Manual)
 const submitScore = async (data: any) => {
   try {
     const response = await axios.post(`${API_URL}/score`, data, getAuthHeaders());
@@ -46,7 +46,7 @@ const submitScore = async (data: any) => {
   }
 };
 
-// 4. Jadwalkan Misi
+// 4. Jadwalkan Misi (Manual - Deprecated/Optional)
 const assignMission = async (data: any) => {
   try {
     const response = await axios.post(`${API_URL}/mission`, data, getAuthHeaders());
@@ -57,11 +57,23 @@ const assignMission = async (data: any) => {
   }
 };
 
+// 5. Buat Jadwal Misi Berulang (Target Misi) - BARU
+const createMissionSchedule = async (data: any) => {
+  try {
+    const response = await axios.post(`${API_URL}/mission-schedule`, data, getAuthHeaders());
+    return response.data;
+  } catch (error) {
+    console.error("Error creating mission schedule:", error);
+    throw error;
+  }
+};
+
 const contributorService = {
   getData,
   getHistory,
   submitScore,
-  assignMission
+  assignMission,
+  createMissionSchedule // Export fungsi baru
 };
 
 export default contributorService;

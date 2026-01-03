@@ -242,3 +242,20 @@ export const completeGoogleRegistration = async (req: Request, res: Response) =>
     connection.release();
   }
 };
+
+export const getStudentsList = async (req: Request, res: Response) => {
+  try {
+    const query = `
+      SELECT u.id, u.full_name, u.nisn, c.name as class_name 
+      FROM users u
+      LEFT JOIN classes c ON u.class_id = c.id
+      WHERE u.role = 'student'
+      ORDER BY u.full_name ASC
+    `;
+    const [rows] = await pool.query(query);
+    res.json({ data: rows });
+  } catch (error) {
+    console.error("Fetch Students Error:", error);
+    res.status(500).json({ message: "Gagal mengambil data siswa" });
+  }
+};

@@ -21,35 +21,34 @@ jobs:
         with:
           node-version: '20'
 
-      - name: 📦 Install Dependencies (Client)
+      - name: 📦 Install Dependencies
         working-directory: ./frontend
         run: npm install
-      
-      # --- [BAGIAN BARU] MEMBUAT .ENV.PRODUCTION OTOMATIS ---
+
       - name: ⚙️ Create .env.production
         working-directory: ./frontend
         run: |
-          # Kita buat file .env.production yang berisi URL Backend cPanel
           echo "VITE_API_BASE_URL=${{ secrets.VITE_API_URL_PROD }}" > .env.production
-          # Cek isinya (Opsional, untuk debug)
-          cat .env.production
 
       - name: 🏗️ Build Frontend
         working-directory: ./frontend
         run: npm run build
       
+      # Membuat .htaccess agar React Router aman saat refresh page
       - name: 📄 Create .htaccess manually
+        working-directory: ./frontend/dist
         run: |
-          cd frontend/dist
-          echo "<IfModule mod_rewrite.c>" > .htaccess
-          echo "  RewriteEngine On" >> .htaccess
-          echo "  RewriteBase /" >> .htaccess
-          echo "  RewriteRule ^index\.html$ - [L]" >> .htaccess
-          echo "  RewriteCond %{REQUEST_FILENAME} !-f" >> .htaccess
-          echo "  RewriteCond %{REQUEST_FILENAME} !-d" >> .htaccess
-          echo "  RewriteCond %{REQUEST_FILENAME} !-l" >> .htaccess
-          echo "  RewriteRule . /index.html [L]" >> .htaccess
-          echo "</IfModule>" >> .htaccess
+          cat <<EOF > .htaccess
+          <IfModule mod_rewrite.c>
+            RewriteEngine On
+            RewriteBase /
+            RewriteRule ^index\.html$ - [L]
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteCond %{REQUEST_FILENAME} !-l
+            RewriteRule . /index.html [L]
+          </IfModule>
+          EOF
 
       - name: 📂 Upload to Public HTML
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
@@ -58,17 +57,17 @@ jobs:
           username: ${{ secrets.CPANEL_FTP_USER }}
           password: ${{ secrets.CPANEL_FTP_PASS }}
           local-dir: ./frontend/dist/
-          server-dir: ./kokurikuler.smpn6pekalongan.org/ 
-          dangerous-clean-slate: true 
+          server-dir: ./kokurikuler.smpn6pekalongan.org/
+          dangerous-clean-slate: true
           protocol: ftp
           port: 21
-          security: loose
-          
-# --------------------------------------------------------
-  # TUGAS 2: DEPLOY BACKEND (DENGAN AUTO-GENERATE HTACCESS)
+          timeout: 300000 # 5 Menit timeout
+
+  # --------------------------------------------------------
+  # TUGAS 2: DEPLOY BACKEND (ZIP + UNZIP METHOD)
   # --------------------------------------------------------
   server-deploy:
-    name: 🚀 Deploy Backend (Final & Complete)
+    name: 🚀 Deploy Backend
     needs: web-deploy
     runs-on: ubuntu-latest
     steps:
@@ -80,19 +79,19 @@ jobs:
         with:
           node-version: '20'
 
-      - name: 📦 Build Backend
+      # Install semua untuk build, lalu hapus, install hanya production untuk upload
+      - name: 📦 Prepare Backend Files
         working-directory: ./backend
         run: |
           npm install
           npm run build
           rm -rf node_modules
-          npm install --production
+          npm install --production --omit=dev
 
-      # --- [BAGIAN PENTING] MEMBUAT .HTACCESS OTOMATIS ---
-      - name: 📄 Create .htaccess from Secret Config
+      # Membuat .htaccess konfigurasi CloudLinux Passenger
+      - name: 📄 Create .htaccess
         working-directory: ./backend
         run: |
-          # Kita gunakan 'cat <<EOF' agar rapi untuk banyak baris
           cat <<EOF > .htaccess
           # DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
           PassengerAppRoot "/home/smpnpeka/backendkokurikuler.smpn6pekalongan.org"
@@ -101,40 +100,70 @@ jobs:
           PassengerAppType node
           PassengerStartupFile dist/index.js
           # DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END
-
+          
           RewriteEngine On
           RewriteCond %{HTTPS} off
           RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
           EOF
-          
-          # ⚠️ PENTING: 
-          # Pastikan path "/home/smpnpeka/..." di atas SESUAI dengan 
-          # yang ada di file .htaccess cPanel Anda saat ini.
-          
-      - name: 🗜️ Bungkus ZIP (Sertakan .htaccess)
+
+      # Membuat script PHP untuk Unzip di Server secara otomatis
+      - name: 🐘 Create Unzip Script
         working-directory: ./backend
         run: |
-          # Perhatikan: Kita MENAMBAHKAN .htaccess ke dalam perintah zip
-          zip -r backend_update.zip dist package.json package-lock.json .htaccess
+          cat <<EOF > unzip_backend.php
+          <?php
+          \$zipFile = 'backend_update.zip';
           
-          mkdir ../final_upload
-          mv backend_update.zip ../final_upload/
-          cp unzip_backend.php ../final_upload/
+          if (file_exists(\$zipFile)) {
+              \$zip = new ZipArchive;
+              if (\$zip->open(\$zipFile) === TRUE) {
+                  \$zip->extractTo('./');
+                  \$zip->close();
+                  echo "Sukses: File berhasil di-unzip.<br>";
+                  
+                  // Hapus file zip setelah selesai
+                  unlink(\$zipFile);
+                  echo "Info: File zip dihapus.<br>";
+                  
+                  // Restart Node.js App (CloudLinux Passenger)
+                  if (!is_dir('tmp')) { mkdir('tmp'); }
+                  file_put_contents('tmp/restart.txt', time());
+                  echo "Sukses: Aplikasi direstart (tmp/restart.txt touched).";
+              } else {
+                  http_response_code(500);
+                  echo "Gagal: Tidak bisa membuka file zip.";
+              }
+          } else {
+              http_response_code(404);
+              echo "Gagal: File zip tidak ditemukan.";
+          }
+          ?>
+          EOF
 
-      - name: 📂 Upload Folder Isolasi
+      - name: 🗜️ Zip Files (Code + Node Modules + Config)
+        working-directory: ./backend
+        run: |
+          # Masukkan dist, node_modules, package.json, dan file config ke dalam ZIP
+          zip -r -q backend_update.zip dist node_modules package.json .htaccess unzip_backend.php
+
+      - name: 📂 Upload ZIP to Server
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.CPANEL_HOST }}
           username: ${{ secrets.CPANEL_FTP_USER }}
           password: ${{ secrets.CPANEL_FTP_PASS }}
-          local-dir: ./final_upload/
+          local-dir: ./backend/
+          # Kita hanya upload satu file ZIP, jadi filter ini penting agar tidak upload folder src/dll
+          include-only: "^backend_update.zip$"
           server-dir: ./backendkokurikuler.smpn6pekalongan.org/
+          # Jangan hapus file lama dulu, biarkan unzip yang menimpa
+          dangerous-clean-slate: false
           protocol: ftp
           port: 21
-          security: loose
-          
-      - name: 🔓 Eksekusi Unzip
+          timeout: 600000 # 10 Menit timeout (karena file zip besar berisi node_modules)
+
+      - name: 🔓 Execute Unzip on Server
         run: |
-          echo "Memanggil script unzip..."
-          # Gunakan HTTPS agar aman
-          curl -L https://backendkokurikuler.smpn6pekalongan.org/unzip_backend.php
+          echo "Memicu proses unzip di server..."
+          # Menggunakan curl untuk menjalankan script PHP yang baru saja diupload
+          curl -L --fail https://backendkokurikuler.smpn6pekalongan.org/unzip_backend.php

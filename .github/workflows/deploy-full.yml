@@ -7,10 +7,10 @@ on:
 
 jobs:
   # --------------------------------------------------------
-  # TUGAS 1: DEPLOY FRONTEND (REACT)
+  # TUGAS 1: DEPLOY FRONTEND (METODE ZIP - ANTI MANDEK)
   # --------------------------------------------------------
   web-deploy:
-    name: 🚀 Deploy Frontend
+    name: 🚀 Deploy Frontend (ZIP Method)
     runs-on: ubuntu-latest
     steps:
       - name: 🚚 Get latest code
@@ -21,21 +21,16 @@ jobs:
         with:
           node-version: '20'
 
-      - name: 📦 Install Dependencies
-        working-directory: ./frontend
-        run: npm install
-
-      - name: ⚙️ Create .env.production
+      - name: 📦 Install & Build Frontend
         working-directory: ./frontend
         run: |
+          npm install
+          # Buat .env production
           echo "VITE_API_BASE_URL=${{ secrets.VITE_API_URL_PROD }}" > .env.production
+          npm run build
 
-      - name: 🏗️ Build Frontend
-        working-directory: ./frontend
-        run: npm run build
-      
-      # Membuat .htaccess agar React Router aman saat refresh page
-      - name: 📄 Create .htaccess manually
+      # Membuat .htaccess (Penting untuk React Router)
+      - name: 📄 Create .htaccess
         working-directory: ./frontend/dist
         run: |
           cat <<EOF > .htaccess
@@ -50,7 +45,35 @@ jobs:
           </IfModule>
           EOF
 
-      - name: 📂 Upload to Public HTML
+      # Membuat script Unzip untuk Frontend
+      - name: 🐘 Create Frontend Unzip Script
+        working-directory: ./frontend/dist
+        run: |
+          cat <<EOF > unzip_frontend.php
+          <?php
+          \$zipFile = 'frontend_app.zip';
+          if (file_exists(\$zipFile)) {
+              \$zip = new ZipArchive;
+              if (\$zip->open(\$zipFile) === TRUE) {
+                  \$zip->extractTo('./');
+                  \$zip->close();
+                  echo "Frontend Sukses Di-unzip.";
+                  unlink(\$zipFile); // Hapus zip biar bersih
+                  unlink(__FILE__); // Hapus script ini sendiri (self-destruct)
+              } else {
+                  http_response_code(500); echo "Gagal unzip.";
+              }
+          } else { http_response_code(404); echo "Zip tidak ada."; }
+          ?>
+          EOF
+
+      # Bungkus hasil build jadi ZIP
+      - name: 🗜️ Zip Frontend Assets
+        working-directory: ./frontend/dist
+        run: zip -r -q frontend_app.zip .
+
+      # Upload hanya 1 file ZIP + Script PHP (Cepat & Stabil)
+      - name: 📂 Upload ZIP to Public HTML
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.CPANEL_HOST }}
@@ -58,16 +81,22 @@ jobs:
           password: ${{ secrets.CPANEL_FTP_PASS }}
           local-dir: ./frontend/dist/
           server-dir: ./kokurikuler.smpn6pekalongan.org/
-          dangerous-clean-slate: true
+          # Filter: Hanya upload zip dan script php
+          include-only: "^(frontend_app.zip|unzip_frontend.php)$"
+          dangerous-clean-slate: false
           protocol: ftp
           port: 21
-          timeout: 300000 # 5 Menit timeout
+          timeout: 300000
+
+      # Eksekusi Unzip di Server
+      - name: 🔓 Execute Unzip
+        run: curl -L --fail https://kokurikuler.smpn6pekalongan.org/unzip_frontend.php
 
   # --------------------------------------------------------
-  # TUGAS 2: DEPLOY BACKEND (ZIP + UNZIP METHOD)
+  # TUGAS 2: DEPLOY BACKEND (METODE ZIP - SUDAH BENAR)
   # --------------------------------------------------------
   server-deploy:
-    name: 🚀 Deploy Backend
+    name: 🚀 Deploy Backend (ZIP Method)
     needs: web-deploy
     runs-on: ubuntu-latest
     steps:
@@ -79,8 +108,7 @@ jobs:
         with:
           node-version: '20'
 
-      # Install semua untuk build, lalu hapus, install hanya production untuk upload
-      - name: 📦 Prepare Backend Files
+      - name: 📦 Build Backend
         working-directory: ./backend
         run: |
           npm install
@@ -88,8 +116,7 @@ jobs:
           rm -rf node_modules
           npm install --production --omit=dev
 
-      # Membuat .htaccess konfigurasi CloudLinux Passenger
-      - name: 📄 Create .htaccess
+      - name: 📄 Create .htaccess for Passenger
         working-directory: ./backend
         run: |
           cat <<EOF > .htaccess
@@ -106,45 +133,32 @@ jobs:
           RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
           EOF
 
-      # Membuat script PHP untuk Unzip di Server secara otomatis
-      - name: 🐘 Create Unzip Script
+      - name: 🐘 Create Backend Unzip Script
         working-directory: ./backend
         run: |
           cat <<EOF > unzip_backend.php
           <?php
           \$zipFile = 'backend_update.zip';
-          
           if (file_exists(\$zipFile)) {
               \$zip = new ZipArchive;
               if (\$zip->open(\$zipFile) === TRUE) {
                   \$zip->extractTo('./');
                   \$zip->close();
-                  echo "Sukses: File berhasil di-unzip.<br>";
-                  
-                  // Hapus file zip setelah selesai
                   unlink(\$zipFile);
-                  echo "Info: File zip dihapus.<br>";
                   
-                  // Restart Node.js App (CloudLinux Passenger)
+                  // Restart App
                   if (!is_dir('tmp')) { mkdir('tmp'); }
                   file_put_contents('tmp/restart.txt', time());
-                  echo "Sukses: Aplikasi direstart (tmp/restart.txt touched).";
-              } else {
-                  http_response_code(500);
-                  echo "Gagal: Tidak bisa membuka file zip.";
-              }
-          } else {
-              http_response_code(404);
-              echo "Gagal: File zip tidak ditemukan.";
-          }
+                  echo "Backend Sukses Update & Restart.";
+                  unlink(__FILE__);
+              } else { http_response_code(500); echo "Gagal unzip."; }
+          } else { http_response_code(404); echo "Zip tidak ada."; }
           ?>
           EOF
 
-      - name: 🗜️ Zip Files (Code + Node Modules + Config)
+      - name: 🗜️ Zip Backend
         working-directory: ./backend
-        run: |
-          # Masukkan dist, node_modules, package.json, dan file config ke dalam ZIP
-          zip -r -q backend_update.zip dist node_modules package.json .htaccess unzip_backend.php
+        run: zip -r -q backend_update.zip dist node_modules package.json .htaccess unzip_backend.php
 
       - name: 📂 Upload ZIP to Server
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
@@ -153,17 +167,12 @@ jobs:
           username: ${{ secrets.CPANEL_FTP_USER }}
           password: ${{ secrets.CPANEL_FTP_PASS }}
           local-dir: ./backend/
-          # Kita hanya upload satu file ZIP, jadi filter ini penting agar tidak upload folder src/dll
           include-only: "^backend_update.zip$"
           server-dir: ./backendkokurikuler.smpn6pekalongan.org/
-          # Jangan hapus file lama dulu, biarkan unzip yang menimpa
           dangerous-clean-slate: false
           protocol: ftp
           port: 21
-          timeout: 600000 # 10 Menit timeout (karena file zip besar berisi node_modules)
+          timeout: 600000
 
-      - name: 🔓 Execute Unzip on Server
-        run: |
-          echo "Memicu proses unzip di server..."
-          # Menggunakan curl untuk menjalankan script PHP yang baru saja diupload
-          curl -L --fail https://backendkokurikuler.smpn6pekalongan.org/unzip_backend.php
+      - name: 🔓 Execute Backend Unzip
+        run: curl -L --fail https://backendkokurikuler.smpn6pekalongan.org/unzip_backend.php

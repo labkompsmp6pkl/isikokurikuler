@@ -63,8 +63,10 @@ export const getDashboardData = async (req: Request, res: Response) => {
             [parentId]
         );
 
+        // [PERBAIKAN] Jangan return 404 jika siswa tidak ada.
+        // Return 200 dengan student: null agar frontend bisa merender form "Link Siswa" tanpa error console.
         if (studentRows.length === 0) {
-            return res.status(404).json({ message: 'Belum ada siswa yang terhubung.' });
+            return res.json({ student: null, logs: [] });
         }
         
         const student = studentRows[0]; 

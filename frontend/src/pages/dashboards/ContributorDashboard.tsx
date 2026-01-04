@@ -15,8 +15,9 @@ import { useAuth } from '../../services/authService';
 import Spinner from './student/components/Spinner';
 
 // Sub-Components
-import MissionMainView from './contributor/MissionMainView'; 
+import CharacterMainView from './contributor/CharacterMainView'; 
 import HistoryView from './contributor/HistoryView';
+import StudentSelectorView from './contributor/StudentSelectorView';
 
 const contributorHabits = [
   { icon: <Sun size={32} />, title: "Bangun Pagi", indicator: "Ketepatan waktu kehadiran siswa di sekolah dan kesiapan memulai pelajaran jam pertama.", color: "bg-orange-50 border-orange-200 text-orange-800" },
@@ -32,9 +33,11 @@ const ContributorDashboard: React.FC = () => {
     const { logout } = useAuth();
     
     const [user, setUser] = useState<any>({ fullName: 'Kontributor', role: 'contributor' });
-    const [isLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'beranda' | 'misi' | 'riwayat'>('beranda');
+    const [isLoading, setIsLoading] = useState(false);
+    const [activeTab, setActiveTab] = useState<'beranda' | 'karakter' | 'riwayat'>('beranda');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [students, setStudents] = useState<any[]>([]);
+    const [isStudentSelectorOpen, setStudentSelectorOpen] = useState(false);
 
     useEffect(() => {
         const userString = localStorage.getItem('user');
@@ -51,11 +54,15 @@ const ContributorDashboard: React.FC = () => {
 
     const navItems = [
         { id: 'beranda', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
-        { id: 'misi', label: 'Misi', icon: <Target size={20} /> }, 
+        { id: 'karakter', label: 'Karakter', icon: <Target size={20} /> }, 
         { id: 'riwayat', label: 'Riwayat', icon: <CalendarDays size={20} /> },
     ];
 
     if (isLoading) return <div className="h-screen flex items-center justify-center bg-slate-50"><Spinner /></div>;
+
+    if(isStudentSelectorOpen) {
+        return <StudentSelectorView students={students} onSelect={() => {}} onBack={() => setStudentSelectorOpen(false)} />
+    }
 
     return (
         <div className="min-h-screen bg-gray-50 flex font-sans text-slate-800">
@@ -114,7 +121,6 @@ const ContributorDashboard: React.FC = () => {
             </aside>
 
             {/* MAIN CONTENT WRAPPER */}
-            {/* Menggunakan min-w-0 flex flex-col agar scroll body bekerja */}
             <div className="flex-1 flex flex-col min-w-0">
                 
                 {/* HEADER MOBILE (STICKY) */}
@@ -138,12 +144,11 @@ const ContributorDashboard: React.FC = () => {
                 </header>
 
                 {/* CONTENT AREA */}
-                {/* Hapus overflow-auto dan h-screen agar scroll di body */}
                 <main className="p-4 md:p-8 max-w-5xl mx-auto w-full pb-20">
                     <div className="mb-6">
                         <h2 className="text-2xl font-black text-gray-800 tracking-tight">
-                            {activeTab === 'beranda' && 'Instruksi Misi'}
-                            {activeTab === 'misi' && 'Manajemen Misi'} 
+                            {activeTab === 'beranda' && 'Instruksi Pengembangan Karakter'}
+                            {activeTab === 'karakter' && 'Pengembangan Karakter'} 
                             {activeTab === 'riwayat' && 'Riwayat Aktivitas'}
                         </h2>
                         <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-[0.2em]">Panel Kontributor</p>
@@ -159,7 +164,7 @@ const ContributorDashboard: React.FC = () => {
                                     </div>
                                     <h1 className="text-3xl font-black mb-4 leading-tight tracking-tighter">Halo, <span className="text-yellow-300 italic">{user.fullName}</span></h1>
                                     <p className="text-rose-100 text-lg font-medium max-w-2xl opacity-90">
-                                        Peran Anda sangat penting. Anda bisa menilai sikap siswa secara langsung atau membuat target misi terjadwal.
+                                        Peran Anda sangat penting. Anda bisa menilai sikap siswa secara langsung atau membuat target karakter terjadwal.
                                     </p>
                                 </div>
                                 <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-10 -translate-y-10">
@@ -186,7 +191,7 @@ const ContributorDashboard: React.FC = () => {
                         </div>
                     )}
 
-                    {activeTab === 'misi' && <MissionMainView />}
+                    {activeTab === 'karakter' && <CharacterMainView />}
                     {activeTab === 'riwayat' && <HistoryView />}
                 </main>
             </div>

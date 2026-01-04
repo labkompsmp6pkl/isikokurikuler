@@ -2,7 +2,6 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const API_URL = `${API_BASE_URL}/api/admin`;
-const API_URL2 = `${API_BASE_URL}/api/auth`;
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token');
@@ -58,10 +57,14 @@ const deleteUser = async (id: number) => {
     return response.data;
 };
 
+// --- PERBAIKAN DI SINI ---
+// Ubah API_URL2 menjadi API_URL dan endpoint menjadi '/classes'
+// Agar mendapatkan data lengkap (Wali Kelas & Total Siswa)
 const getClasses = async () => {
-    const response = await axios.get(`${API_URL2}/classes-list`, getAuthHeaders());
+    const response = await axios.get(`${API_URL}/classes`, getAuthHeaders());
     return response.data;
 };
+// -------------------------
 
 const createClass = async (data: any) => {
     const response = await axios.post(`${API_URL}/classes`, data, getAuthHeaders());

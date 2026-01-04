@@ -5,33 +5,49 @@ import bcrypt from 'bcryptjs';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// --- 1. USER MANAGEMENT ---
-
 export const getUsers = async (req: Request, res: Response) => {
     try {
         const { page = 1, limit = 6, role, class_id, search } = req.query;
         const offset = (Number(page) - 1) * Number(limit);
 
-        // MODIFIKASI: Melakukan JOIN ke tabel classes untuk mendapatkan class_name
+        // PERBAIKAN QUERY: 
+        // Menggunakan teknik "CASE WHEN" untuk menentukan sumber nama kelas.
+        // 1. Jika User = 'teacher', ambil nama kelas dari tabel 'classes' dimana teacher_id = user.id (Data Asli Wali Kelas)
+        // 2. Jika User = 'student', ambil nama kelas dari user.class_id biasa.
+        
         let query = `
             SELECT u.*, 
-            c.name as class_name,
+            CASE 
+                WHEN u.role = 'teacher' THEN c_teach.name 
+                ELSE c.name 
+            END as class_name,
+            
+            CASE 
+                WHEN u.role = 'teacher' THEN c_teach.id 
+                ELSE c.id 
+            END as real_class_id,
+
             (SELECT GROUP_CONCAT(s.full_name SEPARATOR ', ') FROM users s WHERE s.parent_id = u.id) as children_names
+            
             FROM users u 
             LEFT JOIN classes c ON u.class_id = c.id
+            LEFT JOIN classes c_teach ON c_teach.teacher_id = u.id
             WHERE 1=1
         `;
+        
         const params: any[] = [];
 
         if (role && role !== 'all') {
             query += ` AND u.role = ?`;
             params.push(role);
         }
-        // MODIFIKASI: Filter berdasarkan class_id (Relasi)
+
+        // Filter Class ID (Sekarang support filter guru berdasarkan kelas yang dia ajar)
         if (class_id && class_id !== 'all') {
-            query += ` AND u.class_id = ?`;
-            params.push(class_id);
+            query += ` AND (u.class_id = ? OR c_teach.id = ?)`;
+            params.push(class_id, class_id);
         }
+
         if (search) {
             query += ` AND (u.full_name LIKE ? OR u.email LIKE ? OR u.nisn LIKE ? OR u.nip LIKE ?)`;
             const searchParam = `%${search}%`;
@@ -43,11 +59,22 @@ export const getUsers = async (req: Request, res: Response) => {
 
         const [users]: any = await pool.query(query, params);
 
-        let countQuery = `SELECT COUNT(*) as total FROM users u WHERE 1=1`;
+        // Query Total Data (Count) juga perlu disesuaikan logic filternya
+        let countQuery = `
+            SELECT COUNT(*) as total 
+            FROM users u 
+            LEFT JOIN classes c_teach ON c_teach.teacher_id = u.id
+            WHERE 1=1
+        `;
         const countParams: any[] = [];
         
         if (role && role !== 'all') { countQuery += ` AND u.role = ?`; countParams.push(role); }
-        if (class_id && class_id !== 'all') { countQuery += ` AND u.class_id = ?`; countParams.push(class_id); }
+        
+        if (class_id && class_id !== 'all') { 
+            countQuery += ` AND (u.class_id = ? OR c_teach.id = ?)`; 
+            countParams.push(class_id, class_id); 
+        }
+        
         if (search) { 
             countQuery += ` AND (u.full_name LIKE ? OR u.email LIKE ? OR u.nisn LIKE ? OR u.nip LIKE ?)`;
             const searchParam = `%${search}%`;
@@ -75,7 +102,6 @@ export const getUsers = async (req: Request, res: Response) => {
 export const getUserById = async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
-        // MODIFIKASI: Mengambil class_id untuk form detail
         const [rows]: any = await pool.query("SELECT * FROM users WHERE id = ?", [id]);
         if (rows.length === 0) return res.status(404).json({ message: "User tidak ditemukan" });
         res.json(rows[0]);
@@ -88,12 +114,25 @@ export const createUser = async (req: Request, res: Response) => {
     const { full_name, email, password, role, nisn, nip, class_id, whatsapp_number } = req.body;
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
-        // MODIFIKASI: Simpan ke kolom class_id
-        await pool.query(
+        
+        // 1. Insert User Baru
+        const [result]: any = await pool.query(
             `INSERT INTO users (full_name, email, password, role, nisn, nip, class_id, whatsapp_number) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [full_name, email, hashedPassword, role, nisn || null, nip || null, class_id || null, whatsapp_number || null]
         );
+
+        const newUserId = result.insertId;
+
+        // 2. AUTO SYNC: Jika Guru dipilih jadi Wali Kelas
+        if (role === 'teacher' && class_id) {
+            // A. Copot jabatan guru lain yang mungkin memegang kelas ini sebelumnya
+            await pool.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND role = 'teacher' AND id != ?", [class_id, newUserId]);
+            
+            // B. Update tabel classes agar menunjuk ke guru baru ini
+            await pool.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [newUserId, class_id]);
+        }
+
         res.status(201).json({ message: "User berhasil dibuat" });
     } catch (error) {
         console.error(error);
@@ -106,7 +145,6 @@ export const updateUser = async (req: Request, res: Response) => {
     const { full_name, email, role, nisn, nip, class_id, whatsapp_number, password } = req.body;
 
     try {
-        // MODIFIKASI: Update kolom class_id
         let query = `
             UPDATE users 
             SET full_name = ?, email = ?, role = ?, nisn = ?, nip = ?, 
@@ -124,6 +162,22 @@ export const updateUser = async (req: Request, res: Response) => {
         params.push(id);
 
         await pool.query(query, params);
+
+        // AUTO SYNC: Logika Jabatan Guru
+        if (role === 'teacher') {
+            if (class_id) {
+                // Jika ditugaskan ke kelas baru:
+                // 1. Copot guru lain dari kelas tersebut
+                await pool.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND role = 'teacher' AND id != ?", [class_id, id]);
+                // 2. Set tabel classes ke guru ini
+                await pool.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [id, class_id]);
+            } else {
+                // Jika jabatan dicopot (class_id kosong):
+                // Hapus nama dia dari tabel classes
+                await pool.query("UPDATE classes SET teacher_id = NULL WHERE teacher_id = ?", [id]);
+            }
+        }
+
         res.json({ message: 'User updated successfully' });
     } catch (error) {
         console.error(error);
@@ -135,6 +189,8 @@ export const deleteUser = async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
         await pool.query("DELETE FROM users WHERE id = ?", [id]);
+        // Clean up classes table if a teacher is deleted
+        await pool.query("UPDATE classes SET teacher_id = NULL WHERE teacher_id = ?", [id]);
         res.json({ message: "User berhasil dihapus" });
     } catch (error) {
         res.status(500).json({ message: "Gagal menghapus user" });
@@ -165,6 +221,7 @@ export const getClasses = async (req: Request, res: Response) => {
 
 export const setupClassDatabase = async (req: Request, res: Response) => {
     try {
+        // A. Pastikan Tabel Ada
         await pool.query(`
             CREATE TABLE IF NOT EXISTS classes (
                 id int(11) NOT NULL AUTO_INCREMENT,
@@ -177,29 +234,40 @@ export const setupClassDatabase = async (req: Request, res: Response) => {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         `);
 
-        // Migrasi Nama Kelas
+        // B. Migrasi Nama Kelas dari string 'class' di users ke tabel classes (jika belum ada)
         await pool.query(`
             INSERT IGNORE INTO classes (name)
             SELECT DISTINCT class FROM users 
             WHERE class IS NOT NULL AND class != ''
         `);
 
-        // Sinkronisasi class_id di tabel users berdasarkan teks kelas lama
+        // C. [SYNC SISWA] Update class_id siswa berdasarkan nama kelas (text) jika class_id masih kosong
         await pool.query(`
             UPDATE users u
             JOIN classes c ON u.class = c.name
             SET u.class_id = c.id
+            WHERE u.class_id IS NULL OR u.class_id = 0
         `);
 
-        // Set Wali Kelas
+        // D. [SYNC GURU 1] Update tabel 'classes' -> isi teacher_id dari data 'users'
+        // (Jika di tabel user dia tersetting sebagai guru kelas X, maka tabel kelas X harus mencatat dia gurunya)
         await pool.query(`
             UPDATE classes c
-            JOIN users u ON u.class = c.name
+            JOIN users u ON u.class_id = c.id
             SET c.teacher_id = u.id
             WHERE u.role = 'teacher'
         `);
 
-        res.json({ message: "Database kelas berhasil disinkronkan!" });
+        // E. [SYNC GURU 2] Update tabel 'users' -> isi class_id dari data 'classes'
+        // (Jika di tabel kelas tercatat Pak Budi gurunya, maka profil Pak Budi harus tersetting class_id tersebut)
+        await pool.query(`
+            UPDATE users u
+            JOIN classes c ON c.teacher_id = u.id
+            SET u.class_id = c.id
+            WHERE u.role = 'teacher' AND (u.class_id IS NULL OR u.class_id = 0)
+        `);
+
+        res.json({ message: "Database berhasil diperbaiki & disinkronkan!" });
     } catch (error) {
         console.error("Setup Error:", error);
         res.status(500).json({ message: "Gagal melakukan setup database." });
@@ -209,7 +277,13 @@ export const setupClassDatabase = async (req: Request, res: Response) => {
 export const createClass = async (req: Request, res: Response) => {
     const { name, teacher_id } = req.body;
     try {
-        await pool.query("INSERT INTO classes (name, teacher_id) VALUES (?, ?)", [name, teacher_id || null]);
+        const [result]: any = await pool.query("INSERT INTO classes (name, teacher_id) VALUES (?, ?)", [name, teacher_id || null]);
+        
+        if (teacher_id) {
+            const newClassId = result.insertId;
+            await pool.query("UPDATE users SET class_id = ? WHERE id = ?", [newClassId, teacher_id]);
+        }
+
         res.status(201).json({ message: "Kelas berhasil dibuat" });
     } catch (error: any) {
         if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ message: "Nama kelas sudah ada" });
@@ -239,11 +313,22 @@ export const updateClass = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, teacher_id } = req.body;
     try {
+        // Ambil guru lama
+        const [oldClass]: any = await pool.query("SELECT teacher_id FROM classes WHERE id = ?", [id]);
+        const oldTeacherId = oldClass[0]?.teacher_id;
+
         await pool.query("UPDATE classes SET name=?, teacher_id=? WHERE id=?", [name, teacher_id || null, id]);
-        if (teacher_id) {
-            // MODIFIKASI: Pastikan class_id guru terupdate saat ditugaskan
-            await pool.query("UPDATE users SET class_id=? WHERE id=?", [id, teacher_id]);
+        
+        // Sync Guru Lama (Hapus class_id)
+        if (oldTeacherId && String(oldTeacherId) !== String(teacher_id)) {
+            await pool.query("UPDATE users SET class_id = NULL WHERE id = ?", [oldTeacherId]);
         }
+
+        // Sync Guru Baru (Set class_id)
+        if (teacher_id) {
+            await pool.query("UPDATE users SET class_id = ? WHERE id = ?", [id, teacher_id]);
+        }
+
         res.json({ message: "Kelas berhasil diperbarui" });
     } catch (error) {
         res.status(500).json({ message: "Gagal update kelas" });
@@ -254,6 +339,7 @@ export const deleteClass = async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
         await pool.query("DELETE FROM classes WHERE id=?", [id]);
+        await pool.query("UPDATE users SET class_id = NULL WHERE class_id = ?", [id]);
         res.json({ message: "Kelas dihapus" });
     } catch (error) {
         res.status(500).json({ message: "Gagal menghapus kelas" });
@@ -273,7 +359,6 @@ export const getClassDetail = async (req: Request, res: Response) => {
 
         const classData = classRows[0];
 
-        // MODIFIKASI: Ambil siswa berdasarkan class_id (FK)
         const [students]: any = await pool.query(`
             SELECT id, full_name, nisn, email 
             FROM users 
@@ -381,16 +466,43 @@ export const generateNationalAnalysis = async (req: Request, res: Response) => {
 
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
+        // PERBAIKAN 1: Pertegas Prompt agar hanya memberikan JSON
         const prompt = `
-            Sebagai Konsultan Pendidikan, analisis data karakter siswa ini:
-            ${JSON.stringify(dataSummary)}
-            Berikan JSON dengan key: strengths, interventions, recommendations. Bahasa Indonesia akademis.
+            Anda adalah API JSON. Tugas Anda menganalisis data karakter siswa.
+            Data: ${JSON.stringify(dataSummary)}
+            
+            Instruksi:
+            1. Analisis kekuatan (strengths), area perlu intervensi (interventions), dan rekomendasi program sekolah (recommendations).
+            2. Gunakan Bahasa Indonesia yang formal dan akademis.
+            3. HANYA KEMBALIKAN JSON RAW. JANGAN gunakan markdown formatting (seperti \`\`\`json). JANGAN ada kata pengantar.
+            
+            Format Output JSON Wajib:
+            {
+                "strengths": ["poin 1", "poin 2"],
+                "interventions": ["poin 1", "poin 2"],
+                "recommendations": ["poin 1", "poin 2"]
+            }
         `;
 
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();
-        const cleanJson = responseText.replace(/```json|```/g, '').trim();
-        res.json(JSON.parse(cleanJson));
+
+        // PERBAIKAN 2: Logika Ekstraksi JSON yang Lebih Kuat
+        // Mencari kurung kurawal pertama '{' dan terakhir '}' untuk membuang teks sampah
+        const firstJsonChar = responseText.indexOf('{');
+        const lastJsonChar = responseText.lastIndexOf('}');
+
+        if (firstJsonChar !== -1 && lastJsonChar !== -1) {
+            const cleanJson = responseText.substring(firstJsonChar, lastJsonChar + 1);
+            res.json(JSON.parse(cleanJson));
+        } else {
+            // Fallback jika AI benar-benar gagal memberikan JSON
+            console.error("AI Response invalid:", responseText);
+            res.status(500).json({ 
+                message: 'Gagal memparsing respon AI.', 
+                raw: responseText 
+            });
+        }
 
     } catch (error) {
         console.error("AI Analysis Error:", error);

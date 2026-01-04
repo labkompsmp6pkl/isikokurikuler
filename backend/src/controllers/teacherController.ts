@@ -39,8 +39,12 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
                 s.id, 
                 s.full_name, 
                 s.nisn, 
-                p.full_name AS parent_name
+                p.full_name AS parent_name,
+                c.name as class_name,
+                t.full_name as teacher_name
              FROM users s
+             LEFT JOIN classes c ON s.class_id = c.id
+             LEFT JOIN users t ON c.teacher_id = t.id
              LEFT JOIN users p ON s.parent_id = p.id
              WHERE s.class_id = ? AND s.role = 'student' 
              ORDER BY s.full_name ASC`,

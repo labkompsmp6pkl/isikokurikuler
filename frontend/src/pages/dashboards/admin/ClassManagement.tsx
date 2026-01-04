@@ -13,10 +13,14 @@ const ClassManagement: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [dbError, setDbError] = useState(false);
 
-    // Filter & Pagination
+    // Filter & Pagination (Untuk Daftar Kelas)
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 6;
+
+    // Pagination (Untuk Detail Siswa di Modal) -- BARU
+    const [studentPage, setStudentPage] = useState(1);
+    const studentsPerPage = 5; // Menampilkan 5 siswa per halaman di modal
 
     // Modals
     const [showModal, setShowModal] = useState(false);
@@ -34,14 +38,33 @@ const ClassManagement: React.FC = () => {
         setLoading(true);
         setDbError(false);
         try {
-            const [classesData, teachersData] = await Promise.all([
+            const [classesResponse, teachersResponse] = await Promise.all([
                 adminService.getClasses(),
                 adminService.getTeachersList()
             ]);
-            setClasses(classesData);
-            setTeachers(teachersData);
+
+            // Validasi Format Array
+            let validClasses = [];
+            if (Array.isArray(classesResponse)) {
+                validClasses = classesResponse;
+            } else if (classesResponse && Array.isArray(classesResponse.data)) {
+                validClasses = classesResponse.data;
+            }
+            setClasses(validClasses);
+
+            let validTeachers = [];
+            if (Array.isArray(teachersResponse)) {
+                validTeachers = teachersResponse;
+            } else if (teachersResponse && Array.isArray(teachersResponse.data)) {
+                validTeachers = teachersResponse.data;
+            }
+            setTeachers(validTeachers);
+
         } catch (error: any) {
-            console.error(error);
+            console.error("Error fetching data:", error);
+            setClasses([]); 
+            setTeachers([]);
+            
             if (error.response?.data?.code === 'NO_TABLE') {
                 setDbError(true);
             }
@@ -52,9 +75,11 @@ const ClassManagement: React.FC = () => {
 
     useEffect(() => { fetchData(); }, []);
 
-    // --- LOGIC: PAGINATION & FILTER ---
-    const filteredClasses = classes.filter(cls => 
-        cls.name.toLowerCase().includes(searchTerm.toLowerCase())
+    // --- LOGIC: PAGINATION & FILTER (DAFTAR KELAS) ---
+    const safeClasses = Array.isArray(classes) ? classes : [];
+    
+    const filteredClasses = safeClasses.filter(cls => 
+        cls?.name?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const totalPages = Math.ceil(filteredClasses.length / itemsPerPage);
@@ -64,15 +89,22 @@ const ClassManagement: React.FC = () => {
 
     useEffect(() => { setCurrentPage(1); }, [searchTerm]);
 
-    const getAvailableTeachers = () => {
-        const assignedTeacherIds = classes
-            .map(c => c.teacher_id)
-            .filter(id => id !== null && id !== undefined);
+    // --- LOGIC: PAGINATION SISWA (DI DALAM MODAL) -- BARU ---
+    const safeStudents = selectedClass && Array.isArray(selectedClass.students) ? selectedClass.students : [];
+    const totalStudentPages = Math.ceil(safeStudents.length / studentsPerPage);
+    const indexOfLastStudent = studentPage * studentsPerPage;
+    const indexOfFirstStudent = indexOfLastStudent - studentsPerPage;
+    const currentStudents = safeStudents.slice(indexOfFirstStudent, indexOfLastStudent);
 
-        return teachers.filter(t => {
-            if (isEdit && t.id === formData.teacher_id) return true;
+    const getAvailableTeachers = () => {
+        const assignedTeacherIds = Array.isArray(classes) 
+            ? classes.map(c => c.teacher_id).filter(id => id !== null && id !== undefined)
+            : [];
+
+        return Array.isArray(teachers) ? teachers.filter(t => {
+            if (isEdit && String(t.id) === String(formData.teacher_id)) return true;
             return !assignedTeacherIds.includes(t.id);
-        });
+        }) : [];
     };
 
     // --- HANDLERS ---
@@ -241,9 +273,15 @@ const ClassManagement: React.FC = () => {
 
                                 <button 
                                     onClick={async () => { 
-                                        const data = await adminService.getClassDetail(cls.id); 
-                                        setSelectedClass(data); 
-                                        setShowDetailModal(true); 
+                                        try {
+                                            const detailResponse = await adminService.getClassDetail(cls.id); 
+                                            const classData = detailResponse.data || detailResponse;
+                                            setSelectedClass(classData); 
+                                            setStudentPage(1); // Reset halaman ke 1 saat buka modal baru
+                                            setShowDetailModal(true);
+                                        } catch (e) {
+                                            Swal.fire("Error", "Gagal memuat detail kelas", "error");
+                                        }
                                     }} 
                                     className="w-full py-2.5 bg-indigo-50 text-indigo-600 font-bold rounded-xl text-sm hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-2"
                                 >
@@ -253,7 +291,7 @@ const ClassManagement: React.FC = () => {
                         ))}
                     </div>
 
-                    {/* PAGINATION */}
+                    {/* PAGINATION UTAMA (DAFTAR KELAS) */}
                     {totalPages > 1 && (
                         <div className="mt-10 flex justify-center items-center gap-4">
                             <button 
@@ -347,7 +385,7 @@ const ClassManagement: React.FC = () => {
                 </div>
             )}
 
-            {/* MODAL DETAIL SISWA */}
+            {/* MODAL DETAIL SISWA (DENGAN PAGINATION) */}
             {showDetailModal && selectedClass && (
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
@@ -360,16 +398,18 @@ const ClassManagement: React.FC = () => {
                         </div>
                         
                         <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
-                            {selectedClass.students.length === 0 ? (
+                            {(!selectedClass.students || selectedClass.students.length === 0) ? (
                                 <div className="text-center py-10">
                                     <p className="text-slate-400 italic">Belum ada siswa di kelas ini.</p>
                                 </div>
                             ) : (
                                 <div className="space-y-3">
-                                    {selectedClass.students.map((s: any, idx: number) => (
+                                    {/* Render siswa sesuai halaman pagination */}
+                                    {currentStudents.map((s: any, idx: number) => (
                                         <div key={s.id} className="flex items-center gap-4 p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-white hover:border-indigo-100 hover:shadow-sm transition-all">
                                             <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm">
-                                                {idx + 1}
+                                                {/* Hitung index absolut */}
+                                                {(studentPage - 1) * studentsPerPage + idx + 1}
                                             </div>
                                             <div>
                                                 <p className="font-bold text-slate-800">{s.full_name}</p>
@@ -384,6 +424,29 @@ const ClassManagement: React.FC = () => {
                                 </div>
                             )}
                         </div>
+
+                        {/* Pagination Controls untuk Modal */}
+                        {totalStudentPages > 1 && (
+                            <div className="p-4 border-t border-slate-100 flex justify-center items-center gap-3">
+                                <button 
+                                    disabled={studentPage === 1}
+                                    onClick={() => setStudentPage(prev => prev - 1)}
+                                    className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-transparent text-slate-600"
+                                >
+                                    <ChevronLeft size={18}/>
+                                </button>
+                                <span className="text-sm font-medium text-slate-600">
+                                    Hal <span className="font-bold text-indigo-600">{studentPage}</span> / {totalStudentPages}
+                                </span>
+                                <button 
+                                    disabled={studentPage === totalStudentPages}
+                                    onClick={() => setStudentPage(prev => prev + 1)}
+                                    className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-transparent text-slate-600"
+                                >
+                                    <ChevronRight size={18}/>
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

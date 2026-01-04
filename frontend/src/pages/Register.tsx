@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 // ==========================================
-// 1. KOMPONEN UI PENDUKUNG (Styled for Consistency)
+// KOMPONEN UI PENDUKUNG
 // ==========================================
 
 type InputFieldProps = {
@@ -55,20 +55,22 @@ const InputField: React.FC<InputFieldProps> = ({
   </div>
 );
 
+// UPDATE: Tambahkan disabled & className di tipe options
 type SelectFieldProps = {
   name: string;
   value: string | number;
-  options: {value: string | number, label: string}[];
+  options: {value: string | number, label: string, disabled?: boolean, className?: string}[];
   placeholder: string;
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   required?: boolean;
   icon?: React.ReactNode;
+  disabled?: boolean;
 };
 
 const SelectField: React.FC<SelectFieldProps> = ({ 
-  name, value, options, placeholder, onChange, required = true, icon 
+  name, value, options, placeholder, onChange, required = true, icon, disabled = false
 }) => (
-  <div className="relative group">
+  <div className={`relative group ${disabled ? 'opacity-50' : ''}`}>
     <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-400 group-focus-within:text-violet-600 transition-colors">
       {icon}
     </div>
@@ -77,10 +79,21 @@ const SelectField: React.FC<SelectFieldProps> = ({
       value={value}
       required={required}
       onChange={onChange}
-      className={`appearance-none block w-full pl-16 pr-12 py-5 border-2 border-transparent bg-slate-50 hover:border-violet-100 focus:border-violet-500 rounded-[2rem] focus:outline-none focus:bg-white transition-all font-bold text-sm cursor-pointer shadow-inner focus:shadow-violet-100/50 ${!value ? 'text-slate-400' : 'text-slate-900'}`}
+      disabled={disabled}
+      className={`appearance-none block w-full pl-16 pr-12 py-5 border-2 border-transparent bg-slate-50 hover:border-violet-100 focus:border-violet-500 rounded-[2rem] focus:outline-none focus:bg-white transition-all font-bold text-sm shadow-inner focus:shadow-violet-100/50 ${!value ? 'text-slate-400' : 'text-slate-900'} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
     >
       <option value="" disabled>{placeholder}</option>
-      {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+      {/* UPDATE: Render option dengan logic disabled */}
+      {options.map(opt => (
+        <option 
+            key={opt.value} 
+            value={opt.value} 
+            disabled={opt.disabled}
+            className={opt.className || ''}
+        >
+            {opt.label}
+        </option>
+      ))}
     </select>
     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-6 text-slate-400 group-focus-within:text-violet-600">
       <ChevronDown size={20} />
@@ -89,18 +102,16 @@ const SelectField: React.FC<SelectFieldProps> = ({
 );
 
 // ==========================================
-// 2. MAIN COMPONENT
+// KOMPONEN UTAMA
 // ==========================================
 
 const Register: React.FC = () => {
   const { register: authRegister } = useAuth(); 
   const navigate = useNavigate();
 
-  // Role tetap menggunakan nilai Inggris untuk logika internal/backend
   const [selectedRole, setSelectedRole] = useState<'student' | 'teacher' | 'contributor' | 'parent'>('student');
   const [classList, setClassList] = useState<any[]>([]);
   
-  // Mapping untuk Label Tampilan (Bahasa Indonesia)
   const roleOptions = [
     { id: 'student', label: 'Siswa', icon: <GraduationCap size={24}/> },
     { id: 'teacher', label: 'Guru', icon: <ShieldCheck size={24}/> },
@@ -128,9 +139,12 @@ const Register: React.FC = () => {
       try {
         const response = await authApi.get('/auth/classes-list');
         const data = response.data.data || response.data;
-        if (Array.isArray(data)) setClassList(data);
+        if (Array.isArray(data)) {
+          // FIX: Jangan filter kapasitas di sini agar Guru bisa melihat semua kelas
+          setClassList(data);
+        }
       } catch (err) {
-        console.error("Gagal load kelas:", err);
+        console.error("Gagal memuat daftar kelas:", err);
       } finally {
         setIsClassLoading(false);
       }
@@ -138,8 +152,14 @@ const Register: React.FC = () => {
     fetchClasses();
   }, []);
 
-  const mappedClassOptions = useMemo(() => {
-    return classList.map(c => ({ value: c.id, label: `Kelas ${c.name}` }));
+  // FIX: Filter kapasitas dipindah ke sini (khusus untuk Dropdown Siswa)
+  const studentClassOptions = useMemo(() => {
+    return classList
+      .filter(c => (c.kapasitas || 0) > (c.terisi || 0)) // Filter hanya untuk siswa
+      .map(c => ({ 
+        value: c.id, 
+        label: `Kelas ${c.name} (Sisa ${c.kapasitas - c.terisi})` 
+      }));
   }, [classList]);
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -172,7 +192,7 @@ const Register: React.FC = () => {
       const generatedEmail = `${namePrefix}${randomSuffix}@isokurikuler.id`;
 
       const registrationData = {
-        role: selectedRole, // Kirim role (student/teacher/dll) ke backend
+        role: selectedRole,
         fullName: formData.fullName.trim(),
         email: generatedEmail,
         password: formData.password,
@@ -185,7 +205,7 @@ const Register: React.FC = () => {
       const response = await authRegister(registrationData);
       
       toast.dismiss(loadingToast);
-      toast.success('Pendaftaran Berhasil!', { icon: '🎉', style: { borderRadius: '20px', fontWeight: 'bold' } });
+      toast.success('Pendaftaran Berhasil!', { icon: '🎉' });
       
       if (response.user) {
         const target = response.user.role === 'student' ? '/student/beranda' : `/${response.user.role}/dashboard`;
@@ -198,7 +218,7 @@ const Register: React.FC = () => {
       toast.dismiss(loadingToast);
       const msg = err.response?.data?.message || 'Gagal mendaftar. Data mungkin sudah ada.';
       setError(msg);
-      toast.error("Registrasi Gagal", { style: { borderRadius: '20px', fontWeight: 'bold' } });
+      toast.error("Registrasi Gagal");
       setLoading(false);
     }
   };
@@ -226,10 +246,11 @@ const Register: React.FC = () => {
             <SelectField 
               name="classId" 
               value={formData.classId} 
-              options={mappedClassOptions} 
-              placeholder={isClassLoading ? "Memuat kelas..." : "Pilih Kelas"} 
+              options={studentClassOptions} 
+              placeholder={isClassLoading ? "Memuat kelas..." : (studentClassOptions.length > 0 ? "Pilih Kelas" : "Semua kelas sudah penuh")}
               onChange={handleFormChange}
               icon={<GraduationCap size={22}/>}
+              disabled={isClassLoading || studentClassOptions.length === 0}
             />
           </>
         )}
@@ -243,10 +264,20 @@ const Register: React.FC = () => {
               onChange={handleFormChange}
               icon={<ShieldCheck size={22}/>}
             />
+            {/* FIX: SelectField Khusus Guru dengan Logic Disable */}
             <SelectField 
               name="classId" 
               value={formData.classId} 
-              options={mappedClassOptions} 
+              options={classList.map(c => {
+                  // Cek apakah kelas sudah punya wali kelas
+                  const isTaken = c.teacher_id && c.teacher_id !== 0;
+                  return {
+                      value: c.id,
+                      label: `Kelas ${c.name}` + (isTaken ? ` (Sudah ada: ${c.teacher_name})` : ''),
+                      disabled: isTaken, // Disable jika sudah ada
+                      className: isTaken ? 'text-slate-400 bg-slate-100 italic' : '' // Styling khusus
+                  };
+              })}
               placeholder="Wali Kelas (Opsional)" 
               required={false}
               onChange={handleFormChange}
@@ -281,13 +312,11 @@ const Register: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6 selection:bg-violet-100 selection:text-violet-900 font-sans relative overflow-hidden">
       
-      {/* Background Decor */}
       <div className="fixed top-[-10%] right-[-5%] w-[40%] h-[40%] bg-violet-100/50 rounded-full blur-[100px] pointer-events-none"></div>
       <div className="fixed bottom-[-10%] left-[-5%] w-[40%] h-[40%] bg-fuchsia-100/50 rounded-full blur-[100px] pointer-events-none"></div>
 
       <div className="w-full max-w-2xl bg-white/80 backdrop-blur-xl p-10 md:p-14 rounded-[4rem] shadow-2xl shadow-slate-200/50 border border-white/60 relative z-10 my-10">
         
-        {/* HEADER */}
         <div className="text-center mb-10">
           <div className="inline-flex p-4 bg-gradient-to-tr from-violet-50 to-white rounded-[2.5rem] mb-6 shadow-sm ring-4 ring-white">
             <img src="/logo-smpn6.png" alt="Logo SMPN 6" className="w-16 h-16 object-contain" />
@@ -296,7 +325,6 @@ const Register: React.FC = () => {
           <p className="text-slate-500 font-bold">Bergabung bersama komunitas belajar <span className="text-violet-600">SMPN 6 Pekalongan</span>.</p>
         </div>
 
-        {/* GOOGLE REGISTER */}
         <div className="mb-12">
           <a 
             href={`${API_HOST}/api/auth/google`} 
@@ -309,7 +337,6 @@ const Register: React.FC = () => {
             />
             <span className="font-bold text-slate-700 text-base">Daftar Cepat dengan Google</span>
           </a>
-
           <div className="relative flex items-center justify-center mt-10">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t-2 border-slate-100 rounded-full"></div>
@@ -320,10 +347,8 @@ const Register: React.FC = () => {
           </div>
         </div>
 
-        {/* FORM REGISTER */}
         <form onSubmit={handleRegister} className="space-y-10">
           
-          {/* Role Selector Grid */}
           <div className="space-y-4">
             <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-4 flex items-center gap-2">
               <UserPlus size={14} className="text-violet-500"/> Pilih Peran Anda
@@ -352,7 +377,6 @@ const Register: React.FC = () => {
             </div>
           </div>
 
-          {/* Dynamic Fields */}
           <div className="space-y-4">
             {renderRoleSpecificFields()}
             
@@ -376,7 +400,6 @@ const Register: React.FC = () => {
             />
           </div>
 
-          {/* Error Message */}
           {error && (
             <div className="bg-rose-50 text-rose-600 text-xs font-bold p-5 rounded-[2rem] flex items-center gap-3 border border-rose-100 animate-shake">
               <AlertCircle size={20} className="shrink-0" />
@@ -384,7 +407,6 @@ const Register: React.FC = () => {
             </div>
           )}
 
-          {/* Submit Button */}
           <button 
             type="submit" 
             disabled={loading} 
@@ -405,7 +427,6 @@ const Register: React.FC = () => {
             )}
           </button>
 
-          {/* Footer Link */}
           <div className="text-center">
             <p className="text-sm font-bold text-slate-500">
               Sudah punya akun?{' '}

@@ -115,6 +115,7 @@ const ContributorDashboard: React.FC = () => {
 
             {/* MAIN CONTENT WRAPPER */}
             {/* Menggunakan min-w-0 flex flex-col agar scroll body bekerja */}
+             {/* SIDEBAR (Desktop Sticky, Mobile Drawer) */}
             <div className="flex-1 flex flex-col min-w-0">
                 
                 {/* HEADER MOBILE (STICKY) */}

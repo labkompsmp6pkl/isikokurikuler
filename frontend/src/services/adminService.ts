@@ -101,6 +101,16 @@ const setupClassDatabase = async () => {
     return response.data;
 };
 
+const addStudentsToClass = async (classId: number, studentIds: number[]) => {
+    const response = await axios.post(`${API_URL}/classes/${classId}/add-students`, { studentIds }, getAuthHeaders());
+    return response.data;
+};
+
+const removeStudentsFromClass = async (classId: number, studentIds: number[]) => {
+    const response = await axios.post(`${API_URL}/classes/${classId}/remove-students`, { studentIds }, getAuthHeaders());
+    return response.data;
+};
+
 const adminService = {
     getDashboardStats,
     generateAIAnalysis,
@@ -116,7 +126,9 @@ const adminService = {
     deleteClass,
     getClassDetail,
     setupClassDatabase,
-    getTeachersList
+    getTeachersList,
+    addStudentsToClass,
+    removeStudentsFromClass
 };
 
 export default adminService;

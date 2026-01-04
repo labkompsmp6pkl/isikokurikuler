@@ -1,10 +1,12 @@
-import { Router, RequestHandler } from 'express'; // 1. Pastikan import RequestHandler
+import { Router, RequestHandler } from 'express';
 import { authMiddleware, roleMiddleware } from '../middleware/authMiddleware'; 
 import { 
     getAdminDashboardStats, generateNationalAnalysis,
     getUsers, getUserById, createUser, updateUser, deleteUser,
     getClasses, createClass, generateClasses, updateClass, deleteClass, getClassDetail, getTeachersList,
-    setupClassDatabase
+    setupClassDatabase,
+    addStudentsToClass,      // <-- IMPORT BARU
+    removeStudentsFromClass  // <-- IMPORT BARU
 } from '../controllers/adminController';
 
 const router = Router();
@@ -12,7 +14,6 @@ const router = Router();
 // ==================================================================
 // 1. GLOBAL AUTH (Semua route di file ini butuh login)
 // ==================================================================
-// FIX: Tambahkan 'as RequestHandler' untuk mengatasi error TS2769
 router.use(authMiddleware as RequestHandler);
 
 // ==================================================================
@@ -25,7 +26,6 @@ router.get('/teachers-list', getTeachersList as RequestHandler);
 // ==================================================================
 // 3. ADMIN ONLY ROUTES (Gerbang Khusus Admin)
 // ==================================================================
-// FIX: Tambahkan 'as RequestHandler' di sini juga
 router.use(roleMiddleware(['admin']) as RequestHandler);
 
 // --- Dashboard & Stats ---
@@ -47,5 +47,8 @@ router.put('/classes/:id', updateClass as RequestHandler);
 router.delete('/classes/:id', deleteClass as RequestHandler);
 router.get('/classes/:id', getClassDetail as RequestHandler);
 
+// --- NEW: Bulk Student Management (Tambah/Hapus Siswa Massal) ---
+router.post('/classes/:classId/add-students', addStudentsToClass as RequestHandler);
+router.post('/classes/:classId/remove-students', removeStudentsFromClass as RequestHandler);
 
 export default router;

@@ -42,10 +42,14 @@ export const getUsers = async (req: Request, res: Response) => {
             params.push(role);
         }
 
-        // Filter Class ID (Sekarang support filter guru berdasarkan kelas yang dia ajar)
         if (class_id && class_id !== 'all') {
-            query += ` AND (u.class_id = ? OR c_teach.id = ?)`;
-            params.push(class_id, class_id);
+            if (class_id === 'none') {
+                // Filter khusus untuk mengambil siswa yang BELUM punya kelas
+                query += ` AND (u.class_id IS NULL OR u.class_id = 0)`;
+            } else {
+                query += ` AND (u.class_id = ? OR c_teach.id = ?)`;
+                params.push(class_id, class_id);
+            }
         }
 
         if (search) {
@@ -71,8 +75,12 @@ export const getUsers = async (req: Request, res: Response) => {
         if (role && role !== 'all') { countQuery += ` AND u.role = ?`; countParams.push(role); }
         
         if (class_id && class_id !== 'all') { 
-            countQuery += ` AND (u.class_id = ? OR c_teach.id = ?)`; 
-            countParams.push(class_id, class_id); 
+            if (class_id === 'none') {
+                countQuery += ` AND (u.class_id IS NULL OR u.class_id = 0)`;
+            } else {
+                countQuery += ` AND (u.class_id = ? OR c_teach.id = ?)`; 
+                countParams.push(class_id, class_id); 
+            }
         }
         
         if (search) { 
@@ -507,5 +515,49 @@ export const generateNationalAnalysis = async (req: Request, res: Response) => {
     } catch (error) {
         console.error("AI Analysis Error:", error);
         res.status(500).json({ message: 'Gagal melakukan analisis AI.' });
+    }
+};
+
+export const addStudentsToClass = async (req: Request, res: Response) => {
+    const { classId } = req.params;
+    const { studentIds } = req.body; // Array ID Siswa: [1, 2, 5]
+
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+        return res.status(400).json({ message: "Tidak ada siswa yang dipilih." });
+    }
+
+    try {
+        // Update massal class_id user
+        const placeholders = studentIds.map(() => '?').join(',');
+        await pool.query(
+            `UPDATE users SET class_id = ? WHERE id IN (${placeholders})`,
+            [classId, ...studentIds]
+        );
+        res.json({ message: `${studentIds.length} siswa berhasil ditambahkan.` });
+    } catch (error) {
+        console.error("Add Students Error:", error);
+        res.status(500).json({ message: "Gagal menambahkan siswa." });
+    }
+};
+
+export const removeStudentsFromClass = async (req: Request, res: Response) => {
+    const { classId } = req.params;
+    const { studentIds } = req.body;
+
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+        return res.status(400).json({ message: "Tidak ada siswa yang dipilih." });
+    }
+
+    try {
+        const placeholders = studentIds.map(() => '?').join(',');
+        // Set class_id jadi NULL
+        await pool.query(
+            `UPDATE users SET class_id = NULL WHERE class_id = ? AND id IN (${placeholders})`,
+            [classId, ...studentIds]
+        );
+        res.json({ message: `${studentIds.length} siswa berhasil dikeluarkan.` });
+    } catch (error) {
+        console.error("Remove Students Error:", error);
+        res.status(500).json({ message: "Gagal mengeluarkan siswa." });
     }
 };

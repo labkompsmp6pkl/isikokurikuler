@@ -28,8 +28,31 @@ const CharacterScheduleView: React.FC = () => {
         const fetchClasses = async () => {
             try {
                 const res = await authApi.get('/auth/classes-list');
-                setClasses(res.data || []);
-            } catch (err) { console.error(err); }
+                
+                // --- PERBAIKAN DI SINI ---
+                // Kita cek dua kemungkinan:
+                // 1. res.data langsung array (Format backend A)
+                // 2. res.data.data adalah array (Format backend B - yang terjadi di kasus Anda)
+                let receivedData = [];
+
+                if (Array.isArray(res.data)) {
+                    receivedData = res.data;
+                } else if (res.data && Array.isArray(res.data.data)) {
+                    receivedData = res.data.data;
+                }
+
+                if (Array.isArray(receivedData)) {
+                    setClasses(receivedData);
+                } else {
+                    console.error("API Error: Data format not recognized", res.data);
+                    setClasses([]); 
+                }
+                // -------------------------
+
+            } catch (err) { 
+                console.error("Failed to fetch classes:", err); 
+                setClasses([]); 
+            }
         };
         fetchClasses();
     }, []);
@@ -115,11 +138,12 @@ const CharacterScheduleView: React.FC = () => {
                         <div className="relative">
                             <select value={targetClass} onChange={(e) => setTargetClass(e.target.value)} className="w-full px-5 py-4 border-2 border-rose-100 bg-white rounded-2xl font-bold text-gray-700 outline-none focus:border-rose-500 cursor-pointer">
                                 <option value="">-- Seluruh Kelas --</option>
-                                {classes.map((cls) => 
+                                {/* Rendering yang aman */}
+                                {Array.isArray(classes) && classes.map((cls) => (
                                     <option key={cls.id} value={cls.id}>
-                                        {cls.name} ({cls.student_count} siswa)
+                                        {cls.name} {cls.student_count ? `(${cls.student_count} siswa)` : ''}
                                     </option>
-                                )}
+                                ))}
                             </select>
                             <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
                         </div>

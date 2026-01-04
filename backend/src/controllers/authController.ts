@@ -5,19 +5,26 @@ import jwt from 'jsonwebtoken';
 import { UserPayload } from '../middleware/authMiddleware';
 
 // ================================================
-// Fungsi Baru: Mengambil Daftar Kelas dengan Kapasitas
+// Fungsi Baru: Mengambil Daftar Kelas dengan Info Wali Kelas
 // ================================================
 export const getClasses: RequestHandler = async (req, res) => {
   try {
-    const query = 'SELECT id, name, kapasitas, terisi FROM classes ORDER BY name ASC';
+    // PERBAIKAN: Join ke tabel users untuk ambil nama wali kelas (teacher_name)
+    const query = `
+      SELECT c.id, c.name, c.kapasitas, c.terisi, c.teacher_id, u.full_name as teacher_name 
+      FROM classes c 
+      LEFT JOIN users u ON c.teacher_id = u.id 
+      ORDER BY c.name ASC
+    `;
     const [rows] = await pool.query(query);
+    
+    // Kembalikan dalam format { data: [...] } sesuai ekspektasi frontend
     res.json({ data: rows });
   } catch (error) {
     console.error("Gagal mengambil data kelas:", error);
     res.status(500).json({ message: "Gagal mengambil data kelas" });
   }
 };
-
 
 // --- 1. LOGIN (MANUAL & PHONE) ---
 export const login = async (req: Request, res: Response) => {
@@ -113,7 +120,19 @@ export const register = async (req: Request, res: Response) => {
 
     } else if (role === 'teacher') {
       if (!nip) throw new Error("NIP wajib diisi.");
+      
+      // LOGIC: Jika guru memilih kelas (classId ada), cek apakah kelas itu sudah punya wali kelas?
+      // (Opsional: tambahkan validasi di backend jika ingin lebih ketat)
+      
       await connection.query('UPDATE users SET nip = ?, class_id = ? WHERE id = ?', [nip, classId || null, newUserId]);
+
+      // Jika guru ini menjadi wali kelas (ada classId), update juga tabel classes
+      if (classId) {
+         // Reset wali kelas lama (jika ada logic replace) atau reject (jika strict)
+         // Disini kita pakai logic replace (menggantikan wali kelas lama) sesuai permintaan sebelumnya
+         await connection.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND role = 'teacher' AND id != ?", [classId, newUserId]);
+         await connection.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [newUserId, classId]);
+      }
 
     } else if (role === 'parent') {
       if (!whatsappNumber) throw new Error("Nomor WhatsApp wajib diisi.");
@@ -216,8 +235,16 @@ export const completeGoogleRegistration = async (req: Request, res: Response) =>
       const [checkNisn]: any = await connection.query('SELECT id FROM users WHERE nisn = ?', [nisn]);
       if (checkNisn.length > 0) throw new Error("NISN sudah terdaftar.");
       await connection.query('UPDATE users SET nisn = ?, class_id = ? WHERE id = ?', [nisn.trim(), classId, newUserId]);
+    
     } else if (role === 'teacher') {
       await connection.query('UPDATE users SET nip = ?, class_id = ? WHERE id = ?', [nip.trim(), classId || null, newUserId]);
+      
+      // Update tabel classes jika teacher memilih kelas (Logic override wali kelas)
+      if (classId) {
+         await connection.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND role = 'teacher' AND id != ?", [classId, newUserId]);
+         await connection.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [newUserId, classId]);
+      }
+
     } else if (role === 'parent') {
       const cleanPhone = phoneNumber.replace(/\D/g, '');
       await connection.query('UPDATE users SET whatsapp_number = ? WHERE id = ?', [cleanPhone, newUserId]);

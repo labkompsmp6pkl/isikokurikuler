@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Search, Plus, Trash2, ChevronLeft, ChevronRight, 
-    GraduationCap, Briefcase,
+    GraduationCap, Briefcase, 
     Mail, Hash, Phone, BookOpen, Edit, Sparkles, Save, ArrowLeft, User, Key
 } from 'lucide-react';
 import Swal from 'sweetalert2';
@@ -10,7 +10,7 @@ import adminService from '../../../services/adminService';
 // --- TIPE DATA ---
 interface UserFormState {
     full_name: string;
-    email: string; // Masih ada di state, tapi diisi otomatis
+    email: string;
     role: string;
     class_id: string | number;
     nisn?: string;
@@ -53,10 +53,22 @@ const UserManagement: React.FC = () => {
     useEffect(() => {
         const initData = async () => {
             try {
-                const classes = await adminService.getClasses();
-                setAvailableClasses(classes);
+                // Mengambil data kelas lengkap (termasuk info wali kelas)
+                const response = await adminService.getClasses();
+                
+                let classesData = [];
+                if (Array.isArray(response)) {
+                    classesData = response;
+                } else if (response && Array.isArray(response.data)) {
+                    classesData = response.data;
+                }
+                setAvailableClasses(classesData);
+
                 fetchUsers(1);
-            } catch (error) { console.error(error); }
+            } catch (error) { 
+                console.error("Init Error:", error);
+                setAvailableClasses([]); 
+            }
         };
         initData();
     }, []);
@@ -70,7 +82,7 @@ const UserManagement: React.FC = () => {
     const fetchUsers = async (page = 1) => {
         setLoading(true);
         try {
-            const res = await adminService.getUsers({ ...filters, page });
+            const res = await adminService.getUsers({ ...filters, page }); //
             setUsers(res.data);
             setMeta(res.meta);
         } catch (error) { console.error(error); } finally { setLoading(false); }
@@ -89,7 +101,8 @@ const UserManagement: React.FC = () => {
             full_name: user.full_name,
             email: user.email,
             role: user.role,
-            class_id: user.class_id || '',
+            // Prioritaskan real_class_id jika ada (dari backend logic), fallback ke class_id biasa
+            class_id: user.real_class_id || user.class_id || '',
             nisn: user.nisn || '',
             nip: user.nip || '',
             whatsapp_number: user.whatsapp_number || '',
@@ -104,25 +117,64 @@ const UserManagement: React.FC = () => {
         setViewMode('list');
         setFormData(initialForm);
         fetchUsers(meta.page);
+        // Refresh data kelas agar status wali kelas terbaru terupdate di dropdown
+        adminService.getClasses().then(res => {
+             let data = Array.isArray(res) ? res : (res.data || []);
+             setAvailableClasses(data);
+        });
+    };
+
+    // --- HANDLER KHUSUS PERUBAHAN KELAS (GURU) ---
+    // Logika konfirmasi hanya jalan jika Edit Mode
+    const handleClassChangeForTeacher = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newClassId = e.target.value;
+        
+        if (!newClassId) {
+            setFormData({ ...formData, class_id: '' });
+            return;
+        }
+
+        const selectedClass = availableClasses.find(c => String(c.id) === newClassId);
+        const isTaken = selectedClass?.teacher_id && selectedClass?.teacher_id !== 0;
+
+        // LOGIKA KONFIRMASI (Hanya di Edit Mode)
+        // Di Create Mode, opsi ini sudah didisable di render, jadi logic ini extra safety.
+        if (isEditMode && isTaken) {
+            // Cek apakah wali kelasnya bukan user yang sedang diedit saat ini
+            if (String(selectedClass.teacher_id) !== String(selectedUserId)) {
+                const result = await Swal.fire({
+                    title: 'Wali Kelas Sudah Ada!',
+                    text: `Kelas ${selectedClass.name} sudah dipegang oleh ${selectedClass.teacher_name}. Apakah Anda yakin ingin menimpanya?`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#f59e0b',
+                    confirmButtonText: 'Ya, Ganti',
+                    cancelButtonText: 'Batal'
+                });
+
+                if (!result.isConfirmed) {
+                    return; // Jangan ubah value jika batal
+                }
+            }
+        }
+
+        setFormData({ ...formData, class_id: newClassId });
     };
 
     // --- LOGIKA GENERATE EMAIL OTOMATIS ---
     const generateAutoEmail = (data: UserFormState): string => {
-        // Jika Admin, gunakan input email manual (karena admin tidak punya NISN/NIP di form ini)
         if (data.role === 'admin') return data.email;
 
-        // Logic Auto Generate berdasarkan data yang diberikan
         switch (data.role) {
             case 'teacher':
                 return `${data.nip}@teacher.isokul`;
             case 'student':
-                return `${data.nisn}@student.isokul`; // Atau domain lain sesuai kebutuhan
+                return `${data.nisn}@student.isokul`;
             case 'parent':
                 return `${data.whatsapp_number}@parent.isokul`;
             case 'contributor':
                 return `${data.whatsapp_number}@contributor.isokul`;
             default:
-                // Fallback safe (seharusnya tidak terpanggil jika logic benar)
                 return `${Date.now()}@user.isokul`;
         }
     };
@@ -130,10 +182,7 @@ const UserManagement: React.FC = () => {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            // 1. Generate Email Otomatis
             const autoEmail = generateAutoEmail(formData);
-
-            // 2. Siapkan Payload
             const payload = {
                 ...formData,
                 email: autoEmail,
@@ -141,13 +190,11 @@ const UserManagement: React.FC = () => {
             };
 
             if (isEditMode && selectedUserId) {
-                // PERBAIKAN DI SINI: Tambahkan String()
-                await adminService.updateUser(String(selectedUserId), payload);
-                
-                Swal.fire("Sukses", `Data berhasil diperbarui. Email: ${autoEmail}`, "success");
+                await adminService.updateUser(String(selectedUserId), payload); //
+                Swal.fire("Sukses", `Data diperbarui. Email: ${autoEmail}`, "success");
             } else {
-                await adminService.createUser(payload);
-                Swal.fire("Sukses", `User baru ditambahkan. Email Login: ${autoEmail}`, "success");
+                await adminService.createUser(payload); //
+                Swal.fire("Sukses", `User dibuat. Email: ${autoEmail}`, "success");
             }
             handleBackToList();
         } catch (error: any) {
@@ -162,14 +209,13 @@ const UserManagement: React.FC = () => {
         });
         if (result.isConfirmed) {
             try {
-                await adminService.deleteUser(id);
+                await adminService.deleteUser(id); //
                 Swal.fire('Terhapus!', '', 'success');
                 fetchUsers(meta.page);
             } catch (error) { Swal.fire('Gagal', 'Error sistem', 'error'); }
         }
     };
 
-    // --- HELPER UI ---
     const getRoleBadge = (role: string) => {
         const base = "px-3 py-1 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1.5 border";
         if (role === 'student') return <span className={`${base} bg-blue-50 text-blue-600 border-blue-100`}><GraduationCap size={14}/> Siswa</span>;
@@ -178,9 +224,6 @@ const UserManagement: React.FC = () => {
         return <span className={`${base} bg-gray-50 text-gray-600 border-gray-100`}>{role}</span>;
     };
 
-    // ==========================================
-    // TAMPILAN 1: FORM VIEW
-    // ==========================================
     if (viewMode === 'form') {
         return (
             <div className="animate-fade-in-up space-y-6">
@@ -196,7 +239,6 @@ const UserManagement: React.FC = () => {
 
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 md:p-8 max-w-4xl">
                     <form onSubmit={handleSave} className="space-y-6">
-                        {/* BAGIAN UMUM */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Peran (Role)</label>
@@ -213,7 +255,6 @@ const UserManagement: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* INPUT EMAIL HANYA MUNCUL JIKA ROLE ADMIN */}
                             {formData.role === 'admin' && (
                                 <div className="col-span-1 md:col-span-2 bg-purple-50 p-4 rounded-xl border border-purple-100">
                                     <label className="block text-xs font-bold text-purple-600 uppercase mb-2">Email Admin (Manual)</label>
@@ -233,7 +274,7 @@ const UserManagement: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* BAGIAN INFO EMAIL AUTO-GENERATE PREVIEW (Hanya Info) */}
+                        {/* INFO EMAIL PREVIEW */}
                         {formData.role !== 'admin' && (
                             <div className="bg-slate-100 p-4 rounded-xl border border-slate-200 flex items-center gap-3">
                                 <Mail size={20} className="text-slate-400"/>
@@ -248,14 +289,14 @@ const UserManagement: React.FC = () => {
                             </div>
                         )}
 
-                        {/* BAGIAN KHUSUS (Conditional Rendering) */}
+                        {/* DETAIL ROLE SPESIFIK */}
                         <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100/50 space-y-4">
                             <h3 className="font-bold text-indigo-900 text-sm flex items-center gap-2 mb-4">
                                 <Sparkles size={16}/> Informasi Khusus Role: <span className="uppercase underline">{formData.role}</span>
                             </h3>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* JIKA SISWA */}
+                                {/* FORM SISWA */}
                                 {formData.role === 'student' && (
                                     <>
                                         <div>
@@ -266,13 +307,18 @@ const UserManagement: React.FC = () => {
                                             <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Pilih Kelas</label>
                                             <select required className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" value={formData.class_id} onChange={e => setFormData({...formData, class_id: e.target.value})}>
                                                 <option value="">-- Pilih Kelas --</option>
-                                                {availableClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                {/* Siswa TETAP BISA memilih kelas meskipun ada walinya */}
+                                                {Array.isArray(availableClasses) && availableClasses.map(c => (
+                                                    <option key={c.id} value={c.id}>
+                                                        {c.name} {c.teacher_name ? `(Wali: ${c.teacher_name})` : ''}
+                                                    </option>
+                                                ))}
                                             </select>
                                         </div>
                                     </>
                                 )}
 
-                                {/* JIKA GURU */}
+                                {/* FORM GURU (Wali Kelas Logic) */}
                                 {formData.role === 'teacher' && (
                                     <>
                                         <div>
@@ -281,15 +327,44 @@ const UserManagement: React.FC = () => {
                                         </div>
                                         <div>
                                             <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Wali Kelas Untuk (Opsional)</label>
-                                            <select className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" value={formData.class_id} onChange={e => setFormData({...formData, class_id: e.target.value})}>
+                                            <select 
+                                                className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" 
+                                                value={formData.class_id} 
+                                                onChange={handleClassChangeForTeacher} 
+                                            >
                                                 <option value="">-- Bukan Wali Kelas --</option>
-                                                {availableClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                
+                                                {/* IMPLEMENTASI LOGIC DISABLE / ALERT */}
+                                                {Array.isArray(availableClasses) && availableClasses.map(c => {
+                                                    const isTaken = c.teacher_id && c.teacher_id !== 0;
+                                                    
+                                                    // Jika sedang EDIT, dan guru ini adalah pemilik kelas tersebut, JANGAN anggap taken
+                                                    const isMyClass = isEditMode && selectedUserId && String(c.teacher_id) === String(selectedUserId);
+                                                    
+                                                    // DISABLE hanya jika: Sudah ada wali, BUKAN kelas sendiri, dan SEDANG BUAT BARU (!isEditMode)
+                                                    const isDisabled = !isEditMode && isTaken;
+
+                                                    return (
+                                                        <option 
+                                                            key={c.id} 
+                                                            value={c.id} 
+                                                            disabled={isDisabled}
+                                                            className={isTaken && !isMyClass ? 'text-amber-600 bg-amber-50 italic font-medium' : 'text-slate-800'}
+                                                        >
+                                                            {c.name} {isTaken ? `(Sudah ada: ${c.teacher_name})` : ''}
+                                                        </option>
+                                                    );
+                                                })}
                                             </select>
+                                            <p className="text-[10px] text-slate-400 mt-1 italic">
+                                                {isEditMode 
+                                                    ? "*Anda bisa menimpa wali kelas yang sudah ada (akan muncul konfirmasi)." 
+                                                    : "*Kelas yang sudah ada wali kelasnya tidak bisa dipilih saat membuat baru."}
+                                            </p>
                                         </div>
                                     </>
                                 )}
 
-                                {/* JIKA ORTU / KONTRIBUTOR */}
                                 {(formData.role === 'parent' || formData.role === 'contributor') && (
                                     <div className="md:col-span-2">
                                         <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Nomor WhatsApp (Wajib - Jadi Email)</label>
@@ -300,7 +375,6 @@ const UserManagement: React.FC = () => {
                                     </div>
                                 )}
                                 
-                                {/* JIKA ADMIN */}
                                 {formData.role === 'admin' && (
                                     <div className="md:col-span-2 text-center py-4 text-slate-400 italic text-sm">
                                         Gunakan kolom email manual di atas untuk login Admin.
@@ -323,9 +397,6 @@ const UserManagement: React.FC = () => {
         );
     }
 
-    // ==========================================
-    // TAMPILAN 2: LIST VIEW
-    // ==========================================
     return (
         <div className="space-y-6 animate-fade-in">
             {/* Toolbar */}
@@ -344,7 +415,7 @@ const UserManagement: React.FC = () => {
                         {(filters.role === 'all' || filters.role === 'student' || filters.role === 'teacher') && (
                             <select className="bg-slate-50 border border-slate-100 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer" value={filters.class_id} onChange={(e) => setFilters({...filters, class_id: e.target.value})}>
                                 <option value="all">Semua Kelas</option>
-                                {availableClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                {Array.isArray(availableClasses) && availableClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                         )}
                     </div>

@@ -55,10 +55,11 @@ const InputField: React.FC<InputFieldProps> = ({
   </div>
 );
 
+// UPDATE: Tambahkan disabled & className di tipe options
 type SelectFieldProps = {
   name: string;
   value: string | number;
-  options: {value: string | number, label: string}[];
+  options: {value: string | number, label: string, disabled?: boolean, className?: string}[];
   placeholder: string;
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   required?: boolean;
@@ -82,7 +83,17 @@ const SelectField: React.FC<SelectFieldProps> = ({
       className={`appearance-none block w-full pl-16 pr-12 py-5 border-2 border-transparent bg-slate-50 hover:border-violet-100 focus:border-violet-500 rounded-[2rem] focus:outline-none focus:bg-white transition-all font-bold text-sm shadow-inner focus:shadow-violet-100/50 ${!value ? 'text-slate-400' : 'text-slate-900'} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
     >
       <option value="" disabled>{placeholder}</option>
-      {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+      {/* UPDATE: Render option dengan logic disabled */}
+      {options.map(opt => (
+        <option 
+            key={opt.value} 
+            value={opt.value} 
+            disabled={opt.disabled}
+            className={opt.className || ''}
+        >
+            {opt.label}
+        </option>
+      ))}
     </select>
     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-6 text-slate-400 group-focus-within:text-violet-600">
       <ChevronDown size={20} />
@@ -129,9 +140,8 @@ const Register: React.FC = () => {
         const response = await authApi.get('/auth/classes-list');
         const data = response.data.data || response.data;
         if (Array.isArray(data)) {
-          // Filter kelas yang masih memiliki kapasitas
-          const availableClasses = data.filter(c => (c.kapasitas || 0) > (c.terisi || 0));
-          setClassList(availableClasses);
+          // FIX: Jangan filter kapasitas di sini agar Guru bisa melihat semua kelas
+          setClassList(data);
         }
       } catch (err) {
         console.error("Gagal memuat daftar kelas:", err);
@@ -142,12 +152,14 @@ const Register: React.FC = () => {
     fetchClasses();
   }, []);
 
-  const mappedClassOptions = useMemo(() => {
-    // Menambahkan informasi sisa kursi pada label
-    return classList.map(c => ({ 
+  // FIX: Filter kapasitas dipindah ke sini (khusus untuk Dropdown Siswa)
+  const studentClassOptions = useMemo(() => {
+    return classList
+      .filter(c => (c.kapasitas || 0) > (c.terisi || 0)) // Filter hanya untuk siswa
+      .map(c => ({ 
         value: c.id, 
         label: `Kelas ${c.name} (Sisa ${c.kapasitas - c.terisi})` 
-    }));
+      }));
   }, [classList]);
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -234,11 +246,11 @@ const Register: React.FC = () => {
             <SelectField 
               name="classId" 
               value={formData.classId} 
-              options={mappedClassOptions} 
-              placeholder={isClassLoading ? "Memuat kelas..." : (mappedClassOptions.length > 0 ? "Pilih Kelas" : "Semua kelas sudah penuh")}
+              options={studentClassOptions} 
+              placeholder={isClassLoading ? "Memuat kelas..." : (studentClassOptions.length > 0 ? "Pilih Kelas" : "Semua kelas sudah penuh")}
               onChange={handleFormChange}
               icon={<GraduationCap size={22}/>}
-              disabled={isClassLoading || mappedClassOptions.length === 0}
+              disabled={isClassLoading || studentClassOptions.length === 0}
             />
           </>
         )}
@@ -252,10 +264,20 @@ const Register: React.FC = () => {
               onChange={handleFormChange}
               icon={<ShieldCheck size={22}/>}
             />
+            {/* FIX: SelectField Khusus Guru dengan Logic Disable */}
             <SelectField 
               name="classId" 
               value={formData.classId} 
-              options={mappedClassOptions} 
+              options={classList.map(c => {
+                  // Cek apakah kelas sudah punya wali kelas
+                  const isTaken = c.teacher_id && c.teacher_id !== 0;
+                  return {
+                      value: c.id,
+                      label: `Kelas ${c.name}` + (isTaken ? ` (Sudah ada: ${c.teacher_name})` : ''),
+                      disabled: isTaken, // Disable jika sudah ada
+                      className: isTaken ? 'text-slate-400 bg-slate-100 italic' : '' // Styling khusus
+                  };
+              })}
               placeholder="Wali Kelas (Opsional)" 
               required={false}
               onChange={handleFormChange}

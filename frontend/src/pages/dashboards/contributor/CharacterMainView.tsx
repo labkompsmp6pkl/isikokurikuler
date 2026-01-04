@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { PenTool, Target } from 'lucide-react';
-import MissionInputView from './MissionInputView';
-import MissionScheduleView from './MissionScheduleView';
+import CharacterInputView from './CharacterInputView';
+import CharacterScheduleView from './CharacterScheduleView';
 
-const MissionMainView: React.FC = () => {
+const CharacterMainView: React.FC = () => {
     const [subTab, setSubTab] = useState<'sikap' | 'jadwal'>('sikap');
 
     return (
@@ -33,20 +33,20 @@ const MissionMainView: React.FC = () => {
                     }`}
                 >
                     <Target size={18} /> 
-                    <span>Target Misi</span>
+                    <span>Target Karakter</span>
                 </button>
             </div>
 
             {/* Content Area */}
             <div className="animate-fade-in">
                 {subTab === 'sikap' ? (
-                    <MissionInputView /> 
+                    <CharacterInputView /> 
                 ) : (
-                    <MissionScheduleView />
+                    <CharacterScheduleView />
                 )}
             </div>
         </div>
     );
 };
 
-export default MissionMainView;
+export default CharacterMainView;

@@ -45,18 +45,17 @@ const RecordDetailView: React.FC<RecordDetailViewProps> = ({ records, initialInd
             </div>
 
             {/* Scrollable Content Area */}
-            {/* PERBAIKAN: Tambahkan pb-24 agar konten paling bawah tidak tertutup tombol floating */}
             <div className="p-8 space-y-6 flex-1 pb-32">
                 
                 {/* Score Card */}
                 <div className={`p-6 rounded-2xl text-white shadow-lg flex items-center justify-between ${
-                    record.type === 'Misi Rutin' 
+                    record.type === 'Karakter Rutin' 
                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600' 
                     : 'bg-gradient-to-r from-rose-600 to-pink-600'
                 }`}>
                     <div>
                         <p className="text-white/80 text-xs font-bold uppercase tracking-widest mb-1">
-                            {record.type === 'Misi Rutin' ? 'Misi Selesai' : 'Skor Diberikan'}
+                            {record.type === 'Karakter Rutin' ? 'Karakter Selesai' : 'Skor Diberikan'}
                         </p>
                         <span className="text-4xl font-black">{record.score}</span>
                         <span className="text-lg opacity-70">/100</span>
@@ -95,7 +94,7 @@ const RecordDetailView: React.FC<RecordDetailViewProps> = ({ records, initialInd
                     <div className="flex items-center gap-2 mb-2 text-slate-700">
                         <FileText size={18} />
                         <h4 className="font-bold text-sm uppercase">
-                            {record.type === 'Misi Rutin' ? 'Judul Misi' : 'Bukti / Catatan'}
+                            {record.type === 'Karakter Rutin' ? 'Judul Karakter' : 'Bukti / Catatan'}
                         </h4>
                     </div>
                     <p className="text-sm text-gray-600 italic bg-gray-50 p-4 rounded-lg border border-gray-100 leading-relaxed">
@@ -105,7 +104,6 @@ const RecordDetailView: React.FC<RecordDetailViewProps> = ({ records, initialInd
             </div>
 
             {/* Slideshow Controls (Floating at Bottom) */}
-            {/* PERBAIKAN: Posisi sticky di bottom container, dengan background blur */}
             {records.length > 1 && (
                 <div className="absolute bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-md border-t border-gray-100 flex justify-between items-center z-20">
                     

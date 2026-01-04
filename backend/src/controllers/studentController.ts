@@ -184,18 +184,17 @@ export const getStudentMissions = async (req: AuthenticatedRequest, res: Respons
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const todayName = days[new Date().getDay()];
 
-        // QUERY UPDATED: Join dengan tabel users (u) untuk ambil nama kontributor
         const query = `
             SELECT 
                 ms.*, 
-                u.full_name as contributor_name,  -- AMBIL NAMA LENGKAP
+                u.full_name as contributor_name,
                 (SELECT COUNT(*) FROM mission_completions mc 
                  WHERE mc.mission_schedule_id = ms.id 
                  AND mc.student_id = ? 
                  AND DATE(mc.completed_at) = CURDATE()) as is_completed
             FROM mission_schedules ms
-            JOIN users u ON ms.contributor_id = u.id -- JOIN KE USERS
-            WHERE ms.target_class = ?
+            JOIN users u ON ms.contributor_id = u.id
+            WHERE (ms.target_class = ? OR ms.target_class IS NULL)
             AND (ms.frequency = 'daily' OR ms.day_of_week = ?)
             ORDER BY is_completed ASC, ms.id DESC
         `;

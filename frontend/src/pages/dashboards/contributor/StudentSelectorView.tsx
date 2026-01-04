@@ -120,7 +120,7 @@ const StudentSelectorView: React.FC<StudentSelectorViewProps> = ({ students, onS
                                 <div>
                                     <h4 className="font-bold text-gray-800 group-hover:text-rose-900 line-clamp-1">{student.full_name}</h4>
                                     <p className="text-xs text-gray-400 font-medium uppercase tracking-wider group-hover:text-rose-500">
-                                        NISN: {student.nisn || '-'}
+                                        {student.class_name || 'Tanpa Kelas'} - {student.teacher_name || 'Tanpa Wali'}
                                     </p>
                                 </div>
                                 <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-rose-600">

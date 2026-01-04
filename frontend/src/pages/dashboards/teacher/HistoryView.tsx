@@ -163,7 +163,11 @@ const HistoryView: React.FC<HistoryViewProps> = ({ students, teacherClass }) => 
                             onChange={(e) => setFilterStudentId(e.target.value)}
                         >
                             <option value="">-- Tampilkan Seluruh Kelas {teacherClass} --</option>
-                            {students.map((s:any) => (<option key={s.id} value={s.id}>{s.full_name}</option>))}
+                            {students.map((s: any) => (
+                                <option key={s.id} value={s.id}>
+                                    {s.full_name} ({s.class_name} - {s.teacher_name})
+                                </option>
+                            ))}
                         </select>
                     </div>
                 </div>

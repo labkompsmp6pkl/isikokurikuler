@@ -1,39 +1,42 @@
-import { Router, RequestHandler } from 'express'; // 1. Import RequestHandler
+import { Router, RequestHandler } from 'express';
 import { 
     login, 
     register, 
     googleCallbackHandler, 
     completeGoogleRegistration,
-    getStudentsList
+    getStudentsList,
+    getClasses // <<< PERBAIKAN: Impor dari authController
 } from '../controllers/authController';
 import passport from 'passport';
 import { authMiddleware } from '../middleware/authMiddleware'; 
-import { getClasses } from '../controllers/adminController';
 
 const router = Router();
 
 // Auth Manual
-// Tambahkan 'as RequestHandler' untuk menghindari error tipe pada req/res
 router.post('/login', login as RequestHandler);
 router.post('/register', register as RequestHandler);
-router.get('/classes-list', getClasses as RequestHandler);
+
+// Mengambil daftar kelas untuk pendaftaran
+router.get('/classes-list', getClasses as RequestHandler); // <<< PERBAIKAN: Sekarang menggunakan fungsi yang benar
+
 // Auth Google
-// 1. Redirect ke Google
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }) as RequestHandler);
+
+// Endpoint untuk admin mengambil daftar siswa (jika diperlukan)
 router.get('/students-list', getStudentsList as RequestHandler);
-// 2. Callback Handler
+
+// Callback setelah login Google berhasil
 router.get(
   '/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: '/login' }) as RequestHandler,
   googleCallbackHandler as RequestHandler
 );
 
-// 3. API Submit Data Lengkap
-// PENTING: Tambahkan 'as RequestHandler' pada middleware dan controller
+// Menyelesaikan pendaftaran setelah login Google
 router.post(
     '/google/complete-register', 
-    authMiddleware as RequestHandler, // <--- PERBAIKAN UTAMA DI SINI
-    completeGoogleRegistration as RequestHandler // <--- Controller juga di-cast agar aman
+    authMiddleware as RequestHandler, 
+    completeGoogleRegistration as RequestHandler
 );
 
 export default router;

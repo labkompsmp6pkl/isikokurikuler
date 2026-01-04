@@ -1,8 +1,23 @@
-import { Request, Response } from 'express';
+import { Request, Response, RequestHandler } from 'express';
 import pool from '../config/db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { UserPayload } from '../middleware/authMiddleware';
+
+// ================================================
+// Fungsi Baru: Mengambil Daftar Kelas dengan Kapasitas
+// ================================================
+export const getClasses: RequestHandler = async (req, res) => {
+  try {
+    const query = 'SELECT id, name, kapasitas, terisi FROM classes ORDER BY name ASC';
+    const [rows] = await pool.query(query);
+    res.json({ data: rows });
+  } catch (error) {
+    console.error("Gagal mengambil data kelas:", error);
+    res.status(500).json({ message: "Gagal mengambil data kelas" });
+  }
+};
+
 
 // --- 1. LOGIN (MANUAL & PHONE) ---
 export const login = async (req: Request, res: Response) => {
@@ -33,21 +48,16 @@ export const login = async (req: Request, res: Response) => {
       user = rows[0];
     }
 
-    // SECURITY UPDATE: Jangan beri tahu jika akun tidak ditemukan
     if (!user) return res.status(401).json({ message: LOGIN_FAIL_MSG });
 
-    // Cek Password (Handle Bcrypt dari PHP/Laravel format $2y$ ke $2a$)
     const userPasswordHash = user.password ? user.password.replace('$2y$', '$2a$') : '';
     
-    // Jika user login manual tapi password kosong (biasanya user Google), beri pesan spesifik atau generik (pilih salah satu, di sini kita beri petunjuk sedikit agar UX tetap baik tapi aman)
     if (!userPasswordHash) return res.status(401).json({ message: 'Akun ini terdaftar via Google. Silakan login via Google.' });
 
     const isPasswordValid = await bcrypt.compare(password, userPasswordHash);
     
-    // SECURITY UPDATE: Jangan beri tahu "Password Salah", gunakan pesan yang sama
     if (!isPasswordValid) return res.status(401).json({ message: LOGIN_FAIL_MSG });
 
-    // Buat Token (Login Sukses)
     const token = jwt.sign(
       { id: user.id, role: user.role, name: user.full_name },
       process.env.JWT_SECRET as string,
@@ -80,26 +90,21 @@ export const register = async (req: Request, res: Response) => {
   try {
     await connection.beginTransaction();
 
-    // 1. Validasi Dasar
     if (!email || !password || !fullName || !role) {
       throw new Error("Data pendaftaran tidak lengkap.");
     }
 
-    // 2. Cek email duplikat
     const [existing]: any = await connection.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length > 0) throw new Error("Email sudah digunakan.");
 
-    // 3. Hash Password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 4. Insert User Dasar
     const [result]: any = await connection.query(
       `INSERT INTO users (full_name, email, password, role) VALUES (?, ?, ?, ?)`,
       [fullName.trim(), email, hashedPassword, role]
     );
     const newUserId = result.insertId;
 
-    // 5. Update Data Spesifik per Role
     if (role === 'student') {
       if (!nisn || !classId) throw new Error("NISN dan Kelas wajib diisi.");
       const [checkNisn]: any = await connection.query('SELECT id FROM users WHERE nisn = ?', [nisn]);
@@ -121,7 +126,6 @@ export const register = async (req: Request, res: Response) => {
 
     await connection.commit();
 
-    // 6. Langsung berikan token agar bisa auto-login
     const token = jwt.sign(
       { id: newUserId, role, name: fullName },
       process.env.JWT_SECRET as string,
@@ -243,12 +247,17 @@ export const completeGoogleRegistration = async (req: Request, res: Response) =>
   }
 };
 
+// --- 5. GET STUDENTS LIST (ADMIN) ---
 export const getStudentsList = async (req: Request, res: Response) => {
   try {
     const query = `
-      SELECT u.id, u.full_name, u.nisn, c.name as class_name 
+      SELECT 
+        u.id, u.full_name, u.nisn, 
+        c.name as class_name,
+        t.full_name as teacher_name
       FROM users u
       LEFT JOIN classes c ON u.class_id = c.id
+      LEFT JOIN users t ON c.teacher_id = t.id
       WHERE u.role = 'student'
       ORDER BY u.full_name ASC
     `;

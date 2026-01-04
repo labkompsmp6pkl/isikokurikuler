@@ -7,8 +7,7 @@ import contributorService from '../../../services/contributorService';
 import { authApi } from '../../../services/authService';
 import StudentSelectorView from './StudentSelectorView';
 
-const MissionInputView: React.FC = () => {
-    // ... (STATE DAN LOGIC TETAP SAMA, TIDAK ADA YANG DIUBAH) ...
+const CharacterInputView: React.FC = () => {
     const [students, setStudents] = useState<any[]>([]);
     const [contributorRole, setContributorRole] = useState('Guru Mata Pelajaran');
     const [customRole, setCustomRole] = useState('');
@@ -41,7 +40,7 @@ const MissionInputView: React.FC = () => {
         try {
             const payloadBase = {
                 contributor_role: finalRole,
-                behavior_category: 'Misi Harian',
+                behavior_category: 'Karakter Harian',
                 score: score,
                 notes: notes,
                 record_date: new Date().toISOString().split('T')[0]
@@ -85,7 +84,6 @@ const MissionInputView: React.FC = () => {
         );
     }
 
-    // PERUBAHAN: Hapus class layout wrapper (max-w, mx-auto)
     return (
         <form onSubmit={handleSubmit} className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-xl border border-rose-100">
             
@@ -100,7 +98,6 @@ const MissionInputView: React.FC = () => {
             </div>
 
             <div className="space-y-8">
-                {/* 1. IDENTITAS PENILAI */}
                 <div className="space-y-3">
                     <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                         <Briefcase size={14}/> Identitas Penilai
@@ -119,7 +116,6 @@ const MissionInputView: React.FC = () => {
                     )}
                 </div>
 
-                {/* 2. TARGET SISWA */}
                 <div className="space-y-3">
                     <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                         <Users size={14}/> Target Siswa
@@ -130,7 +126,6 @@ const MissionInputView: React.FC = () => {
                     </button>
                 </div>
 
-                {/* 3. SKOR */}
                 <div className="space-y-4 bg-rose-50/50 p-5 rounded-[1.5rem] border-2 border-rose-100/50">
                     <div className="flex justify-between items-end mb-2">
                         <label className="text-[11px] font-black text-rose-400 uppercase tracking-widest flex items-center gap-2">
@@ -144,7 +139,6 @@ const MissionInputView: React.FC = () => {
                     </div>
                 </div>
 
-                {/* 4. BUKTI */}
                 <div className="space-y-3">
                     <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                         <PenTool size={14}/> Bukti Nyata
@@ -160,4 +154,4 @@ const MissionInputView: React.FC = () => {
     );
 };
 
-export default MissionInputView;
+export default CharacterInputView;

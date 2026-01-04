@@ -9,9 +9,12 @@ export const getContributorData = async (req: Request, res: Response) => {
             SELECT 
                 u.id, 
                 u.full_name, 
-                c.name as class_name 
+                u.nisn,
+                c.name as class_name,
+                t.full_name as teacher_name
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
+            LEFT JOIN users t ON c.teacher_id = t.id
             WHERE u.role = 'student'
             ORDER BY c.name ASC, u.full_name ASC
         `);

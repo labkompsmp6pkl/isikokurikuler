@@ -3,16 +3,21 @@ import toast from 'react-hot-toast';
 import { 
     Calendar, Save, ChevronDown, Repeat, Briefcase 
 } from 'lucide-react';
-import contributorService from '../../../services/contributorService'; // Tetap pakai Service
+import contributorService from '../../../services/contributorService';
 import { authApi } from '../../../services/authService';
 
-const MissionScheduleView: React.FC = () => {
-    const [classes, setClasses] = useState<any[]>([]);
+interface ClassData {
+    id: string;
+    name: string;
+    student_count: number;
+}
+
+const CharacterScheduleView: React.FC = () => {
+    const [classes, setClasses] = useState<ClassData[]>([]);
     
-    // Form State
     const [contributorRole, setContributorRole] = useState('Guru Mata Pelajaran');
     const [customRole, setCustomRole] = useState('');
-    const [targetClass, setTargetClass] = useState(''); // Menyimpan ID Kelas
+    const [targetClass, setTargetClass] = useState('');
     const [habitCategory, setHabitCategory] = useState('Gemar Belajar');
     const [title, setTitle] = useState('');
     const [frequency, setFrequency] = useState('weekly');
@@ -23,7 +28,7 @@ const MissionScheduleView: React.FC = () => {
         const fetchClasses = async () => {
             try {
                 const res = await authApi.get('/auth/classes-list');
-                setClasses(res.data.data || res.data || []);
+                setClasses(res.data || []);
             } catch (err) { console.error(err); }
         };
         fetchClasses();
@@ -34,27 +39,25 @@ const MissionScheduleView: React.FC = () => {
         
         const finalRole = contributorRole === 'Lainnya' ? customRole.trim() : contributorRole;
         if (!finalRole) return toast.error('Isi identitas penilai', { id: 'val-role' });
-        if (!title.trim()) return toast.error('Judul misi wajib diisi', { id: 'val-title' });
+        if (!title.trim()) return toast.error('Judul karakter wajib diisi', { id: 'val-title' });
         if (!targetClass) return toast.error('Pilih target kelas', { id: 'val-class' });
 
         setIsSubmitting(true);
-        const toastId = toast.loading('Menjadwalkan misi...', { id: 'schedule-process' });
+        const toastId = toast.loading('Menjadwalkan karakter...', { id: 'schedule-process' });
 
         try {
             await contributorService.createMissionSchedule({
                 contributor_role: finalRole,
                 title,
                 habit_category: habitCategory,
-                target_class: targetClass, // Sekarang mengirim ID Kelas (misal: "1")
+                target_class: targetClass,
                 frequency,
                 day_of_week: dayOfWeek
             });
 
-            toast.success('Jadwal misi berhasil dibuat!', { id: toastId });
+            toast.success('Jadwal karakter berhasil dibuat!', { id: toastId });
             setTitle('');
             setCustomRole('');
-            // Optional: Reset targetClass jika ingin
-            // setTargetClass(''); 
         } catch (err) {
             toast.error('Gagal membuat jadwal.', { id: toastId });
         } finally {
@@ -77,13 +80,12 @@ const MissionScheduleView: React.FC = () => {
                     <Calendar size={28} />
                 </div>
                 <div>
-                    <h2 className="text-2xl font-black text-gray-800">Target Misi (Jadwal)</h2>
+                    <h2 className="text-2xl font-black text-gray-800">Target Karakter (Jadwal)</h2>
                     <p className="text-rose-500 font-bold text-sm uppercase tracking-widest">Penugasan Berulang</p>
                 </div>
             </div>
 
             <div className="space-y-6">
-                {/* Inputs ... */}
                 <div className="space-y-3">
                     <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Briefcase size={14}/> Identitas Penilai</label>
                     <div className="relative">
@@ -96,7 +98,7 @@ const MissionScheduleView: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Judul Misi / Tugas</label>
+                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Judul Karakter / Tugas</label>
                     <input type="text" className="w-full px-5 py-4 border-2 border-rose-100 bg-white rounded-2xl font-bold text-gray-700 outline-none focus:border-rose-500" placeholder="Contoh: Membaca Buku Paket Hal 10-15" value={title} onChange={(e) => setTitle(e.target.value)} />
                 </div>
 
@@ -112,7 +114,12 @@ const MissionScheduleView: React.FC = () => {
                         <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Target Kelas</label>
                         <div className="relative">
                             <select value={targetClass} onChange={(e) => setTargetClass(e.target.value)} className="w-full px-5 py-4 border-2 border-rose-100 bg-white rounded-2xl font-bold text-gray-700 outline-none focus:border-rose-500 cursor-pointer">
-                                <option value="">-- Pilih --</option>{classes.map((cls: any) => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
+                                <option value="">-- Seluruh Kelas --</option>
+                                {classes.map((cls) => 
+                                    <option key={cls.id} value={cls.id}>
+                                        {cls.name} ({cls.student_count} siswa)
+                                    </option>
+                                )}
                             </select>
                             <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
                         </div>
@@ -135,7 +142,7 @@ const MissionScheduleView: React.FC = () => {
 
                 <div className="pt-4">
                     <button type="submit" disabled={isSubmitting} className="w-full py-5 bg-rose-700 text-white font-black rounded-2xl shadow-xl hover:bg-rose-800 transition-all flex items-center justify-center gap-3 disabled:opacity-70 mt-4">
-                        {isSubmitting ? 'Memproses...' : <><Save size={20} /> JADWALKAN MISI</>}
+                        {isSubmitting ? 'Memproses...' : <><Save size={20} /> JADWALKAN KARAKTER</>}
                     </button>
                 </div>
             </div>
@@ -143,4 +150,4 @@ const MissionScheduleView: React.FC = () => {
     );
 };
 
-export default MissionScheduleView;
+export default CharacterScheduleView;

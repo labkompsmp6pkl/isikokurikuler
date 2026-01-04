@@ -26,7 +26,8 @@ const PORT = process.env.PORT || 5000;
 const productionOrigins = [
   'https://kokurikuler.smpn6pekalongan.org',
   'https://www.kokurikuler.smpn6pekalongan.org',
-  'https://isikokurikuler.vercel.app'
+  'https://isikokurikuler.vercel.app',
+  'https://sistem-pendaftaran-sekolah.vercel.app',
 ];
 
 let corsOptions: CorsOptions;

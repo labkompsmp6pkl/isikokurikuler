@@ -44,11 +44,12 @@ export const getUsers = async (req: Request, res: Response) => {
 
         if (class_id && class_id !== 'all') {
             if (class_id === 'none') {
-                // Filter khusus untuk mengambil siswa yang BELUM punya kelas
+                // Filter user yang class_id-nya NULL atau 0
                 query += ` AND (u.class_id IS NULL OR u.class_id = 0)`;
             } else {
-                query += ` AND (u.class_id = ? OR c_teach.id = ?)`;
-                params.push(class_id, class_id);
+                // Filter berdasarkan ID kelas tertentu
+                query += ` AND u.class_id = ?`;
+                params.push(class_id);
             }
         }
 

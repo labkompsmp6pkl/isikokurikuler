@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     Search, Plus, Trash2, ChevronLeft, ChevronRight, 
     GraduationCap, Briefcase, 
-    Mail, Hash, Phone, BookOpen, Edit, Sparkles, Save, ArrowLeft, User, Key
+    Mail, Hash, Phone, BookOpen, Edit, Sparkles, Save, ArrowLeft, User, Key, Filter, Shield
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import adminService from '../../../services/adminService';
@@ -73,16 +73,17 @@ const UserManagement: React.FC = () => {
         initData();
     }, []);
 
-    // Debounce Search
+    // Debounce Search & Filter Change
     useEffect(() => {
-        const timer = setTimeout(() => fetchUsers(1), 300);
+        const timer = setTimeout(() => fetchUsers(1), 300); // Reset ke halaman 1 saat filter berubah
         return () => clearTimeout(timer);
     }, [filters.search, filters.role, filters.class_id]);
 
     const fetchUsers = async (page = 1) => {
         setLoading(true);
         try {
-            const res = await adminService.getUsers({ ...filters, page }); //
+            // Mengirim parameter filter ke backend (termasuk class_id='none')
+            const res = await adminService.getUsers({ ...filters, page });
             setUsers(res.data);
             setMeta(res.meta);
         } catch (error) { console.error(error); } finally { setLoading(false); }
@@ -125,7 +126,6 @@ const UserManagement: React.FC = () => {
     };
 
     // --- HANDLER KHUSUS PERUBAHAN KELAS (GURU) ---
-    // Logika konfirmasi hanya jalan jika Edit Mode
     const handleClassChangeForTeacher = async (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newClassId = e.target.value;
         
@@ -138,9 +138,7 @@ const UserManagement: React.FC = () => {
         const isTaken = selectedClass?.teacher_id && selectedClass?.teacher_id !== 0;
 
         // LOGIKA KONFIRMASI (Hanya di Edit Mode)
-        // Di Create Mode, opsi ini sudah didisable di render, jadi logic ini extra safety.
         if (isEditMode && isTaken) {
-            // Cek apakah wali kelasnya bukan user yang sedang diedit saat ini
             if (String(selectedClass.teacher_id) !== String(selectedUserId)) {
                 const result = await Swal.fire({
                     title: 'Wali Kelas Sudah Ada!',
@@ -153,7 +151,7 @@ const UserManagement: React.FC = () => {
                 });
 
                 if (!result.isConfirmed) {
-                    return; // Jangan ubah value jika batal
+                    return; 
                 }
             }
         }
@@ -190,10 +188,10 @@ const UserManagement: React.FC = () => {
             };
 
             if (isEditMode && selectedUserId) {
-                await adminService.updateUser(String(selectedUserId), payload); //
+                await adminService.updateUser(String(selectedUserId), payload);
                 Swal.fire("Sukses", `Data diperbarui. Email: ${autoEmail}`, "success");
             } else {
-                await adminService.createUser(payload); //
+                await adminService.createUser(payload);
                 Swal.fire("Sukses", `User dibuat. Email: ${autoEmail}`, "success");
             }
             handleBackToList();
@@ -209,7 +207,7 @@ const UserManagement: React.FC = () => {
         });
         if (result.isConfirmed) {
             try {
-                await adminService.deleteUser(id); //
+                await adminService.deleteUser(id);
                 Swal.fire('Terhapus!', '', 'success');
                 fetchUsers(meta.page);
             } catch (error) { Swal.fire('Gagal', 'Error sistem', 'error'); }
@@ -307,7 +305,6 @@ const UserManagement: React.FC = () => {
                                             <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Pilih Kelas</label>
                                             <select required className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" value={formData.class_id} onChange={e => setFormData({...formData, class_id: e.target.value})}>
                                                 <option value="">-- Pilih Kelas --</option>
-                                                {/* Siswa TETAP BISA memilih kelas meskipun ada walinya */}
                                                 {Array.isArray(availableClasses) && availableClasses.map(c => (
                                                     <option key={c.id} value={c.id}>
                                                         {c.name} {c.teacher_name ? `(Wali: ${c.teacher_name})` : ''}
@@ -333,15 +330,9 @@ const UserManagement: React.FC = () => {
                                                 onChange={handleClassChangeForTeacher} 
                                             >
                                                 <option value="">-- Bukan Wali Kelas --</option>
-                                                
-                                                {/* IMPLEMENTASI LOGIC DISABLE / ALERT */}
                                                 {Array.isArray(availableClasses) && availableClasses.map(c => {
                                                     const isTaken = c.teacher_id && c.teacher_id !== 0;
-                                                    
-                                                    // Jika sedang EDIT, dan guru ini adalah pemilik kelas tersebut, JANGAN anggap taken
                                                     const isMyClass = isEditMode && selectedUserId && String(c.teacher_id) === String(selectedUserId);
-                                                    
-                                                    // DISABLE hanya jika: Sudah ada wali, BUKAN kelas sendiri, dan SEDANG BUAT BARU (!isEditMode)
                                                     const isDisabled = !isEditMode && isTaken;
 
                                                     return (
@@ -404,19 +395,33 @@ const UserManagement: React.FC = () => {
                 <div className="flex-1 bg-white p-2 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-2">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3 text-slate-400" size={20}/>
-                        <input type="text" placeholder="Cari user..." className="w-full pl-10 pr-4 py-2.5 bg-transparent outline-none font-medium text-slate-700" value={filters.search} onChange={(e) => setFilters({...filters, search: e.target.value})}/>
+                        <input type="text" placeholder="Cari user (nama, nisn, email)..." className="w-full pl-10 pr-4 py-2.5 bg-transparent outline-none font-medium text-slate-700" value={filters.search} onChange={(e) => setFilters({...filters, search: e.target.value})}/>
                     </div>
                     <div className="h-px md:h-auto md:w-px bg-slate-100 mx-2"></div>
                     <div className="flex gap-2">
-                        <select className="bg-slate-50 border border-slate-100 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer" value={filters.role} onChange={(e) => setFilters({...filters, role: e.target.value, class_id: 'all'})}>
-                            <option value="all">Semua Role</option>
-                            {roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                        </select>
-                        {(filters.role === 'all' || filters.role === 'student' || filters.role === 'teacher') && (
-                            <select className="bg-slate-50 border border-slate-100 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer" value={filters.class_id} onChange={(e) => setFilters({...filters, class_id: e.target.value})}>
-                                <option value="all">Semua Kelas</option>
-                                {Array.isArray(availableClasses) && availableClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {/* Filter Role */}
+                        <div className="relative flex items-center">
+                            <Shield size={16} className="absolute left-3 text-slate-400 z-10"/>
+                            <select className="bg-slate-50 border border-slate-100 pl-9 pr-3 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer hover:bg-slate-100 transition-colors appearance-none" value={filters.role} onChange={(e) => setFilters({...filters, role: e.target.value, class_id: 'all'})}>
+                                <option value="all">Semua Role</option>
+                                {roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                             </select>
+                        </div>
+
+                        {/* Filter Class - UPDATED */}
+                        {(filters.role === 'all' || filters.role === 'student' || filters.role === 'teacher') && (
+                            <div className="relative flex items-center">
+                                <Filter size={16} className="absolute left-3 text-slate-400 z-10"/>
+                                <select 
+                                    className="bg-slate-50 border border-slate-100 pl-9 pr-8 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer hover:bg-slate-100 transition-colors appearance-none" 
+                                    value={filters.class_id} 
+                                    onChange={(e) => setFilters({...filters, class_id: e.target.value})}
+                                >
+                                    <option value="all">Semua Kelas</option>
+                                    <option value="none" className="text-rose-600 font-bold">⚠ Belum Ada Kelas</option>
+                                    {Array.isArray(availableClasses) && availableClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -428,11 +433,18 @@ const UserManagement: React.FC = () => {
             {/* List User Grid */}
             {loading ? (
                 <div className="flex flex-col items-center justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-100 border-t-indigo-600 mb-4"></div><p className="text-indigo-400 font-bold text-xs">Memuat Data...</p></div>
+            ) : users.length === 0 ? (
+                <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300">
+                    <User size={48} className="mx-auto text-slate-300 mb-3"/>
+                    <p className="text-slate-500 font-medium">Tidak ada pengguna ditemukan.</p>
+                </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                     {users.map((u) => (
-                        <div key={u.id} className="bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-xl hover:border-indigo-200 hover:-translate-y-1 transition-all duration-300 group">
-                            <div className="flex justify-between items-start mb-4">
+                        <div key={u.id} className="bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-xl hover:border-indigo-200 hover:-translate-y-1 transition-all duration-300 group relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-indigo-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                            
+                            <div className="flex justify-between items-start mb-4 pl-2">
                                 <div className="flex items-center gap-3">
                                     <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-black text-lg shadow-md">{u.full_name.charAt(0)}</div>
                                     <div className="overflow-hidden">
@@ -443,12 +455,20 @@ const UserManagement: React.FC = () => {
                                 {getRoleBadge(u.role)}
                             </div>
 
-                            <div className="space-y-2 mb-5 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <div className="space-y-2 mb-5 bg-slate-50 p-3 rounded-xl border border-slate-100 mx-2">
                                 {(u.role === 'student' || u.role === 'teacher') && (
                                     <>
                                         <div className="flex justify-between items-center text-[11px]">
                                             <span className="text-slate-400 font-bold uppercase flex items-center gap-1.5"><BookOpen size={12}/> {u.role === 'teacher' ? 'Wali Kelas' : 'Kelas'}</span> 
-                                            <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-100">{u.class_name || (u.class_id ? `ID: ${u.class_id}` : '-')}</span>
+                                            {u.role === 'student' && !u.class_name && !u.class_id ? (
+                                                <span className="font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 flex items-center gap-1">
+                                                    ⚠ Belum Masuk Kelas
+                                                </span>
+                                            ) : (
+                                                <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-100">
+                                                    {u.class_name || (u.class_id ? `ID: ${u.class_id}` : '-')}
+                                                </span>
+                                            )}
                                         </div>
                                         <div className="flex justify-between items-center text-[11px]">
                                             <span className="text-slate-400 font-bold uppercase flex items-center gap-1.5"><Hash size={12}/> {u.role === 'student' ? 'NISN' : 'NIP'}</span> 
@@ -464,11 +484,11 @@ const UserManagement: React.FC = () => {
                                 )}
                             </div>
 
-                            <div className="flex gap-2 pt-2">
+                            <div className="flex gap-2 pt-2 px-2">
                                 <button onClick={() => handleEdit(u)} className="flex-1 py-2.5 rounded-xl bg-indigo-50 text-indigo-600 font-bold text-[11px] hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-2 uppercase tracking-wide">
                                     <Edit size={14}/> Edit
                                 </button>
-                                <button onClick={() => handleDelete(u.id)} className="w-10 h-10 rounded-xl bg-white text-rose-500 border border-rose-100 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center">
+                                <button onClick={() => handleDelete(u.id)} className="w-10 h-10 rounded-xl bg-white text-rose-500 border border-rose-100 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center shadow-sm">
                                     <Trash2 size={16}/>
                                 </button>
                             </div>

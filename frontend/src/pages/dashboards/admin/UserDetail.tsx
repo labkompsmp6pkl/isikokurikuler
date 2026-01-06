@@ -101,7 +101,6 @@ const UserDetail: React.FC = () => {
         }
     };
 
-    // --- RENDER HELPER UNTUK MODE VIEW ---
     const renderParentRow = (relationshipType: string, iconColor: string) => {
         const parent = userData?.family_data?.find((p: any) => p.relationship === relationshipType);
         return (

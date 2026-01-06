@@ -13,10 +13,28 @@ apiClient.interceptors.request.use((config) => {
     return config;
 });
 
+const getStudentParents = async (studentId: number) => {
+  const response = await apiClient.get(`/api/teacher/students/${studentId}/parents`);
+  return response.data;
+};
+
 const getDashboard = async () => (await apiClient.get('/api/teacher/dashboard')).data;
+
 const validateLog = async (logId: number) => (await apiClient.patch(`/api/teacher/validate/${logId}`)).data;
+
 const getClassHistory = async (studentId?: string) => (await apiClient.get('/api/teacher/history', { params: { studentId } })).data;
+
 const generateReport = async (payload: { studentId: number, startDate: string, endDate: string }) => 
     (await apiClient.post('/api/teacher/generate-report', payload)).data;
 
-export default { getDashboard, validateLog, getClassHistory, generateReport };
+// [BARU] Tambahkan fungsi ini untuk mengambil antrean validasi
+const getValidationLogs = async () => (await apiClient.get('/api/teacher/validation-logs')).data;
+
+export default { 
+    getDashboard, 
+    validateLog, 
+    getClassHistory, 
+    generateReport, 
+    getValidationLogs,
+    getStudentParents
+};

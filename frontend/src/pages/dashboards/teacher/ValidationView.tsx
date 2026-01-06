@@ -11,8 +11,8 @@ import {
     Coffee, 
     Activity, 
     ChevronRight,
-    AlertCircle,
-    CalendarDays
+    CalendarDays,
+    UserCheck
 } from 'lucide-react';
 import teacherService from '../../../services/teacherService';
 
@@ -30,8 +30,8 @@ const DetailPage: React.FC<{ log: any, onBack: () => void, onRefresh: () => void
         try {
             await teacherService.validateLog(log.id);
             toast.success('Jurnal berhasil disahkan! ✅', { id: toastId });
-            onRefresh(); // Refresh data utama
-            onBack();    // Kembali ke list
+            onRefresh(); 
+            onBack();    
         } catch (error) {
             toast.error('Gagal mengesahkan jurnal.', { id: toastId });
         } finally {
@@ -86,11 +86,24 @@ const DetailPage: React.FC<{ log: any, onBack: () => void, onRefresh: () => void
             </div>
 
             <div className="p-6 space-y-6">
-                <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-start gap-3">
-                    <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={20} />
-                    <p className="text-sm font-medium text-amber-800">
-                        Jurnal ini telah disetujui oleh Orang Tua. Silakan validasi sebagai langkah terakhir (Pengesahan).
-                    </p>
+                
+                {/* [MODIFIKASI] Info Penyetuju (Orang Tua) - TAMPILAN LEBIH RAPI */}
+                <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex items-start gap-3">
+                    <div className="bg-emerald-100 text-emerald-600 p-2 rounded-full shrink-0 mt-0.5">
+                        <UserCheck size={20} />
+                    </div>
+                    <div>
+                        <h4 className="font-black text-emerald-800 text-sm uppercase mb-1">Status: Disetujui Orang Tua</h4>
+                        {log.parent_name ? (
+                            <p className="text-sm text-emerald-700 leading-relaxed">
+                                Divalidasi oleh <span className="font-bold">{log.parent_role || 'Wali'}</span> : <span className="font-bold underline">{log.parent_name}</span>
+                            </p>
+                        ) : (
+                            <p className="text-sm text-emerald-700 leading-relaxed">
+                                Divalidasi oleh <span className="font-bold">{log.approved_by || 'Wali Murid'}</span>
+                            </p>
+                        )}
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -169,13 +182,22 @@ const ValidationView: React.FC<ValidationViewProps> = ({ logs, onRefresh }) => {
                             <h4 className="font-black text-gray-800 text-lg group-hover:text-violet-700 transition-colors">
                                 {log.student_name}
                             </h4>
-                            <div className="flex items-center gap-3 mt-1">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-1">
                                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wide flex items-center gap-1">
                                     <CalendarDays size={12} /> {new Date(log.log_date).toLocaleDateString('id-ID')}
                                 </span>
-                                <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded uppercase">
-                                    Disetujui Ortu
-                                </span>
+                                
+                                {/* [MODIFIKASI] Tampilan Nama Penyetuju di List */}
+                                <div className="flex items-center gap-1">
+                                    <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded uppercase">
+                                        Disetujui {log.parent_role || log.approved_by || 'Ortu'}
+                                    </span>
+                                    {log.parent_name && (
+                                        <span className="text-[10px] text-gray-400 font-medium hidden sm:inline">
+                                            ({log.parent_name})
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>

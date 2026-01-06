@@ -4,7 +4,8 @@ import {
     getTeacherDashboard, 
     validateLog, 
     getClassHistory, 
-    generateStudentReport 
+    generateStudentReport,
+    getStudentParents
 } from '../controllers/teacherController';
 
 const router = Router();
@@ -20,5 +21,7 @@ router.get('/dashboard', getTeacherDashboard as RequestHandler);
 router.patch('/validate/:logId', validateLog as RequestHandler);
 router.get('/history', getClassHistory as RequestHandler);
 router.post('/generate-report', generateStudentReport as RequestHandler);
+
+router.get('/students/:studentId/parents', getStudentParents as RequestHandler);
 
 export default router;

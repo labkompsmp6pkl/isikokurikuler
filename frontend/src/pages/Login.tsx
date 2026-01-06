@@ -118,7 +118,7 @@ const Login: React.FC = () => {
           
           {/* Input Identifier */}
           <div className="space-y-2">
-            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-4">ID Pengguna (Email / NISN / NIP)</label>
+            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-4">ID Pengguna (NoTelp / NISN / NIP)</label>
             <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-400 group-focus-within:text-violet-600 transition-colors">
                 <User size={22} />

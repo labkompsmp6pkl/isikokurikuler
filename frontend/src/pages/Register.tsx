@@ -56,10 +56,18 @@ const InputField: React.FC<InputFieldProps> = ({
   </div>
 );
 
+// Tipe data untuk opsi select yang lebih fleksibel (bisa handle disabled per option)
+type SelectOption = {
+    value: string | number;
+    label: string;
+    disabled?: boolean;
+    className?: string;
+};
+
 type SelectFieldProps = {
   name: string;
   value: string | number;
-  options: {value: string | number, label: string, disabled?: boolean, className?: string}[];
+  options: SelectOption[];
   placeholder: string;
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   required?: boolean;
@@ -109,6 +117,8 @@ const Register: React.FC = () => {
   const navigate = useNavigate();
 
   const [selectedRole, setSelectedRole] = useState<'student' | 'teacher' | 'contributor' | 'parent'>('student');
+  
+  // State untuk menyimpan data kelas lengkap (id, name, kapasitas, terisi/student_count)
   const [classList, setClassList] = useState<any[]>([]);
   
   const roleOptions = [
@@ -136,7 +146,9 @@ const Register: React.FC = () => {
     const fetchClasses = async () => {
       setIsClassLoading(true);
       try {
-        const response = await authApi.get('/auth/classes-list');
+        // Menggunakan endpoint public atau admin yang mengembalikan data kuota
+        // Pastikan backend mengembalikan field 'kapasitas' dan 'student_count' (atau 'terisi')
+        const response = await authApi.get('/auth/classes-list'); 
         const data = response.data.data || response.data;
         if (Array.isArray(data)) {
           setClassList(data);
@@ -150,13 +162,24 @@ const Register: React.FC = () => {
     fetchClasses();
   }, []);
 
+  // --- MEMOIZE CLASS OPTIONS UNTUK SISWA ---
   const studentClassOptions = useMemo(() => {
-    return classList
-      .filter(c => (c.kapasitas || 0) > (c.terisi || 0)) 
-      .map(c => ({ 
-        value: c.id, 
-        label: `Kelas ${c.name} (Sisa ${c.kapasitas - c.terisi})` 
-      }));
+    return classList.map(c => {
+        // Hitung sisa kuota
+        // Menggunakan 'student_count' jika dari query count, atau 'terisi' jika kolom statis
+        const currentFilled = c.student_count !== undefined ? c.student_count : (c.terisi || 0);
+        const capacity = c.kapasitas || 40; // Default 40 jika null
+        const remaining = capacity - currentFilled;
+        const isFull = remaining <= 0;
+
+        return {
+            value: c.id,
+            // Label menampilkan Sisa Kuota atau Penuh
+            label: `Kelas ${c.name} ${isFull ? '(Penuh)' : `(Sisa ${remaining})`}`,
+            disabled: isFull, // Disable jika penuh
+            className: isFull ? 'text-red-400 bg-red-50 italic' : 'text-slate-700 font-bold'
+        };
+    });
   }, [classList]);
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -196,7 +219,7 @@ const Register: React.FC = () => {
         role: selectedRole,
         fullName: formData.fullName.trim(),
         email: generatedEmail,
-        // Jika siswa, kirim password kosong/null
+        // Jika siswa, kirim password kosong/null (backend handle ini)
         password: selectedRole === 'student' ? '' : formData.password,
         nisn: selectedRole === 'student' ? formData.nisn : undefined,
         nip: (selectedRole === 'teacher' || selectedRole === 'contributor') ? formData.nip : undefined,
@@ -251,11 +274,12 @@ const Register: React.FC = () => {
               onChange={handleFormChange}
               icon={<ShieldCheck size={22}/>}
             />
+            {/* DROPDOWN KELAS DENGAN SISA KUOTA */}
             <SelectField 
               name="classId" 
               value={formData.classId} 
               options={studentClassOptions} 
-              placeholder={isClassLoading ? "Memuat kelas..." : (studentClassOptions.length > 0 ? "Pilih Kelas" : "Semua kelas sudah penuh")}
+              placeholder={isClassLoading ? "Memuat data kelas..." : (studentClassOptions.length > 0 ? "Pilih Kelas" : "Semua kelas penuh")}
               onChange={handleFormChange}
               icon={<GraduationCap size={22}/>}
               disabled={isClassLoading || studentClassOptions.length === 0}
@@ -279,7 +303,7 @@ const Register: React.FC = () => {
                   const isTaken = c.teacher_id && c.teacher_id !== 0;
                   return {
                       value: c.id,
-                      label: `Kelas ${c.name}` + (isTaken ? ` (Sudah ada: ${c.teacher_name})` : ''),
+                      label: `Kelas ${c.name}` + (isTaken ? ` (Sudah ada: ${c.teacher_name || 'Guru Lain'})` : ''),
                       disabled: isTaken,
                       className: isTaken ? 'text-slate-400 bg-slate-100 italic' : ''
                   };

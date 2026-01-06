@@ -9,15 +9,23 @@ import { UserPayload } from '../middleware/authMiddleware';
 // ================================================
 export const getClasses: RequestHandler = async (req, res) => {
   try {
+    // KITA GANTI QUERYNYA DI SINI
+    // Menggunakan subquery (SELECT COUNT...) untuk menghitung jumlah siswa 'student' di setiap kelas secara langsung
     const query = `
-      SELECT c.id, c.name, c.kapasitas, c.terisi, c.teacher_id, u.full_name as teacher_name 
+      SELECT 
+        c.id, 
+        c.name, 
+        c.kapasitas, 
+        (SELECT COUNT(*) FROM users u WHERE u.class_id = c.id AND u.role = 'student') as student_count,
+        c.teacher_id, 
+        u.full_name as teacher_name 
       FROM classes c 
       LEFT JOIN users u ON c.teacher_id = u.id 
       ORDER BY c.name ASC
     `;
     const [rows] = await pool.query(query);
     
-    // Kembalikan dalam format { data: [...] } sesuai ekspektasi frontend
+    // Kembalikan dalam format { data: [...] }
     res.json({ data: rows });
   } catch (error) {
     console.error("Gagal mengambil data kelas:", error);

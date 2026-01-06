@@ -27,15 +27,17 @@ const ClassManagement: React.FC = () => {
     const [isGenerate, setIsGenerate] = useState(false);
 
     // Forms
-    const [formData, setFormData] = useState({ id: 0, name: '', teacher_id: '' });
-    const [generateData, setGenerateData] = useState({ grade: '7', start: 'A', end: 'G' });
+    // [UPDATE] Tambahkan default kapasitas 40
+    const [formData, setFormData] = useState({ id: 0, name: '', teacher_id: '', kapasitas: 40 });
+    const [generateData, setGenerateData] = useState({ grade: '7', start: 'A', end: 'G', kapasitas: 40 });
+    
     const [selectedClass, setSelectedClass] = useState<any>(null);
 
     // --- BULK ACTION STATES ---
     
     // 1. Hapus Siswa (Detail Modal)
     const [selectedToRemove, setSelectedToRemove] = useState<number[]>([]);
-    const [studentPage, setStudentPage] = useState(1); // Client-side pagination untuk detail
+    const [studentPage, setStudentPage] = useState(1); 
     const studentsPerPage = 5;
 
     // 2. Tambah Siswa (Add Student Modal) - SERVER SIDE PAGINATION
@@ -45,7 +47,7 @@ const ClassManagement: React.FC = () => {
     const [loadingStudents, setLoadingStudents] = useState(false);
     const [addStudentPage, setAddStudentPage] = useState(1);
     const [totalAddStudentPages, setTotalAddStudentPages] = useState(1);
-    const addStudentLimit = 5; // Jumlah siswa per halaman di modal tambah
+    const addStudentLimit = 5; 
 
     // --- DATA FETCHING (KELAS UTAMA) ---
     const fetchData = async () => {
@@ -91,8 +93,6 @@ const ClassManagement: React.FC = () => {
     const fetchStudentsForModal = async (page: number, search: string) => {
         setLoadingStudents(true);
         try {
-            // Panggil API getUsers tanpa filter class_id (menampilkan semua siswa)
-            // Backend sudah mendukung pagination dan search
             const res = await adminService.getUsers({ 
                 role: 'student', 
                 page: page, 
@@ -110,12 +110,11 @@ const ClassManagement: React.FC = () => {
         }
     };
 
-    // Trigger fetch saat modal dibuka atau search/page berubah
     useEffect(() => {
         if (showAddStudentModal) {
             const timer = setTimeout(() => {
                 fetchStudentsForModal(addStudentPage, searchStudent);
-            }, 500); // Debounce search
+            }, 500); 
             return () => clearTimeout(timer);
         }
     }, [showAddStudentModal, addStudentPage, searchStudent]);
@@ -135,8 +134,7 @@ const ClassManagement: React.FC = () => {
         setShowAddStudentModal(true);
         setSelectedToAdd([]);
         setSearchStudent('');
-        setAddStudentPage(1); // Reset ke halaman 1
-        // Fetch akan dipicu oleh useEffect
+        setAddStudentPage(1); 
     };
 
     const handleAddStudents = async () => {
@@ -195,12 +193,20 @@ const ClassManagement: React.FC = () => {
         e.preventDefault();
         try {
             if (isGenerate) {
-                await adminService.generateClasses({ grade: generateData.grade, startLetter: generateData.start, endLetter: generateData.end });
+                // [UPDATE] Kirim data generate termasuk kapasitas
+                await adminService.generateClasses({ 
+                    grade: generateData.grade, 
+                    startLetter: generateData.start, 
+                    endLetter: generateData.end,
+                    kapasitas: generateData.kapasitas 
+                });
                 Swal.fire("Sukses", "Kelas digenerate!", "success");
             } else if (isEdit) {
+                // [UPDATE] Kirim data update termasuk kapasitas
                 await adminService.updateClass(formData.id, formData);
                 Swal.fire("Sukses", "Kelas diperbarui", "success");
             } else {
+                // [UPDATE] Kirim data create termasuk kapasitas
                 await adminService.createClass(formData);
                 Swal.fire("Sukses", "Kelas dibuat", "success");
             }
@@ -222,10 +228,25 @@ const ClassManagement: React.FC = () => {
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div className="flex gap-3">
-                    <button onClick={() => { setIsGenerate(true); setShowModal(true); }} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 px-4 py-2.5 rounded-lg font-semibold flex items-center gap-2 border border-emerald-200 transition-all">
+                    <button 
+                        onClick={() => { 
+                            setIsGenerate(true); 
+                            setGenerateData({ grade: '7', start: 'A', end: 'G', kapasitas: 40 }); // Reset default 40
+                            setShowModal(true); 
+                        }} 
+                        className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 px-4 py-2.5 rounded-lg font-semibold flex items-center gap-2 border border-emerald-200 transition-all"
+                    >
                         <Sparkles size={18}/> <span className="hidden md:inline">Auto-Generate</span>
                     </button>
-                    <button onClick={() => { setIsEdit(false); setIsGenerate(false); setFormData({ id: 0, name: '', teacher_id: '' }); setShowModal(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-semibold flex items-center gap-2 shadow-md hover:shadow-lg transition-all">
+                    <button 
+                        onClick={() => { 
+                            setIsEdit(false); 
+                            setIsGenerate(false); 
+                            setFormData({ id: 0, name: '', teacher_id: '', kapasitas: 40 }); // Reset default 40
+                            setShowModal(true); 
+                        }} 
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-semibold flex items-center gap-2 shadow-md hover:shadow-lg transition-all"
+                    >
                         <Plus size={18}/> Tambah Kelas
                     </button>
                 </div>
@@ -249,7 +270,23 @@ const ClassManagement: React.FC = () => {
                                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tingkat {cls.name.charAt(0)}</p>
                                 </div>
                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => { setIsEdit(true); setIsGenerate(false); setFormData({ id: cls.id, name: cls.name, teacher_id: cls.teacher_id || '' }); setShowModal(true); }} className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 rounded-lg"><Edit size={16}/></button>
+                                    <button 
+                                        onClick={() => { 
+                                            setIsEdit(true); 
+                                            setIsGenerate(false); 
+                                            // [UPDATE] Load kapasitas saat edit
+                                            setFormData({ 
+                                                id: cls.id, 
+                                                name: cls.name, 
+                                                teacher_id: cls.teacher_id || '', 
+                                                kapasitas: cls.kapasitas || 40 
+                                            }); 
+                                            setShowModal(true); 
+                                        }} 
+                                        className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 rounded-lg"
+                                    >
+                                        <Edit size={16}/>
+                                    </button>
                                     <button onClick={() => handleDeleteClass(cls.id)} className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 rounded-lg"><Trash2 size={16}/></button>
                                 </div>
                             </div>
@@ -264,8 +301,11 @@ const ClassManagement: React.FC = () => {
                                 <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                                     <GraduationCap size={16} className="text-emerald-500"/>
                                     <div>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Total Siswa</p>
-                                        <p className="text-sm font-bold text-slate-700">{cls.student_count} Siswa</p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Kuota Kelas</p>
+                                        {/* [UPDATE] Tampilkan Terisi / Kapasitas */}
+                                        <p className="text-sm font-bold text-slate-700">
+                                            {cls.student_count} / <span className="text-slate-500">{cls.kapasitas || 40}</span> Siswa
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -342,7 +382,7 @@ const ClassManagement: React.FC = () => {
                 </div>
             )}
 
-            {/* --- MODAL TAMBAH SISWA (Menampilkan SEMUA Siswa dengan Search & Pagination) --- */}
+            {/* --- MODAL TAMBAH SISWA --- */}
             {showAddStudentModal && (
                 <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[80vh]">
@@ -373,9 +413,7 @@ const ClassManagement: React.FC = () => {
                             ) : (
                                 <div className="space-y-2">
                                     {studentsForAdd.map(s => {
-                                        // Cek apakah siswa ini sudah ada di kelas target
                                         const isAlreadyInThisClass = s.class_id === selectedClass?.id;
-                                        
                                         return (
                                             <div 
                                                 key={s.id} 
@@ -409,7 +447,6 @@ const ClassManagement: React.FC = () => {
                             )}
                         </div>
 
-                        {/* Pagination untuk Modal Tambah Siswa */}
                         {totalAddStudentPages > 1 && (
                             <div className="p-3 border-t border-slate-100 bg-white flex justify-center gap-3">
                                 <button 
@@ -452,14 +489,42 @@ const ClassManagement: React.FC = () => {
                         </div>
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
                             {isGenerate ? (
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div><label className="text-xs font-bold text-slate-500 uppercase">Tingkat</label><select className="w-full p-2 border rounded-lg" value={generateData.grade} onChange={e=>setGenerateData({...generateData, grade:e.target.value})}>{['7','8','9'].map(g=><option key={g} value={g}>{g}</option>)}</select></div>
-                                    <div><label className="text-xs font-bold text-slate-500 uppercase">Mulai</label><select className="w-full p-2 border rounded-lg" value={generateData.start} onChange={e=>setGenerateData({...generateData, start:e.target.value})}>{['A','B','C','D'].map(l=><option key={l} value={l}>{l}</option>)}</select></div>
-                                    <div><label className="text-xs font-bold text-slate-500 uppercase">Sampai</label><select className="w-full p-2 border rounded-lg" value={generateData.end} onChange={e=>setGenerateData({...generateData, end:e.target.value})}>{['E','F','G','H'].map(l=><option key={l} value={l}>{l}</option>)}</select></div>
-                                </div>
+                                <>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Tingkat</label><select className="w-full p-2 border rounded-lg" value={generateData.grade} onChange={e=>setGenerateData({...generateData, grade:e.target.value})}>{['7','8','9'].map(g=><option key={g} value={g}>{g}</option>)}</select></div>
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Mulai</label><select className="w-full p-2 border rounded-lg" value={generateData.start} onChange={e=>setGenerateData({...generateData, start:e.target.value})}>{['A','B','C','D'].map(l=><option key={l} value={l}>{l}</option>)}</select></div>
+                                        <div><label className="text-xs font-bold text-slate-500 uppercase">Sampai</label><select className="w-full p-2 border rounded-lg" value={generateData.end} onChange={e=>setGenerateData({...generateData, end:e.target.value})}>{['E','F','G','H'].map(l=><option key={l} value={l}>{l}</option>)}</select></div>
+                                    </div>
+                                    {/* [UPDATE] Input Kuota untuk Generate */}
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Kuota Per Kelas</label>
+                                        <input 
+                                            type="number" 
+                                            min="1" 
+                                            required 
+                                            className="w-full p-3 border rounded-lg" 
+                                            value={generateData.kapasitas} 
+                                            onChange={e=>setGenerateData({...generateData, kapasitas: parseInt(e.target.value) || 0})} 
+                                            placeholder="40"
+                                        />
+                                    </div>
+                                </>
                             ) : (
                                 <>
                                     <div><label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Nama Kelas</label><input type="text" required className="w-full p-3 border rounded-lg" value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value})} placeholder="Contoh: 7A"/></div>
+                                    {/* [UPDATE] Input Kuota untuk Single Create/Edit */}
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Kuota Siswa</label>
+                                        <input 
+                                            type="number" 
+                                            min="1" 
+                                            required 
+                                            className="w-full p-3 border rounded-lg" 
+                                            value={formData.kapasitas} 
+                                            onChange={e=>setFormData({...formData, kapasitas: parseInt(e.target.value) || 0})} 
+                                            placeholder="40"
+                                        />
+                                    </div>
                                     <div>
                                         <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Wali Kelas</label>
                                         <select className="w-full p-3 border rounded-lg bg-white" value={formData.teacher_id} onChange={e=>setFormData({...formData, teacher_id:e.target.value})}>

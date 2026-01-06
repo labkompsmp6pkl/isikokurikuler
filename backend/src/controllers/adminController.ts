@@ -7,14 +7,9 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export const getUsers = async (req: Request, res: Response) => {
     try {
-        const { page = 1, limit = 6, role, class_id, search } = req.query;
+        const { page = 1, limit = 6, role, class_id, search, status } = req.query;
         const offset = (Number(page) - 1) * Number(limit);
 
-        // PERBAIKAN QUERY: 
-        // Menggunakan teknik "CASE WHEN" untuk menentukan sumber nama kelas.
-        // 1. Jika User = 'teacher', ambil nama kelas dari tabel 'classes' dimana teacher_id = user.id (Data Asli Wali Kelas)
-        // 2. Jika User = 'student', ambil nama kelas dari user.class_id biasa.
-        
         let query = `
             SELECT u.*, 
             CASE 
@@ -27,7 +22,9 @@ export const getUsers = async (req: Request, res: Response) => {
                 ELSE c.id 
             END as real_class_id,
 
-            (SELECT GROUP_CONCAT(s.full_name SEPARATOR ', ') FROM users s WHERE s.parent_id = u.id) as children_names
+            (SELECT GROUP_CONCAT(s.full_name SEPARATOR ', ') FROM users s WHERE s.parent_id = u.id) as children_names,
+            
+            (u.password IS NOT NULL AND u.password != '') as is_active
             
             FROM users u 
             LEFT JOIN classes c ON u.class_id = c.id
@@ -44,12 +41,22 @@ export const getUsers = async (req: Request, res: Response) => {
 
         if (class_id && class_id !== 'all') {
             if (class_id === 'none') {
-                // Filter user yang class_id-nya NULL atau 0
                 query += ` AND (u.class_id IS NULL OR u.class_id = 0)`;
             } else {
-                // Filter berdasarkan ID kelas tertentu
                 query += ` AND u.class_id = ?`;
                 params.push(class_id);
+            }
+        }
+
+        // [MODIFIKASI] Filter Status (HANYA BERLAKU UNTUK SISWA)
+        if (status && status !== 'all') {
+            // Otomatis tambahkan filter role='student' agar lingkupnya terjaga
+            query += ` AND u.role = 'student'`;
+            
+            if (status === 'active') {
+                query += ` AND (u.password IS NOT NULL AND u.password != '')`;
+            } else if (status === 'inactive') {
+                query += ` AND (u.password IS NULL OR u.password = '')`;
             }
         }
 
@@ -64,7 +71,7 @@ export const getUsers = async (req: Request, res: Response) => {
 
         const [users]: any = await pool.query(query, params);
 
-        // Query Total Data (Count) juga perlu disesuaikan logic filternya
+        // --- Query Total Data (Count) ---
         let countQuery = `
             SELECT COUNT(*) as total 
             FROM users u 
@@ -81,6 +88,16 @@ export const getUsers = async (req: Request, res: Response) => {
             } else {
                 countQuery += ` AND (u.class_id = ? OR c_teach.id = ?)`; 
                 countParams.push(class_id, class_id); 
+            }
+        }
+
+        // [MODIFIKASI] Filter Status di Count (SAMA SEPERTI DIATAS)
+        if (status && status !== 'all') {
+            countQuery += ` AND u.role = 'student'`;
+            if (status === 'active') {
+                countQuery += ` AND (u.password IS NOT NULL AND u.password != '')`;
+            } else if (status === 'inactive') {
+                countQuery += ` AND (u.password IS NULL OR u.password = '')`;
             }
         }
         
@@ -206,25 +223,27 @@ export const deleteUser = async (req: Request, res: Response) => {
     }
 };
 
-// --- 2. CLASS MANAGEMENT ---
-
 export const getClasses = async (req: Request, res: Response) => {
     try {
+        // Query ini mengambil data kelas beserta jumlah siswa yang sudah mendaftar (role='student')
         const query = `
-            SELECT c.*, 
-            u.full_name as teacher_name,
-            (SELECT COUNT(*) FROM users s WHERE s.class_id = c.id AND s.role = 'student') as student_count
+            SELECT 
+                c.id, 
+                c.name, 
+                c.teacher_id, 
+                c.kapasitas, 
+                (SELECT COUNT(*) FROM users u WHERE u.class_id = c.id AND u.role = 'student') as student_count,
+                u.full_name as teacher_name
             FROM classes c
             LEFT JOIN users u ON c.teacher_id = u.id
             ORDER BY c.name ASC
         `;
-        const [classes]: any = await pool.query(query);
-        res.json(classes);
-    } catch (error: any) {
-        if (error.code === 'ER_NO_SUCH_TABLE') {
-            return res.status(404).json({ code: 'NO_TABLE', message: "Tabel kelas belum dibuat." });
-        }
-        res.status(500).json({ message: "Gagal memuat data kelas" });
+        
+        const [rows] = await pool.query(query);
+        res.json(rows);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Gagal mengambil data kelas' });
     }
 };
 
@@ -284,9 +303,15 @@ export const setupClassDatabase = async (req: Request, res: Response) => {
 };
 
 export const createClass = async (req: Request, res: Response) => {
-    const { name, teacher_id } = req.body;
+    const { name, teacher_id, kapasitas } = req.body; // Ambil kapasitas dari body
     try {
-        const [result]: any = await pool.query("INSERT INTO classes (name, teacher_id) VALUES (?, ?)", [name, teacher_id || null]);
+        // Gunakan kapasitas dari input, atau default 40 jika kosong/invalid
+        const limit = kapasitas ? parseInt(kapasitas) : 40;
+
+        const [result]: any = await pool.query(
+            "INSERT INTO classes (name, teacher_id, kapasitas) VALUES (?, ?, ?)", 
+            [name, teacher_id || null, limit]
+        );
         
         if (teacher_id) {
             const newClassId = result.insertId;
@@ -296,51 +321,50 @@ export const createClass = async (req: Request, res: Response) => {
         res.status(201).json({ message: "Kelas berhasil dibuat" });
     } catch (error: any) {
         if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ message: "Nama kelas sudah ada" });
+        console.error(error);
         res.status(500).json({ message: "Gagal membuat kelas" });
     }
 };
 
 export const generateClasses = async (req: Request, res: Response) => {
-    const { grade, startLetter, endLetter } = req.body;
+    const { grade, startLetter, endLetter, kapasitas } = req.body; // Ambil kapasitas
+    
     if (!grade || !startLetter || !endLetter) return res.status(400).json({ message: "Parameter tidak lengkap" });
+    
     const startCode = startLetter.toUpperCase().charCodeAt(0);
     const endCode = endLetter.toUpperCase().charCodeAt(0);
+    const limit = kapasitas ? parseInt(kapasitas) : 40; // Default 40
+
     let createdCount = 0;
     try {
         for (let i = startCode; i <= endCode; i++) {
             const className = `${grade}${String.fromCharCode(i)}`;
-            const [result]: any = await pool.query("INSERT IGNORE INTO classes (name) VALUES (?)", [className]);
+            // Masukkan kapasitas ke query insert
+            const [result]: any = await pool.query(
+                "INSERT IGNORE INTO classes (name, kapasitas) VALUES (?, ?)", 
+                [className, limit]
+            );
             if (result.affectedRows > 0) createdCount++;
         }
-        res.json({ message: `Berhasil membuat ${createdCount} kelas baru.` });
+        res.json({ message: `Berhasil membuat ${createdCount} kelas baru dengan kuota ${limit}.` });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: "Gagal generate kelas" });
     }
 };
 
 export const updateClass = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, teacher_id } = req.body;
+    const { name, teacher_id, kapasitas } = req.body; // Tambahkan kapasitas
+
     try {
-        // Ambil guru lama
-        const [oldClass]: any = await pool.query("SELECT teacher_id FROM classes WHERE id = ?", [id]);
-        const oldTeacherId = oldClass[0]?.teacher_id;
-
-        await pool.query("UPDATE classes SET name=?, teacher_id=? WHERE id=?", [name, teacher_id || null, id]);
-        
-        // Sync Guru Lama (Hapus class_id)
-        if (oldTeacherId && String(oldTeacherId) !== String(teacher_id)) {
-            await pool.query("UPDATE users SET class_id = NULL WHERE id = ?", [oldTeacherId]);
-        }
-
-        // Sync Guru Baru (Set class_id)
-        if (teacher_id) {
-            await pool.query("UPDATE users SET class_id = ? WHERE id = ?", [id, teacher_id]);
-        }
-
-        res.json({ message: "Kelas berhasil diperbarui" });
+        await pool.query(
+            'UPDATE classes SET name = ?, teacher_id = ?, kapasitas = ? WHERE id = ?',
+            [name, teacher_id || null, kapasitas || 40, id]
+        );
+        res.json({ message: 'Kelas berhasil diperbarui' });
     } catch (error) {
-        res.status(500).json({ message: "Gagal update kelas" });
+        res.status(500).json({ message: 'Gagal update kelas' });
     }
 };
 
@@ -562,3 +586,53 @@ export const removeStudentsFromClass = async (req: Request, res: Response) => {
         res.status(500).json({ message: "Gagal mengeluarkan siswa." });
     }
 };
+
+export const getUserDetail = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      const queryUser = `
+        SELECT 
+          u.id, u.full_name, u.email, u.role, u.nisn, u.nip, u.whatsapp_number, u.google_id, u.created_at,
+          c.name as class_name,
+          (u.password IS NOT NULL AND u.password != '') as is_active
+        FROM users u
+        LEFT JOIN classes c ON u.class_id = c.id
+        WHERE u.id = ?
+      `;
+      const [rows]: any[] = await pool.query(queryUser, [id]);
+  
+      if (rows.length === 0) {
+        return res.status(404).json({ message: "User tidak ditemukan" });
+      }
+  
+      const user = rows[0];
+      let familyData: any[] = [];
+  
+      if (user.role === 'student') {
+        const queryParents = `
+          SELECT p.id, p.full_name, p.whatsapp_number, fr.relationship 
+          FROM family_relations fr
+          JOIN users p ON fr.parent_id = p.id
+          WHERE fr.student_id = ?
+        `;
+        const [parentRows]: any[] = await pool.query(queryParents, [id]);
+        familyData = parentRows;
+  
+      } else if (user.role === 'parent') {
+        const queryChildren = `
+          SELECT s.id, s.full_name, s.nisn, c.name as class_name, fr.relationship 
+          FROM family_relations fr
+          JOIN users s ON fr.student_id = s.id
+          LEFT JOIN classes c ON s.class_id = c.id
+          WHERE fr.parent_id = ?
+        `;
+        const [childRows]: any[] = await pool.query(queryChildren, [id]);
+        familyData = childRows;
+      }
+  
+      res.json({ ...user, family_data: familyData });
+  
+    } catch (error) {
+      res.status(500).json({ message: "Terjadi kesalahan server" });
+    }
+  };

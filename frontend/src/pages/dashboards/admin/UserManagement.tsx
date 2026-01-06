@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     Search, Plus, Trash2, ChevronLeft, ChevronRight, 
     GraduationCap, Briefcase, 
-    Mail, Hash, Phone, BookOpen, Edit, Sparkles, Save, ArrowLeft, User, Key, Filter, Shield
+    Mail, Hash, Phone, BookOpen, Edit, Sparkles, Save, ArrowLeft, User, Filter, Shield, Eye, Heart, Users, Calendar, Lock
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import adminService from '../../../services/adminService';
@@ -20,8 +20,8 @@ interface UserFormState {
 }
 
 const UserManagement: React.FC = () => {
-    // --- STATE UTAMA ---
-    const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
+    // --- STATE UTAMA (List | Form | Detail) ---
+    const [viewMode, setViewMode] = useState<'list' | 'form' | 'detail'>('list');
     const [isEditMode, setIsEditMode] = useState(false);
     const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
 
@@ -31,6 +31,10 @@ const UserManagement: React.FC = () => {
     const [availableClasses, setAvailableClasses] = useState<any[]>([]);
     const [meta, setMeta] = useState({ page: 1, totalPages: 1, total: 0 });
 
+    // --- STATE DETAIL DATA ---
+    const [selectedUserDetail, setSelectedUserDetail] = useState<any>(null);
+    const [loadingDetail, setLoadingDetail] = useState(false);
+
     // --- FORM STATE ---
     const initialForm: UserFormState = { 
         full_name: '', email: '', role: 'student', class_id: '', 
@@ -39,7 +43,7 @@ const UserManagement: React.FC = () => {
     const [formData, setFormData] = useState<UserFormState>(initialForm);
 
     // --- FILTER STATE ---
-    const [filters, setFilters] = useState({ role: 'all', class_id: 'all', search: '', limit: 6 });
+    const [filters, setFilters] = useState({ role: 'all', class_id: 'all', status: 'all', search: '', limit: 6 });
 
     const roles = [
         { value: 'student', label: 'Siswa' },
@@ -53,17 +57,9 @@ const UserManagement: React.FC = () => {
     useEffect(() => {
         const initData = async () => {
             try {
-                // Mengambil data kelas lengkap (termasuk info wali kelas)
                 const response = await adminService.getClasses();
-                
-                let classesData = [];
-                if (Array.isArray(response)) {
-                    classesData = response;
-                } else if (response && Array.isArray(response.data)) {
-                    classesData = response.data;
-                }
+                let classesData = Array.isArray(response) ? response : (response?.data || []);
                 setAvailableClasses(classesData);
-
                 fetchUsers(1);
             } catch (error) { 
                 console.error("Init Error:", error);
@@ -75,14 +71,13 @@ const UserManagement: React.FC = () => {
 
     // Debounce Search & Filter Change
     useEffect(() => {
-        const timer = setTimeout(() => fetchUsers(1), 300); // Reset ke halaman 1 saat filter berubah
+        const timer = setTimeout(() => fetchUsers(1), 300);
         return () => clearTimeout(timer);
-    }, [filters.search, filters.role, filters.class_id]);
+    }, [filters.search, filters.role, filters.class_id, filters.status]);
 
     const fetchUsers = async (page = 1) => {
         setLoading(true);
         try {
-            // Mengirim parameter filter ke backend (termasuk class_id='none')
             const res = await adminService.getUsers({ ...filters, page });
             setUsers(res.data);
             setMeta(res.meta);
@@ -90,6 +85,24 @@ const UserManagement: React.FC = () => {
     };
 
     // --- HANDLERS NAVIGASI ---
+
+    // 1. Masuk ke Mode Detail
+    const handleViewDetail = async (userId: number) => {
+        setLoadingDetail(true);
+        setViewMode('detail');
+        try {
+            const data = await adminService.getUserDetail(userId);
+            setSelectedUserDetail(data);
+        } catch (error) {
+            console.error(error);
+            setViewMode('list');
+            Swal.fire("Error", "Gagal memuat detail user", "error");
+        } finally {
+            setLoadingDetail(false);
+        }
+    };
+
+    // 2. Masuk ke Mode Form (Tambah Baru)
     const handleAddNew = () => {
         setFormData(initialForm);
         setIsEditMode(false);
@@ -97,12 +110,12 @@ const UserManagement: React.FC = () => {
         setViewMode('form');
     };
 
-    const handleEdit = async (user: any) => {
+    // 3. Masuk ke Mode Form (Edit)
+    const handleEdit = (user: any) => {
         setFormData({
             full_name: user.full_name,
             email: user.email,
             role: user.role,
-            // Prioritaskan real_class_id jika ada (dari backend logic), fallback ke class_id biasa
             class_id: user.real_class_id || user.class_id || '',
             nisn: user.nisn || '',
             nip: user.nip || '',
@@ -114,85 +127,87 @@ const UserManagement: React.FC = () => {
         setViewMode('form');
     };
 
+    // 4. Kembali ke List
     const handleBackToList = () => {
         setViewMode('list');
         setFormData(initialForm);
+        setSelectedUserDetail(null);
         fetchUsers(meta.page);
-        // Refresh data kelas agar status wali kelas terbaru terupdate di dropdown
-        adminService.getClasses().then(res => {
-             let data = Array.isArray(res) ? res : (res.data || []);
-             setAvailableClasses(data);
-        });
     };
 
-    // --- HANDLER KHUSUS PERUBAHAN KELAS (GURU) ---
+    // --- HELPER RENDER ---
+    const renderParentRow = (relationshipType: string, iconColor: string) => {
+        const parent = selectedUserDetail?.family_data?.find((p: any) => p.relationship === relationshipType);
+        return (
+            <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-100 shadow-sm transition-all hover:border-indigo-100">
+                <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-full bg-${iconColor}-50 text-${iconColor}-500`}>
+                        <User size={18} />
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{relationshipType}</p>
+                        {parent ? (
+                            <p className="font-bold text-slate-800 text-sm">{parent.full_name}</p>
+                        ) : (
+                            <p className="text-sm text-slate-400 italic font-medium">(Belum Terhubung)</p>
+                        )}
+                    </div>
+                </div>
+                {parent && parent.whatsapp_number && (
+                    <div className="text-right hidden sm:block">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold">WhatsApp</span>
+                        <p className="text-sm font-mono text-slate-600">{parent.whatsapp_number}</p>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const getRoleBadge = (role: string) => {
+        const base = "px-3 py-1 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1.5 border";
+        if (role === 'student') return <span className={`${base} bg-blue-50 text-blue-600 border-blue-100`}><GraduationCap size={14}/> Siswa</span>;
+        if (role === 'teacher') return <span className={`${base} bg-emerald-50 text-emerald-600 border-emerald-100`}><Briefcase size={14}/> Guru</span>;
+        if (role === 'admin') return <span className={`${base} bg-purple-50 text-purple-600 border-purple-100`}><Sparkles size={14}/> Admin</span>;
+        return <span className={`${base} bg-gray-50 text-gray-600 border-gray-100`}>{role}</span>;
+    };
+
+    // --- FORM LOGIC ---
     const handleClassChangeForTeacher = async (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newClassId = e.target.value;
-        
-        if (!newClassId) {
-            setFormData({ ...formData, class_id: '' });
-            return;
-        }
-
+        if (!newClassId) { setFormData({ ...formData, class_id: '' }); return; }
         const selectedClass = availableClasses.find(c => String(c.id) === newClassId);
         const isTaken = selectedClass?.teacher_id && selectedClass?.teacher_id !== 0;
-
-        // LOGIKA KONFIRMASI (Hanya di Edit Mode)
         if (isEditMode && isTaken) {
             if (String(selectedClass.teacher_id) !== String(selectedUserId)) {
                 const result = await Swal.fire({
                     title: 'Wali Kelas Sudah Ada!',
-                    text: `Kelas ${selectedClass.name} sudah dipegang oleh ${selectedClass.teacher_name}. Apakah Anda yakin ingin menimpanya?`,
+                    text: `Kelas ${selectedClass.name} sudah dipegang oleh ${selectedClass.teacher_name}. Timpa?`,
                     icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonColor: '#f59e0b',
-                    confirmButtonText: 'Ya, Ganti',
-                    cancelButtonText: 'Batal'
+                    showCancelButton: true, confirmButtonText: 'Ya, Ganti', cancelButtonText: 'Batal'
                 });
-
-                if (!result.isConfirmed) {
-                    return; 
-                }
+                if (!result.isConfirmed) return;
             }
         }
-
         setFormData({ ...formData, class_id: newClassId });
-    };
-
-    // --- LOGIKA GENERATE EMAIL OTOMATIS ---
-    const generateAutoEmail = (data: UserFormState): string => {
-        if (data.role === 'admin') return data.email;
-
-        switch (data.role) {
-            case 'teacher':
-                return `${data.nip}@teacher.isokul`;
-            case 'student':
-                return `${data.nisn}@student.isokul`;
-            case 'parent':
-                return `${data.whatsapp_number}@parent.isokul`;
-            case 'contributor':
-                return `${data.whatsapp_number}@contributor.isokul`;
-            default:
-                return `${Date.now()}@user.isokul`;
-        }
     };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const autoEmail = generateAutoEmail(formData);
-            const payload = {
-                ...formData,
-                email: autoEmail,
-                class_id: formData.class_id ? Number(formData.class_id) : null
-            };
-
+            let emailToSave = formData.email;
+            if(formData.role !== 'admin') {
+                 if (formData.role === 'teacher') emailToSave = `${formData.nip}@teacher.isokul`;
+                 else if (formData.role === 'student') emailToSave = `${formData.nisn}@student.isokul`;
+                 else if (formData.role === 'parent' || formData.role === 'contributor') emailToSave = `${formData.whatsapp_number}@${formData.role}.isokul`;
+                 else emailToSave = `${Date.now()}@user.isokul`;
+            }
+            const payload = { ...formData, email: emailToSave, class_id: formData.class_id ? Number(formData.class_id) : null };
             if (isEditMode && selectedUserId) {
                 await adminService.updateUser(String(selectedUserId), payload);
-                Swal.fire("Sukses", `Data diperbarui. Email: ${autoEmail}`, "success");
+                Swal.fire("Sukses", `Data diperbarui.`, "success");
             } else {
                 await adminService.createUser(payload);
-                Swal.fire("Sukses", `User dibuat. Email: ${autoEmail}`, "success");
+                Swal.fire("Sukses", `User dibuat.`, "success");
             }
             handleBackToList();
         } catch (error: any) {
@@ -206,22 +221,173 @@ const UserManagement: React.FC = () => {
             showCancelButton: true, confirmButtonColor: '#4F46E5', confirmButtonText: 'Ya, Hapus!', cancelButtonText: 'Batal'
         });
         if (result.isConfirmed) {
-            try {
-                await adminService.deleteUser(id);
-                Swal.fire('Terhapus!', '', 'success');
-                fetchUsers(meta.page);
-            } catch (error) { Swal.fire('Gagal', 'Error sistem', 'error'); }
+            try { await adminService.deleteUser(id); Swal.fire('Terhapus!', '', 'success'); fetchUsers(meta.page); } 
+            catch (error) { Swal.fire('Gagal', 'Error sistem', 'error'); }
         }
     };
 
-    const getRoleBadge = (role: string) => {
-        const base = "px-3 py-1 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1.5 border";
-        if (role === 'student') return <span className={`${base} bg-blue-50 text-blue-600 border-blue-100`}><GraduationCap size={14}/> Siswa</span>;
-        if (role === 'teacher') return <span className={`${base} bg-emerald-50 text-emerald-600 border-emerald-100`}><Briefcase size={14}/> Guru</span>;
-        if (role === 'admin') return <span className={`${base} bg-purple-50 text-purple-600 border-purple-100`}><Sparkles size={14}/> Admin</span>;
-        return <span className={`${base} bg-gray-50 text-gray-600 border-gray-100`}>{role}</span>;
-    };
+    // ==========================================
+    // RENDER: VIEW DETAIL (PAGE STYLE)
+    // ==========================================
+    if (viewMode === 'detail') {
+        return (
+            <div className="animate-fade-in-up space-y-6">
+                <div className="flex items-center justify-between mb-6">
+                    <button onClick={handleBackToList} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-colors group">
+                        <div className="p-2 bg-white rounded-lg border border-slate-200 group-hover:bg-indigo-50 group-hover:border-indigo-100"><ArrowLeft size={18}/></div>
+                        <span>Kembali ke Daftar</span>
+                    </button>
+                    {selectedUserDetail && (
+                        <button 
+                            onClick={() => handleEdit(selectedUserDetail)} 
+                            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all hover:-translate-y-0.5"
+                        >
+                            <Edit size={16}/> Edit Data
+                        </button>
+                    )}
+                </div>
 
+                {loadingDetail || !selectedUserDetail ? (
+                    <div className="flex flex-col items-center justify-center h-64 bg-white rounded-3xl border border-slate-200">
+                        <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-100 border-t-indigo-600 mb-4"></div>
+                        <p className="text-slate-400 text-sm font-bold">Memuat Data Lengkap...</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* KIRI: Profil Utama */}
+                        <div className="lg:col-span-1 space-y-6">
+                            <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 overflow-hidden border border-white">
+                                <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-8 text-center relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl translate-x-1/2 -translate-y-1/2"></div>
+                                    <div className="relative z-10 flex flex-col items-center">
+                                        <div className="w-24 h-24 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-4xl font-black text-white border-4 border-white/30 shadow-2xl mb-4">
+                                            {selectedUserDetail.full_name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <h1 className="text-xl font-black text-white leading-tight mb-2">{selectedUserDetail.full_name}</h1>
+                                        
+                                        {/* Status Aktivasi Badge di Detail */}
+                                        {selectedUserDetail.role === 'student' && !selectedUserDetail.is_active && (
+                                            <div className="mb-3">
+                                                <span className="bg-amber-400/90 text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm backdrop-blur-sm">
+                                                    <Lock size={10} /> Belum Aktivasi
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        <div className="flex flex-wrap justify-center gap-2">
+                                            <span className="bg-black/20 text-white/90 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-sm">
+                                                <Shield size={10} /> {selectedUserDetail.role}
+                                            </span>
+                                            {selectedUserDetail.class_name && (
+                                                <span className="bg-emerald-500/80 text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-sm shadow-sm">
+                                                    <GraduationCap size={10} /> {selectedUserDetail.role === 'teacher' ? 'Wali' : 'Kelas'} {selectedUserDetail.class_name}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="p-6 space-y-4">
+                                    <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                        <div className="p-2 bg-white rounded-lg text-violet-500 shadow-sm"><Mail size={18}/></div>
+                                        <div className="overflow-hidden">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email</p>
+                                            <p className="font-bold text-slate-700 text-sm truncate">{selectedUserDetail.email}</p>
+                                        </div>
+                                    </div>
+                                    {(selectedUserDetail.nisn || selectedUserDetail.nip) && (
+                                        <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                            <div className="p-2 bg-white rounded-lg text-blue-500 shadow-sm"><Hash size={18}/></div>
+                                            <div>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{selectedUserDetail.role === 'student' ? 'NISN' : 'NIP'}</p>
+                                                <p className="font-mono font-bold text-slate-700 text-sm">{selectedUserDetail.nisn || selectedUserDetail.nip}</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                        <div className="p-2 bg-white rounded-lg text-amber-500 shadow-sm"><Calendar size={18}/></div>
+                                        <div>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bergabung</p>
+                                            <p className="font-bold text-slate-700 text-sm">
+                                                {new Date(selectedUserDetail.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="lg:col-span-2 space-y-6">
+                            {selectedUserDetail.role === 'student' && (
+                                <div className="bg-white rounded-[2rem] p-8 shadow-xl shadow-slate-200/50 border border-white h-full">
+                                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
+                                        <div className="p-3 bg-rose-50 text-rose-500 rounded-xl"><Heart size={24} /></div>
+                                        <div>
+                                            <h3 className="font-black text-xl text-slate-800">Data Orang Tua / Wali</h3>
+                                            <p className="text-sm text-slate-500 font-medium">Informasi hubungan keluarga yang terhubung.</p>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-4">
+                                        {renderParentRow('Ayah', 'blue')}
+                                        {renderParentRow('Ibu', 'rose')}
+                                        {renderParentRow('Wali', 'emerald')}
+                                    </div>
+                                </div>
+                            )}
+
+                            {selectedUserDetail.role === 'parent' && (
+                                <div className="bg-white rounded-[2rem] p-8 shadow-xl shadow-slate-200/50 border border-white h-full">
+                                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
+                                        <div className="p-3 bg-blue-50 text-blue-500 rounded-xl"><Users size={24} /></div>
+                                        <div>
+                                            <h3 className="font-black text-xl text-slate-800">Daftar Anak</h3>
+                                            <p className="text-sm text-slate-500 font-medium">Siswa yang terhubung dengan akun ini.</p>
+                                        </div>
+                                    </div>
+                                    {selectedUserDetail.family_data && selectedUserDetail.family_data.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {selectedUserDetail.family_data.map((child: any, idx: number) => (
+                                                <div key={idx} className="bg-slate-50 rounded-2xl p-5 border border-slate-200 hover:border-blue-200 transition-all">
+                                                    <div className="flex justify-between items-start mb-3">
+                                                        <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-700 shadow-sm">
+                                                            {child.full_name.charAt(0)}
+                                                        </div>
+                                                        <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider">
+                                                            {child.relationship}
+                                                        </span>
+                                                    </div>
+                                                    <h4 className="font-bold text-slate-800 mb-1 line-clamp-1">{child.full_name}</h4>
+                                                    <div className="space-y-1 text-xs text-slate-500">
+                                                        <div className="flex items-center gap-2"><Hash size={12}/> <span className="font-mono">{child.nisn}</span></div>
+                                                        <div className="flex items-center gap-2"><GraduationCap size={12}/> <span>{child.class_name ? `Kelas ${child.class_name}` : 'Tanpa Kelas'}</span></div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-12 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 text-slate-400">
+                                            <p className="font-bold">Belum ada anak yang terhubung.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {(selectedUserDetail.role === 'teacher' || selectedUserDetail.role === 'contributor' || selectedUserDetail.role === 'admin') && (
+                                <div className="bg-white rounded-[2rem] p-8 shadow-xl shadow-slate-200/50 border border-white h-full flex flex-col items-center justify-center text-center opacity-60 min-h-[300px]">
+                                    <Shield size={64} className="text-slate-200 mb-4"/>
+                                    <h3 className="font-bold text-slate-400">Tidak Ada Data Relasi</h3>
+                                    <p className="text-sm text-slate-400 max-w-xs mt-2">Role ini tidak memiliki hubungan keluarga yang tercatat dalam sistem.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // ==========================================
+    // RENDER: VIEW FORM (EDIT / CREATE)
+    // ==========================================
     if (viewMode === 'form') {
         return (
             <div className="animate-fade-in-up space-y-6">
@@ -234,153 +400,22 @@ const UserManagement: React.FC = () => {
                         <p className="text-slate-500 text-sm font-medium">Email akan digenerate otomatis berdasarkan Role & ID.</p>
                     </div>
                 </div>
-
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 md:p-8 max-w-4xl">
                     <form onSubmit={handleSave} className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Peran (Role)</label>
-                                <select className="w-full p-3 bg-indigo-50 border border-indigo-100 rounded-xl font-bold text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-500" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value, class_id: '', nisn: '', nip: '', whatsapp_number: ''})}>
-                                    {roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                                </select>
-                            </div>
-                            
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nama Lengkap</label>
-                                <div className="relative">
-                                    <User className="absolute left-4 top-3.5 text-slate-400" size={18}/>
-                                    <input required type="text" className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all" placeholder="Nama Lengkap" value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} />
-                                </div>
-                            </div>
-
-                            {formData.role === 'admin' && (
-                                <div className="col-span-1 md:col-span-2 bg-purple-50 p-4 rounded-xl border border-purple-100">
-                                    <label className="block text-xs font-bold text-purple-600 uppercase mb-2">Email Admin (Manual)</label>
-                                    <div className="relative">
-                                        <Mail className="absolute left-4 top-3.5 text-purple-400" size={18}/>
-                                        <input required type="email" className="w-full pl-11 pr-4 py-3 bg-white border border-purple-200 rounded-xl font-semibold outline-none focus:ring-2 focus:ring-purple-500 transition-all" placeholder="admin@sekolah.sch.id" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-                                    </div>
-                                </div>
-                            )}
-
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Password {isEditMode && <span className="text-orange-500 font-normal lowercase">(kosongkan jika tidak ubah)</span>}</label>
-                                <div className="relative">
-                                    <Key className="absolute left-4 top-3.5 text-slate-400" size={18}/>
-                                    <input type="password" required={!isEditMode} className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all" placeholder="********" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
-                                </div>
-                            </div>
+                            <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Peran</label><select className="w-full p-3 bg-indigo-50 border border-indigo-100 rounded-xl font-bold text-indigo-900 outline-none" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value, class_id: '', nisn: '', nip: '', whatsapp_number: ''})}>{roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</select></div>
+                            <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nama Lengkap</label><input required type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold outline-none" placeholder="Nama Lengkap" value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} /></div>
+                            {formData.role === 'admin' && (<div className="col-span-1 md:col-span-2"><label className="block text-xs font-bold text-purple-600 uppercase mb-2">Email Admin (Manual)</label><input required type="email" className="w-full p-3 bg-white border border-purple-200 rounded-xl font-semibold outline-none" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} /></div>)}
+                            <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Password {isEditMode && <span className="text-orange-500 font-normal lowercase">(kosongkan jika tidak ubah)</span>}</label><input type="password" required={!isEditMode} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold outline-none" placeholder="********" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} /></div>
                         </div>
-
-                        {/* INFO EMAIL PREVIEW */}
-                        {formData.role !== 'admin' && (
-                            <div className="bg-slate-100 p-4 rounded-xl border border-slate-200 flex items-center gap-3">
-                                <Mail size={20} className="text-slate-400"/>
-                                <div>
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase">Preview Email Login</p>
-                                    <p className="text-sm font-bold text-slate-800">
-                                        {formData.role === 'teacher' ? (formData.nip ? `${formData.nip}@teacher.isokul` : 'Isi NIP untuk generate email') :
-                                         formData.role === 'student' ? (formData.nisn ? `${formData.nisn}@student.isokul` : 'Isi NISN untuk generate email') :
-                                         (formData.whatsapp_number ? `${formData.whatsapp_number}@${formData.role}.isokul` : 'Isi No WA untuk generate email')}
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* DETAIL ROLE SPESIFIK */}
-                        <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100/50 space-y-4">
-                            <h3 className="font-bold text-indigo-900 text-sm flex items-center gap-2 mb-4">
-                                <Sparkles size={16}/> Informasi Khusus Role: <span className="uppercase underline">{formData.role}</span>
-                            </h3>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* FORM SISWA */}
-                                {formData.role === 'student' && (
-                                    <>
-                                        <div>
-                                            <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">NISN (Wajib - Jadi Email)</label>
-                                            <input required type="text" className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" placeholder="Nomor Induk Siswa Nasional" value={formData.nisn} onChange={e => setFormData({...formData, nisn: e.target.value})} />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Pilih Kelas</label>
-                                            <select required className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" value={formData.class_id} onChange={e => setFormData({...formData, class_id: e.target.value})}>
-                                                <option value="">-- Pilih Kelas --</option>
-                                                {Array.isArray(availableClasses) && availableClasses.map(c => (
-                                                    <option key={c.id} value={c.id}>
-                                                        {c.name} {c.teacher_name ? `(Wali: ${c.teacher_name})` : ''}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* FORM GURU (Wali Kelas Logic) */}
-                                {formData.role === 'teacher' && (
-                                    <>
-                                        <div>
-                                            <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">NIP / ID Guru (Wajib - Jadi Email)</label>
-                                            <input required type="text" className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" placeholder="Nomor Induk Pegawai" value={formData.nip} onChange={e => setFormData({...formData, nip: e.target.value})} />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Wali Kelas Untuk (Opsional)</label>
-                                            <select 
-                                                className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" 
-                                                value={formData.class_id} 
-                                                onChange={handleClassChangeForTeacher} 
-                                            >
-                                                <option value="">-- Bukan Wali Kelas --</option>
-                                                {Array.isArray(availableClasses) && availableClasses.map(c => {
-                                                    const isTaken = c.teacher_id && c.teacher_id !== 0;
-                                                    const isMyClass = isEditMode && selectedUserId && String(c.teacher_id) === String(selectedUserId);
-                                                    const isDisabled = !isEditMode && isTaken;
-
-                                                    return (
-                                                        <option 
-                                                            key={c.id} 
-                                                            value={c.id} 
-                                                            disabled={isDisabled}
-                                                            className={isTaken && !isMyClass ? 'text-amber-600 bg-amber-50 italic font-medium' : 'text-slate-800'}
-                                                        >
-                                                            {c.name} {isTaken ? `(Sudah ada: ${c.teacher_name})` : ''}
-                                                        </option>
-                                                    );
-                                                })}
-                                            </select>
-                                            <p className="text-[10px] text-slate-400 mt-1 italic">
-                                                {isEditMode 
-                                                    ? "*Anda bisa menimpa wali kelas yang sudah ada (akan muncul konfirmasi)." 
-                                                    : "*Kelas yang sudah ada wali kelasnya tidak bisa dipilih saat membuat baru."}
-                                            </p>
-                                        </div>
-                                    </>
-                                )}
-
-                                {(formData.role === 'parent' || formData.role === 'contributor') && (
-                                    <div className="md:col-span-2">
-                                        <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Nomor WhatsApp (Wajib - Jadi Email)</label>
-                                        <div className="relative">
-                                            <Phone className="absolute left-4 top-3.5 text-slate-400" size={18}/>
-                                            <input required type="text" className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" placeholder="Contoh: 08123456789" value={formData.whatsapp_number} onChange={e => setFormData({...formData, whatsapp_number: e.target.value})} />
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                {formData.role === 'admin' && (
-                                    <div className="md:col-span-2 text-center py-4 text-slate-400 italic text-sm">
-                                        Gunakan kolom email manual di atas untuk login Admin.
-                                    </div>
-                                )}
-                            </div>
+                        <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100/50 grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {formData.role === 'student' && (<><div><label className="block text-xs font-bold text-indigo-600 uppercase mb-2">NISN</label><input required type="text" className="w-full p-3 border border-slate-200 rounded-xl outline-none bg-white" value={formData.nisn} onChange={e => setFormData({...formData, nisn: e.target.value})} /></div><div><label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Kelas</label><select required className="w-full p-3 border border-slate-200 rounded-xl outline-none bg-white" value={formData.class_id} onChange={e => setFormData({...formData, class_id: e.target.value})}><option value="">-- Pilih --</option>{availableClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div></>)}
+                            {formData.role === 'teacher' && (<><div><label className="block text-xs font-bold text-indigo-600 uppercase mb-2">NIP</label><input required type="text" className="w-full p-3 border border-slate-200 rounded-xl outline-none bg-white" value={formData.nip} onChange={e => setFormData({...formData, nip: e.target.value})} /></div><div><label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Wali Kelas (Opsional)</label><select className="w-full p-3 border border-slate-200 rounded-xl outline-none bg-white" value={formData.class_id} onChange={handleClassChangeForTeacher}><option value="">-- Bukan Wali Kelas --</option>{availableClasses.map(c => <option key={c.id} value={c.id}>{c.name} {c.teacher_id ? '(Ada Guru)' : ''}</option>)}</select></div></>)}
+                            {(formData.role === 'parent' || formData.role === 'contributor') && (<div className="md:col-span-2"><label className="block text-xs font-bold text-indigo-600 uppercase mb-2">WhatsApp</label><input required type="text" className="w-full p-3 border border-slate-200 rounded-xl outline-none bg-white" value={formData.whatsapp_number} onChange={e => setFormData({...formData, whatsapp_number: e.target.value})} /></div>)}
                         </div>
-
-                        <div className="flex gap-4 pt-4">
-                            <button type="button" onClick={handleBackToList} className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors">
-                                Batal
-                            </button>
-                            <button type="submit" className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all flex justify-center items-center gap-2">
-                                <Save size={20}/> Simpan Data
-                            </button>
+                        <div className="flex gap-4 justify-end pt-4">
+                            <button type="button" onClick={handleBackToList} className="px-6 py-3 font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors">Batal</button>
+                            <button type="submit" className="px-10 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2"><Save size={20}/> Simpan</button>
                         </div>
                     </form>
                 </div>
@@ -388,116 +423,63 @@ const UserManagement: React.FC = () => {
         );
     }
 
+    // ==========================================
+    // RENDER: VIEW LIST (GRID USER)
+    // ==========================================
     return (
-        <div className="space-y-6 animate-fade-in">
-            {/* Toolbar */}
+        <div className="space-y-6 animate-fade-in relative">
             <div className="flex flex-col lg:flex-row gap-4">
                 <div className="flex-1 bg-white p-2 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-2">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3 text-slate-400" size={20}/>
                         <input type="text" placeholder="Cari user (nama, nisn, email)..." className="w-full pl-10 pr-4 py-2.5 bg-transparent outline-none font-medium text-slate-700" value={filters.search} onChange={(e) => setFilters({...filters, search: e.target.value})}/>
                     </div>
-                    <div className="h-px md:h-auto md:w-px bg-slate-100 mx-2"></div>
                     <div className="flex gap-2">
-                        {/* Filter Role */}
-                        <div className="relative flex items-center">
-                            <Shield size={16} className="absolute left-3 text-slate-400 z-10"/>
-                            <select className="bg-slate-50 border border-slate-100 pl-9 pr-3 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer hover:bg-slate-100 transition-colors appearance-none" value={filters.role} onChange={(e) => setFilters({...filters, role: e.target.value, class_id: 'all'})}>
-                                <option value="all">Semua Role</option>
-                                {roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                            </select>
-                        </div>
-
-                        {/* Filter Class - UPDATED */}
-                        {(filters.role === 'all' || filters.role === 'student' || filters.role === 'teacher') && (
-                            <div className="relative flex items-center">
-                                <Filter size={16} className="absolute left-3 text-slate-400 z-10"/>
-                                <select 
-                                    className="bg-slate-50 border border-slate-100 pl-9 pr-8 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer hover:bg-slate-100 transition-colors appearance-none" 
-                                    value={filters.class_id} 
-                                    onChange={(e) => setFilters({...filters, class_id: e.target.value})}
-                                >
-                                    <option value="all">Semua Kelas</option>
-                                    <option value="none" className="text-rose-600 font-bold">⚠ Belum Ada Kelas</option>
-                                    {Array.isArray(availableClasses) && availableClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-                            </div>
-                        )}
+                        <div className="relative flex items-center"><Shield size={16} className="absolute left-3 text-slate-400 z-10"/><select className="bg-slate-50 border border-slate-100 pl-9 pr-3 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer" value={filters.role} onChange={(e) => setFilters({...filters, role: e.target.value, class_id: 'all', status: 'all'})}><option value="all">Semua Role</option>{roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</select></div>
+                        {filters.role === 'student' && (<div className="relative flex items-center animate-in slide-in-from-left-2 fade-in duration-300"><Lock size={16} className="absolute left-3 text-slate-400 z-10"/><select className="bg-slate-50 border border-slate-100 pl-9 pr-3 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer" value={filters.status} onChange={(e) => setFilters({...filters, status: e.target.value})}><option value="all">Semua Status</option><option value="active">Sudah Aktivasi</option><option value="inactive">Belum Aktivasi</option></select></div>)}
+                        {(filters.role === 'all' || filters.role === 'student' || filters.role === 'teacher') && (<div className="relative flex items-center"><Filter size={16} className="absolute left-3 text-slate-400 z-10"/><select className="bg-slate-50 border border-slate-100 pl-9 pr-8 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer" value={filters.class_id} onChange={(e) => setFilters({...filters, class_id: e.target.value})}><option value="all">Semua Kelas</option><option value="none">Belum Ada Kelas</option>{availableClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>)}
                     </div>
                 </div>
-                <button onClick={handleAddNew} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-200 transition-all">
-                    <Plus size={20}/> <span className="hidden sm:inline">Tambah User</span>
-                </button>
+                <button onClick={handleAddNew} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-200 transition-all"><Plus size={20}/> <span className="hidden sm:inline">Tambah User</span></button>
             </div>
 
-            {/* List User Grid */}
             {loading ? (
                 <div className="flex flex-col items-center justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-100 border-t-indigo-600 mb-4"></div><p className="text-indigo-400 font-bold text-xs">Memuat Data...</p></div>
             ) : users.length === 0 ? (
-                <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300">
-                    <User size={48} className="mx-auto text-slate-300 mb-3"/>
-                    <p className="text-slate-500 font-medium">Tidak ada pengguna ditemukan.</p>
-                </div>
+                <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300"><User size={48} className="mx-auto text-slate-300 mb-3"/><p className="text-slate-500 font-medium">Tidak ada data.</p></div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                     {users.map((u) => (
-                        <div key={u.id} className="bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-xl hover:border-indigo-200 hover:-translate-y-1 transition-all duration-300 group relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-indigo-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                            
-                            <div className="flex justify-between items-start mb-4 pl-2">
+                        <div key={u.id} className="bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-xl hover:border-indigo-200 transition-all duration-300 group relative">
+                            <div className="flex justify-between items-start mb-4">
                                 <div className="flex items-center gap-3">
                                     <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-black text-lg shadow-md">{u.full_name.charAt(0)}</div>
                                     <div className="overflow-hidden">
-                                        <h3 className="font-bold text-slate-800 truncate text-sm leading-tight max-w-[150px] group-hover:text-indigo-600 transition-colors">{u.full_name}</h3>
+                                        <h3 className="font-bold text-slate-800 truncate text-sm leading-tight max-w-[150px]">{u.full_name}</h3>
                                         <div className="flex items-center gap-1.5 text-slate-500 mt-1"><Mail size={12}/><p className="text-[11px] font-medium truncate max-w-[140px]">{u.email}</p></div>
                                     </div>
                                 </div>
                                 {getRoleBadge(u.role)}
                             </div>
-
-                            <div className="space-y-2 mb-5 bg-slate-50 p-3 rounded-xl border border-slate-100 mx-2">
+                            <div className="space-y-2 mb-5 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                {u.role === 'student' && !u.is_active && (<div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-200 text-amber-600"><Lock size={12} /> <span className="text-[10px] font-bold uppercase">Belum Aktivasi</span></div>)}
                                 {(u.role === 'student' || u.role === 'teacher') && (
                                     <>
-                                        <div className="flex justify-between items-center text-[11px]">
-                                            <span className="text-slate-400 font-bold uppercase flex items-center gap-1.5"><BookOpen size={12}/> {u.role === 'teacher' ? 'Wali Kelas' : 'Kelas'}</span> 
-                                            {u.role === 'student' && !u.class_name && !u.class_id ? (
-                                                <span className="font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 flex items-center gap-1">
-                                                    ⚠ Belum Masuk Kelas
-                                                </span>
-                                            ) : (
-                                                <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-100">
-                                                    {u.class_name || (u.class_id ? `ID: ${u.class_id}` : '-')}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="flex justify-between items-center text-[11px]">
-                                            <span className="text-slate-400 font-bold uppercase flex items-center gap-1.5"><Hash size={12}/> {u.role === 'student' ? 'NISN' : 'NIP'}</span> 
-                                            <span className="font-bold text-slate-700 font-mono">{u.nisn || u.nip || '-'}</span>
-                                        </div>
+                                        <div className="flex justify-between items-center text-[11px]"><span className="text-slate-400 font-bold uppercase flex items-center gap-1.5"><BookOpen size={12}/> {u.role === 'teacher' ? 'Wali Kelas' : 'Kelas'}</span> <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-100">{u.class_name || (u.class_id ? `ID: ${u.class_id}` : '-')}</span></div>
+                                        <div className="flex justify-between items-center text-[11px]"><span className="text-slate-400 font-bold uppercase flex items-center gap-1.5"><Hash size={12}/> {u.role === 'student' ? 'NISN' : 'NIP'}</span> <span className="font-bold text-slate-700 font-mono">{u.nisn || u.nip || '-'}</span></div>
                                     </>
                                 )}
-                                {u.whatsapp_number && (
-                                    <div className="flex justify-between items-center text-[11px]">
-                                        <span className="text-slate-400 font-bold uppercase flex items-center gap-1.5"><Phone size={12}/> WA</span> 
-                                        <span className="font-bold text-slate-700">{u.whatsapp_number}</span>
-                                    </div>
-                                )}
+                                {u.whatsapp_number && (<div className="flex justify-between items-center text-[11px]"><span className="text-slate-400 font-bold uppercase flex items-center gap-1.5"><Phone size={12}/> WA</span> <span className="font-bold text-slate-700">{u.whatsapp_number}</span></div>)}
                             </div>
-
-                            <div className="flex gap-2 pt-2 px-2">
-                                <button onClick={() => handleEdit(u)} className="flex-1 py-2.5 rounded-xl bg-indigo-50 text-indigo-600 font-bold text-[11px] hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-2 uppercase tracking-wide">
-                                    <Edit size={14}/> Edit
-                                </button>
-                                <button onClick={() => handleDelete(u.id)} className="w-10 h-10 rounded-xl bg-white text-rose-500 border border-rose-100 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center shadow-sm">
-                                    <Trash2 size={16}/>
-                                </button>
+                            <div className="flex gap-2">
+                                <button onClick={() => handleViewDetail(u.id)} className="flex-1 py-2 rounded-lg bg-indigo-50 text-indigo-600 font-bold text-xs hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-2"><Eye size={14}/> Detail</button>
+                                <button onClick={() => handleDelete(u.id)} className="w-8 h-8 rounded-lg bg-white text-rose-500 border border-rose-100 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center"><Trash2 size={14}/></button>
                             </div>
                         </div>
                     ))}
                 </div>
             )}
 
-            {/* Pagination */}
             {!loading && users.length > 0 && (
                 <div className="flex flex-col md:flex-row justify-between items-center pt-6 border-t border-slate-200 gap-4">
                     <p className="text-slate-400 text-[11px] font-bold uppercase tracking-widest">Menampilkan {users.length} dari {meta.total} Data</p>

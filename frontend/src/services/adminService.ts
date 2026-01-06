@@ -29,6 +29,11 @@ const generateAIAnalysis = async () => {
     }
 };
 
+const getUserDetail = async (id: number) => {
+    const response = await axios.get(`${API_URL}/users/${id}`, getAuthHeaders());
+    return response.data;
+};
+
 const getUsers = async (params: any) => {
     const response = await axios.get(`${API_URL}/users`, { 
         ...getAuthHeaders(),
@@ -128,7 +133,8 @@ const adminService = {
     setupClassDatabase,
     getTeachersList,
     addStudentsToClass,
-    removeStudentsFromClass
+    removeStudentsFromClass,
+    getUserDetail
 };
 
 export default adminService;

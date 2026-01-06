@@ -10,6 +10,10 @@ interface LogDetailViewProps {
 const LogDetailView: React.FC<LogDetailViewProps> = ({ log, onBack }) => {
     if (!log) return null;
 
+    // --- HELPER 0: Ambil Info User Login ---
+    const userString = localStorage.getItem('user');
+    const currentUser = userString ? JSON.parse(userString) : { id: 0 };
+
     // --- HELPER 1: Format Jam ---
     const formatTime = (timeStr?: string) => {
         if (!timeStr) return '-';
@@ -83,6 +87,43 @@ const LogDetailView: React.FC<LogDetailViewProps> = ({ log, onBack }) => {
         );
     };
 
+    // --- LOGIKA STATUS TAMPILAN ---
+    const getStatusDisplay = () => {
+        if (log.status === 'Disahkan') {
+            return {
+                bg: 'bg-blue-50 border-blue-200 text-blue-800',
+                iconBg: 'bg-blue-100',
+                icon: <CheckCircle size={24} />,
+                label: 'Status Laporan',
+                value: 'Disahkan Wali Kelas'
+            };
+        } 
+        if (log.status === 'Disetujui') {
+            // Logika Nama Penyetuju
+            const isMe = log.approver_id === currentUser.id;
+            const role = log.approved_by || 'Keluarga';
+            const name = log.approver_name || '';
+            const approverLabel = isMe ? 'Anda' : `${role} (${name})`;
+
+            return {
+                bg: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+                iconBg: 'bg-emerald-100',
+                icon: <CheckCircle size={24} />,
+                label: 'Status Laporan',
+                value: `Disetujui oleh ${approverLabel}`
+            };
+        }
+        return {
+            bg: 'bg-amber-50 border-amber-200 text-amber-800',
+            iconBg: 'bg-amber-100',
+            icon: <AlertCircle size={24} />,
+            label: 'Status Laporan',
+            value: 'Menunggu Persetujuan'
+        };
+    };
+
+    const statusInfo = getStatusDisplay();
+
     return (
         <div className="bg-white rounded-[2rem] shadow-sm border border-gray-200 overflow-hidden animate-fade-in">
             {/* Header Halaman Detail */}
@@ -104,24 +145,14 @@ const LogDetailView: React.FC<LogDetailViewProps> = ({ log, onBack }) => {
             {/* Content Body */}
             <div className="p-6 md:p-8 space-y-6">
                 
-                {/* Status Badge */}
-                <div className={`p-4 rounded-2xl border flex items-center gap-4 ${
-                    log.status === 'Disahkan' ? 'bg-blue-50 border-blue-200 text-blue-800' :
-                    log.status === 'Disetujui' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
-                    'bg-amber-50 border-amber-200 text-amber-800'
-                }`}>
-                    <div className={`p-3 rounded-full ${
-                         log.status === 'Disahkan' ? 'bg-blue-100' :
-                         log.status === 'Disetujui' ? 'bg-emerald-100' :
-                         'bg-amber-100'
-                    }`}>
-                        {log.status === 'Disahkan' ? <CheckCircle size={24} /> :
-                         log.status === 'Disetujui' ? <CheckCircle size={24} /> :
-                         <AlertCircle size={24} />}
+                {/* Status Badge (Updated Logic) */}
+                <div className={`p-4 rounded-2xl border flex items-center gap-4 ${statusInfo.bg}`}>
+                    <div className={`p-3 rounded-full ${statusInfo.iconBg}`}>
+                        {statusInfo.icon}
                     </div>
                     <div>
-                        <p className="text-xs font-bold uppercase opacity-70">Status Laporan</p>
-                        <p className="font-black text-xl">{log.status}</p>
+                        <p className="text-xs font-bold uppercase opacity-70">{statusInfo.label}</p>
+                        <p className="font-black text-lg md:text-xl leading-tight">{statusInfo.value}</p>
                     </div>
                 </div>
 

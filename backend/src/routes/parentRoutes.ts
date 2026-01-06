@@ -1,52 +1,35 @@
-import { Router, RequestHandler } from 'express'; // 1. Import RequestHandler
+import { Router, RequestHandler } from 'express';
 import { 
     getDashboardData, 
     approveCharacterLog, 
     linkStudent, 
     getLogHistory,
-    previewStudentByNisn 
+    previewStudentByNisn,
+    searchStudents // Pastikan ini terimport
 } from '../controllers/parentController';
 import { authMiddleware, roleMiddleware } from '../middleware/authMiddleware'; 
 
 const router = Router();
 
-// Mengambil data dasbor utama (log terbatas)
-router.get(
-    '/dashboard',
-    authMiddleware as RequestHandler, 
-    roleMiddleware(['parent']) as RequestHandler,
-    getDashboardData as RequestHandler
-);
+// --- MIDDLEWARE GLOBAL UNTUK SEMUA RUTE PARENT ---
+// Dengan ini, semua endpoint di bawah otomatis butuh Login & Role Parent
+router.use(authMiddleware as RequestHandler);
+router.use(roleMiddleware(['parent']) as RequestHandler);
 
-// [FITUR BARU] Mengambil seluruh riwayat log untuk kalender
-router.get(
-    '/log-history',
-    authMiddleware as RequestHandler,
-    roleMiddleware(['parent']) as RequestHandler,
-    getLogHistory as RequestHandler
-);
+// --- DEFINISI RUTE ---
 
-// Menyetujui sebuah log karakter
-router.patch(
-    '/approve/:logId',
-    authMiddleware as RequestHandler,
-    roleMiddleware(['parent']) as RequestHandler,
-    approveCharacterLog as RequestHandler
-);
+// Dashboard & Data Utama
+router.get('/dashboard', getDashboardData as RequestHandler);
 
-// Menautkan akun orang tua ke siswa via NISN
-router.post(
-    '/link-student',
-    authMiddleware as RequestHandler,
-    roleMiddleware(['parent']) as RequestHandler,
-    linkStudent as RequestHandler
-);
+// [PENTING] Fitur Pencarian Siswa (Yang tadi error)
+router.get('/search-students', searchStudents as RequestHandler);
 
-// Preview Nama Siswa berdasarkan NISN (Cek sebelum link)
-router.post(
-    '/preview-student', 
-    authMiddleware as RequestHandler, 
-    previewStudentByNisn as RequestHandler
-);
+// Fitur Link Siswa
+router.post('/link-student', linkStudent as RequestHandler);
+router.post('/preview-student', previewStudentByNisn as RequestHandler);
+
+// Fitur Jurnal & Log
+router.get('/log-history', getLogHistory as RequestHandler);
+router.patch('/approve/:logId', approveCharacterLog as RequestHandler);
 
 export default router;

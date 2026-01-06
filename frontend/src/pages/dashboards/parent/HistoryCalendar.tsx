@@ -3,7 +3,7 @@ import Calendar from 'react-calendar';
 import toast from 'react-hot-toast';
 import { History, CheckCircle2, Award, CalendarDays, Loader2 } from 'lucide-react';
 import parentService, { CharacterLog } from '../../../services/parentService';
-import LogDetailView from './LogDetailView'; // Import komponen baru
+import LogDetailView from './LogDetailView'; 
 import 'react-calendar/dist/Calendar.css';
 
 const HistoryCalendar: React.FC = () => {
@@ -13,6 +13,10 @@ const HistoryCalendar: React.FC = () => {
     // State untuk navigasi view
     const [view, setView] = useState<'calendar' | 'detail'>('calendar');
     const [selectedLog, setSelectedLog] = useState<CharacterLog | null>(null);
+
+    // [BARU] Ambil Info User Login untuk Statistik Personal
+    const userString = localStorage.getItem('user');
+    const currentUser = userString ? JSON.parse(userString) : { id: 0 };
 
     useEffect(() => {
         const fetchHistory = async () => {
@@ -42,22 +46,26 @@ const HistoryCalendar: React.FC = () => {
         
         if (logForDate) {
             setSelectedLog(logForDate);
-            setView('detail'); // Ganti view ke detail
-            window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll ke atas
+            setView('detail'); 
+            window.scrollTo({ top: 0, behavior: 'smooth' }); 
         } else {
             toast('Tidak ada kegiatan pada tanggal ini', { icon: '📅', id: 'no-date' });
         }
     };
 
-    // Fungsi kembali ke kalender
     const handleBackToCalendar = () => {
         setView('calendar');
         setSelectedLog(null);
     };
 
-    // --- LOGIKA MENGHITUNG STATISTIK ---
+    // --- LOGIKA MENGHITUNG STATISTIK (PERSONALISASI) ---
     const totalInput = logs.length;
-    const sahOrtuCount = logs.filter(l => l.status === 'Disetujui' || l.status === 'Disahkan').length;
+    
+    // [UPDATE] Hanya hitung 'Sah Oleh Anda' jika approver_id COCOK dengan user login
+    const sahOlehAndaCount = logs.filter(l => 
+        l.status === 'Disetujui' && l.approver_id === currentUser.id
+    ).length;
+    
     const sahGuruCount = logs.filter(l => l.status === 'Disahkan').length;
 
     if (isLoading) return (
@@ -66,12 +74,10 @@ const HistoryCalendar: React.FC = () => {
         </div>
     );
 
-    // TAMPILAN 1: DETAIL VIEW (Halaman Baru)
     if (view === 'detail' && selectedLog) {
         return <LogDetailView log={selectedLog} onBack={handleBackToCalendar} />;
     }
 
-    // TAMPILAN 2: KALENDER (Default)
     return (
         <div className="space-y-8 animate-fade-in pb-10">
             {/* Calendar Section */}
@@ -131,8 +137,9 @@ const HistoryCalendar: React.FC = () => {
 
                 <div className="bg-white p-6 rounded-2xl border-b-4 border-emerald-500 shadow-sm flex items-center justify-between transition-all hover:shadow-md">
                     <div>
-                        <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-1">Status Sah oleh Anda</p>
-                        <h3 className="text-3xl font-black text-gray-800">{sahOrtuCount} <span className="text-sm text-gray-400 font-medium">Jurnal</span></h3>
+                        {/* Judul lebih spesifik */}
+                        <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-1">Disetujui Oleh Anda</p>
+                        <h3 className="text-3xl font-black text-gray-800">{sahOlehAndaCount} <span className="text-sm text-gray-400 font-medium">Jurnal</span></h3>
                     </div>
                     <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600">
                         <CheckCircle2 size={24} />

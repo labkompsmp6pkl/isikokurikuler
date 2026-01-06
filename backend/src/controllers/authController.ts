@@ -9,7 +9,6 @@ import { UserPayload } from '../middleware/authMiddleware';
 // ================================================
 export const getClasses: RequestHandler = async (req, res) => {
   try {
-    // PERBAIKAN: Join ke tabel users untuk ambil nama wali kelas (teacher_name)
     const query = `
       SELECT c.id, c.name, c.kapasitas, c.terisi, c.teacher_id, u.full_name as teacher_name 
       FROM classes c 
@@ -57,10 +56,20 @@ export const login = async (req: Request, res: Response) => {
 
     if (!user) return res.status(401).json({ message: LOGIN_FAIL_MSG });
 
-    const userPasswordHash = user.password ? user.password.replace('$2y$', '$2a$') : '';
-    
-    if (!userPasswordHash) return res.status(401).json({ message: 'Akun ini terdaftar via Google. Silakan login via Google.' });
+    // CEK APAKAH USER PUNYA PASSWORD
+    // Siswa baru daftar (belum diaktivasi ortu) passwordnya NULL/Kosong
+    if (!user.password) {
+        if (user.role === 'student') {
+            return res.status(401).json({ message: 'Akun siswa belum diaktivasi oleh Orang Tua. Silakan minta Orang Tua untuk menautkan akun.' });
+        } else if (user.google_id) {
+            return res.status(401).json({ message: 'Akun ini terdaftar via Google. Silakan login via Google.' });
+        } else {
+            return res.status(401).json({ message: 'Akun belum memiliki password.' });
+        }
+    }
 
+    const userPasswordHash = user.password.replace('$2y$', '$2a$'); // Kompatibilitas hash PHP lama (jika ada)
+    
     const isPasswordValid = await bcrypt.compare(password, userPasswordHash);
     
     if (!isPasswordValid) return res.status(401).json({ message: LOGIN_FAIL_MSG });
@@ -97,39 +106,52 @@ export const register = async (req: Request, res: Response) => {
   try {
     await connection.beginTransaction();
 
-    if (!email || !password || !fullName || !role) {
-      throw new Error("Data pendaftaran tidak lengkap.");
+    // Validasi Field Wajib Dasar
+    if (!email || !fullName || !role) {
+      throw new Error("Data pendaftaran tidak lengkap (Nama, Email, Role).");
     }
+
+    // --- VALIDASI PASSWORD KHUSUS ---
+    // Password WAJIB jika role BUKAN student
+    if (role !== 'student') {
+        if (!password || password.length < 6) {
+            throw new Error("Password wajib diisi minimal 6 karakter.");
+        }
+    }
+    // Jika role student, password boleh kosong (nanti jadi NULL)
 
     const [existing]: any = await connection.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length > 0) throw new Error("Email sudah digunakan.");
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Hash Password (Hanya jika ada password)
+    let hashedPassword = null;
+    if (password) {
+        hashedPassword = await bcrypt.hash(password, 10);
+    }
 
+    // Insert ke Database
     const [result]: any = await connection.query(
       `INSERT INTO users (full_name, email, password, role) VALUES (?, ?, ?, ?)`,
       [fullName.trim(), email, hashedPassword, role]
     );
     const newUserId = result.insertId;
 
+    // --- ROLE SPECIFIC UPDATES ---
     if (role === 'student') {
       if (!nisn || !classId) throw new Error("NISN dan Kelas wajib diisi.");
+      
       const [checkNisn]: any = await connection.query('SELECT id FROM users WHERE nisn = ?', [nisn]);
       if (checkNisn.length > 0) throw new Error("NISN sudah terdaftar.");
+      
       await connection.query('UPDATE users SET nisn = ?, class_id = ? WHERE id = ?', [nisn, classId, newUserId]);
 
     } else if (role === 'teacher') {
       if (!nip) throw new Error("NIP wajib diisi.");
       
-      // LOGIC: Jika guru memilih kelas (classId ada), cek apakah kelas itu sudah punya wali kelas?
-      // (Opsional: tambahkan validasi di backend jika ingin lebih ketat)
-      
       await connection.query('UPDATE users SET nip = ?, class_id = ? WHERE id = ?', [nip, classId || null, newUserId]);
 
-      // Jika guru ini menjadi wali kelas (ada classId), update juga tabel classes
       if (classId) {
-         // Reset wali kelas lama (jika ada logic replace) atau reject (jika strict)
-         // Disini kita pakai logic replace (menggantikan wali kelas lama) sesuai permintaan sebelumnya
+         // Logic replace wali kelas
          await connection.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND role = 'teacher' AND id != ?", [classId, newUserId]);
          await connection.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [newUserId, classId]);
       }
@@ -145,6 +167,8 @@ export const register = async (req: Request, res: Response) => {
 
     await connection.commit();
 
+    // Buat token login otomatis (Kecuali siswa tanpa password, mungkin tidak perlu auto-login atau login terbatas)
+    // Untuk simplifikasi, kita tetap berikan token agar bisa redirect ke halaman "Menunggu Aktivasi" di frontend jika perlu
     const token = jwt.sign(
       { id: newUserId, role, name: fullName },
       process.env.JWT_SECRET as string,
@@ -224,6 +248,7 @@ export const completeGoogleRegistration = async (req: Request, res: Response) =>
     const [checkUser]: any = await connection.query('SELECT id FROM users WHERE email = ?', [email]);
     if (checkUser.length > 0) throw new Error("Email ini sudah terdaftar.");
 
+    // Insert user baru via Google (Password NULL)
     const [result]: any = await connection.query(
       `INSERT INTO users (full_name, email, role, google_id, password) VALUES (?, ?, ?, ?, NULL)`,
       [fullName.trim(), email, role, googleId]
@@ -239,14 +264,14 @@ export const completeGoogleRegistration = async (req: Request, res: Response) =>
     } else if (role === 'teacher') {
       await connection.query('UPDATE users SET nip = ?, class_id = ? WHERE id = ?', [nip.trim(), classId || null, newUserId]);
       
-      // Update tabel classes jika teacher memilih kelas (Logic override wali kelas)
       if (classId) {
          await connection.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND role = 'teacher' AND id != ?", [classId, newUserId]);
          await connection.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [newUserId, classId]);
       }
 
     } else if (role === 'parent') {
-      const cleanPhone = phoneNumber.replace(/\D/g, '');
+      const cleanPhone = phoneNumber ? phoneNumber.replace(/\D/g, '') : null;
+      if (!cleanPhone) throw new Error("Nomor WhatsApp wajib diisi.");
       await connection.query('UPDATE users SET whatsapp_number = ? WHERE id = ?', [cleanPhone, newUserId]);
     } else if (role === 'contributor') {
       await connection.query('UPDATE users SET nip = ? WHERE id = ?', [nip.trim(), newUserId]);

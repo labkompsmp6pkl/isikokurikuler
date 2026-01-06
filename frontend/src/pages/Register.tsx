@@ -20,6 +20,7 @@ import {
   AlertCircle,
   Trophy,
   CheckCircle2,
+  Info
 } from 'lucide-react';
 
 // ==========================================
@@ -55,7 +56,6 @@ const InputField: React.FC<InputFieldProps> = ({
   </div>
 );
 
-// UPDATE: Tambahkan disabled & className di tipe options
 type SelectFieldProps = {
   name: string;
   value: string | number;
@@ -83,7 +83,6 @@ const SelectField: React.FC<SelectFieldProps> = ({
       className={`appearance-none block w-full pl-16 pr-12 py-5 border-2 border-transparent bg-slate-50 hover:border-violet-100 focus:border-violet-500 rounded-[2rem] focus:outline-none focus:bg-white transition-all font-bold text-sm shadow-inner focus:shadow-violet-100/50 ${!value ? 'text-slate-400' : 'text-slate-900'} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
     >
       <option value="" disabled>{placeholder}</option>
-      {/* UPDATE: Render option dengan logic disabled */}
       {options.map(opt => (
         <option 
             key={opt.value} 
@@ -102,7 +101,7 @@ const SelectField: React.FC<SelectFieldProps> = ({
 );
 
 // ==========================================
-// KOMPONEN UTAMA
+// KOMPONEN UTAMA REGISTER
 // ==========================================
 
 const Register: React.FC = () => {
@@ -140,7 +139,6 @@ const Register: React.FC = () => {
         const response = await authApi.get('/auth/classes-list');
         const data = response.data.data || response.data;
         if (Array.isArray(data)) {
-          // FIX: Jangan filter kapasitas di sini agar Guru bisa melihat semua kelas
           setClassList(data);
         }
       } catch (err) {
@@ -152,10 +150,9 @@ const Register: React.FC = () => {
     fetchClasses();
   }, []);
 
-  // FIX: Filter kapasitas dipindah ke sini (khusus untuk Dropdown Siswa)
   const studentClassOptions = useMemo(() => {
     return classList
-      .filter(c => (c.kapasitas || 0) > (c.terisi || 0)) // Filter hanya untuk siswa
+      .filter(c => (c.kapasitas || 0) > (c.terisi || 0)) 
       .map(c => ({ 
         value: c.id, 
         label: `Kelas ${c.name} (Sisa ${c.kapasitas - c.terisi})` 
@@ -172,16 +169,20 @@ const Register: React.FC = () => {
     setLoading(true);
     setError('');
 
-    if (formData.password.length < 6) {
-      setError('Password minimal 6 karakter.');
-      setLoading(false);
-      return;
-    }
+    // --- LOGIKA VALIDASI PASSWORD BARU ---
+    // Password hanya dicek jika role BUKAN siswa
+    if (selectedRole !== 'student') {
+        if (formData.password.length < 6) {
+            setError('Password minimal 6 karakter.');
+            setLoading(false);
+            return;
+        }
 
-    if (formData.password !== formData.confirmPassword) {
-      setError('Konfirmasi password tidak cocok.');
-      setLoading(false);
-      return;
+        if (formData.password !== formData.confirmPassword) {
+            setError('Konfirmasi password tidak cocok.');
+            setLoading(false);
+            return;
+        }
     }
 
     const loadingToast = toast.loading('Mendaftarkan akun...');
@@ -195,7 +196,8 @@ const Register: React.FC = () => {
         role: selectedRole,
         fullName: formData.fullName.trim(),
         email: generatedEmail,
-        password: formData.password,
+        // Jika siswa, kirim password kosong/null
+        password: selectedRole === 'student' ? '' : formData.password,
         nisn: selectedRole === 'student' ? formData.nisn : undefined,
         nip: (selectedRole === 'teacher' || selectedRole === 'contributor') ? formData.nip : undefined,
         whatsappNumber: selectedRole === 'parent' ? formData.whatsappNumber : undefined,
@@ -205,13 +207,19 @@ const Register: React.FC = () => {
       const response = await authRegister(registrationData);
       
       toast.dismiss(loadingToast);
-      toast.success('Pendaftaran Berhasil!', { icon: '🎉' });
       
-      if (response.user) {
-        const target = response.user.role === 'student' ? '/student/beranda' : `/${response.user.role}/dashboard`;
-        navigate(target, { replace: true });
+      if (selectedRole === 'student') {
+        // Pesan khusus untuk siswa
+        toast.success('Pendaftaran Berhasil! Minta Orang Tua untuk aktivasi akun.', { duration: 5000, icon: '🎓' });
+        navigate('/login', { state: { message: 'Akun berhasil dibuat. Silakan minta Orang Tua untuk menautkan akun dan mengatur password agar Anda bisa login.' } });
       } else {
-        navigate('/login');
+        toast.success('Pendaftaran Berhasil!', { icon: '🎉' });
+        if (response.user) {
+            const target = response.user.role === 'student' ? '/student/beranda' : `/${response.user.role}/dashboard`;
+            navigate(target, { replace: true });
+        } else {
+            navigate('/login');
+        }
       }
 
     } catch (err: any) {
@@ -264,18 +272,16 @@ const Register: React.FC = () => {
               onChange={handleFormChange}
               icon={<ShieldCheck size={22}/>}
             />
-            {/* FIX: SelectField Khusus Guru dengan Logic Disable */}
             <SelectField 
               name="classId" 
               value={formData.classId} 
               options={classList.map(c => {
-                  // Cek apakah kelas sudah punya wali kelas
                   const isTaken = c.teacher_id && c.teacher_id !== 0;
                   return {
                       value: c.id,
                       label: `Kelas ${c.name}` + (isTaken ? ` (Sudah ada: ${c.teacher_name})` : ''),
-                      disabled: isTaken, // Disable jika sudah ada
-                      className: isTaken ? 'text-slate-400 bg-slate-100 italic' : '' // Styling khusus
+                      disabled: isTaken,
+                      className: isTaken ? 'text-slate-400 bg-slate-100 italic' : ''
                   };
               })}
               placeholder="Wali Kelas (Opsional)" 
@@ -325,6 +331,7 @@ const Register: React.FC = () => {
           <p className="text-slate-500 font-bold">Bergabung bersama komunitas belajar <span className="text-violet-600">SMPN 6 Pekalongan</span>.</p>
         </div>
 
+        {/* --- GOOGLE LOGIN TETAP ADA --- */}
         <div className="mb-12">
           <a 
             href={`${API_HOST}/api/auth/google`} 
@@ -360,7 +367,7 @@ const Register: React.FC = () => {
                   type="button" 
                   onClick={() => {
                     setSelectedRole(role.id as any);
-                    setFormData(prev => ({ ...prev, classId: '', nisn: '', nip: '', whatsappNumber: '' }));
+                    setFormData(prev => ({ ...prev, classId: '', nisn: '', nip: '', whatsappNumber: '', password: '', confirmPassword: '' }));
                     setError('');
                   }} 
                   className={`
@@ -382,22 +389,41 @@ const Register: React.FC = () => {
             
             <div className="h-px bg-slate-100 w-full my-4"></div>
 
-            <InputField 
-              name="password" 
-              placeholder="Buat Password" 
-              type="password" 
-              value={formData.password} 
-              onChange={handleFormChange}
-              icon={<Lock size={22}/>}
-            />
-            <InputField 
-              name="confirmPassword" 
-              placeholder="Konfirmasi Password" 
-              type="password" 
-              value={formData.confirmPassword} 
-              onChange={handleFormChange}
-              icon={<CheckCircle2 size={22}/>}
-            />
+            {/* --- LOGIKA TAMPILAN PASSWORD --- */}
+            {selectedRole === 'student' ? (
+                // JIKA SISWA: Tampilkan info, sembunyikan input password
+                <div className="bg-blue-50 border border-blue-100 p-5 rounded-[2rem] flex items-start gap-4">
+                    <div className="bg-blue-100 text-blue-600 p-2 rounded-full shrink-0">
+                        <Info size={20} />
+                    </div>
+                    <div>
+                        <h4 className="font-black text-blue-800 text-sm mb-1">Tidak Perlu Password</h4>
+                        <p className="text-xs text-blue-600 font-medium leading-relaxed">
+                            Khusus akun Siswa, password akan diatur oleh <strong>Orang Tua</strong> Anda melalui fitur "Hubungkan Siswa". Cukup isi data diri di atas.
+                        </p>
+                    </div>
+                </div>
+            ) : (
+                // JIKA BUKAN SISWA: Tampilkan input password seperti biasa
+                <>
+                    <InputField 
+                        name="password" 
+                        placeholder="Buat Password" 
+                        type="password" 
+                        value={formData.password} 
+                        onChange={handleFormChange}
+                        icon={<Lock size={22}/>}
+                    />
+                    <InputField 
+                        name="confirmPassword" 
+                        placeholder="Konfirmasi Password" 
+                        type="password" 
+                        value={formData.confirmPassword} 
+                        onChange={handleFormChange}
+                        icon={<CheckCircle2 size={22}/>}
+                    />
+                </>
+            )}
           </div>
 
           {error && (

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import parentService, { CharacterLog } from '../../../services/parentService';
-import ApprovalView from './ApprovalView'; // Menggunakan View baru, bukan Modal
+import ApprovalView from './ApprovalView'; 
 import { CheckSquare, Clock, ChevronRight } from 'lucide-react';
 
 interface ApprovalPanelProps {
   logs: CharacterLog[];
   onApproveSuccess: (updatedLog: CharacterLog) => void; 
+  currentUserId: number; 
 }
 
 const LogItem: React.FC<{ log: CharacterLog, onSelect: (log: CharacterLog) => void }> = ({ log, onSelect }) => {
@@ -40,7 +41,7 @@ const ApprovalPanel: React.FC<ApprovalPanelProps> = ({ logs, onApproveSuccess })
   const [selectedLog, setSelectedLog] = useState<CharacterLog | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Jika ada log yang dipilih, tampilkan halaman view (bukan modal)
+  // Jika ada log yang dipilih, tampilkan halaman view detail
   if (selectedLog) {
       const handleApproveLog = async () => {
         if (!selectedLog || isProcessing) return;
@@ -51,14 +52,17 @@ const ApprovalPanel: React.FC<ApprovalPanelProps> = ({ logs, onApproveSuccess })
         try {
             const response = await parentService.approveLog(selectedLog.id);
             
-            if (response && response.log) {
-                onApproveSuccess(response.log); 
+            let updatedData: CharacterLog;
+            if (response && (response as any).log) {
+                updatedData = (response as any).log;
             } else {
-                onApproveSuccess(response as unknown as CharacterLog);
+                updatedData = response as unknown as CharacterLog;
             }
             
+            onApproveSuccess(updatedData); 
+            
             toast.success('Log berhasil disetujui!', { id: toastId });
-            setSelectedLog(null); // Kembali ke list setelah sukses
+            setSelectedLog(null); 
         } catch (error: any) {
             console.error(error);
             toast.error(error.message || 'Gagal menyetujui log.', { id: toastId });
@@ -77,17 +81,19 @@ const ApprovalPanel: React.FC<ApprovalPanelProps> = ({ logs, onApproveSuccess })
       );
   }
 
-  // --- TAMPILAN DAFTAR LOG ---
-  const pendingLogs = logs.filter(log => log.status === 'Tersimpan');
+  // --- FILTER HANYA YANG PENDING ('Tersimpan') ---
+  const pendingLogs = logs
+    .filter(log => log.status === 'Tersimpan')
+    .sort((a, b) => new Date(b.log_date).getTime() - new Date(a.log_date).getTime());
 
   if (pendingLogs.length === 0) {
     return (
-        <div className="text-center py-16 px-6 bg-white rounded-[2rem] border-2 border-dashed border-gray-200">
+        <div className="text-center py-16 px-6 bg-white rounded-[2rem] border-2 border-dashed border-gray-200 animate-fade-in">
             <div className="bg-emerald-50 text-emerald-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
                 <CheckSquare size={40} />
             </div>
             <h3 className="text-2xl font-black text-gray-800 mb-2">Semua Beres!</h3>
-            <p className="text-gray-500 font-medium">Tidak ada catatan baru yang perlu ditinjau saat ini.</p>
+            <p className="text-gray-500 font-medium">Tidak ada jurnal baru yang perlu ditinjau saat ini.</p>
         </div>
     );
   }
@@ -95,7 +101,11 @@ const ApprovalPanel: React.FC<ApprovalPanelProps> = ({ logs, onApproveSuccess })
   return (
     <div className="space-y-4 animate-slide-up">
       {pendingLogs.map(log => (
-        <LogItem key={log.id} log={log} onSelect={setSelectedLog} />
+        <LogItem 
+            key={log.id} 
+            log={log} 
+            onSelect={setSelectedLog} 
+        />
       ))}
     </div>
   );

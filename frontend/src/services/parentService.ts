@@ -30,11 +30,13 @@ export interface StudentPreviewData {
 export interface StudentInfo {
     id: number;
     full_name: string;
-    // Kita tambahkan opsi opsional agar TypeScript tidak error saat mapping
     class?: string;      
     class_name?: string; 
     classId?: number | string;
     student_class?: string;
+    nisn?: string;
+    // Tambahan info hubungan (Ayah/Ibu/Wali)
+    relationship?: string; 
 }
 
 export interface CharacterLog {
@@ -47,6 +49,9 @@ export interface CharacterLog {
     log_date: string; 
     status: 'Tersimpan' | 'Disetujui' | 'Disahkan'; 
     wake_up_time: string;
+    approved_by?: string; // TAMBAHKAN INI (Optional string)
+    approver_id?: number; // BARU
+    approver_name?: string; // BARU
     sleep_time: string;
     worship_activities: string[] | string;
     worship_detail?: string;
@@ -60,8 +65,16 @@ export interface CharacterLog {
 }
 
 export interface ParentDashboardData {
-    student: StudentInfo;
+    // Student bisa null jika belum ada yang ditautkan
+    student: StudentInfo | null; 
     logs: CharacterLog[];
+}
+
+// Interface untuk Payload Link Student
+export interface LinkStudentPayload {
+    nisn: string;
+    studentPassword?: string; // Optional, hanya jika aktivasi
+    relationship: 'Ayah' | 'Ibu' | 'Wali';
 }
 
 // --- [LAYANAN API] --- //
@@ -71,7 +84,7 @@ const getDashboardData = async (): Promise<ParentDashboardData> => {
     const response = await apiClient.get<ParentDashboardData>('/api/parent/dashboard');
     
     // LOGIKA PERBAIKAN: Jika field 'class' kosong, kita cari di field lain
-    if (response.data.student) {
+    if (response.data && response.data.student) {
         const s = response.data.student;
         // Fallback: Gunakan class_name atau student_class jika 'class' undefined
         response.data.student.class = s.class || s.class_name || s.student_class || "-";
@@ -88,8 +101,10 @@ const getStudentPreview = async (nisn: string): Promise<StudentPreviewData> => {
     return response.data;
 };
 
-const linkStudent = async (nisn: string): Promise<{ message: string; student: StudentInfo }> => {
-    const response = await apiClient.post('/api/parent/link-student', { nisn });
+// UPDATE: Menerima object payload, bukan hanya string nisn
+const linkStudent = async (payload: LinkStudentPayload): Promise<{ message: string; student: StudentInfo }> => {
+    // Endpoint backend: /api/parent/link-student
+    const response = await apiClient.post('/api/parent/link-student', payload);
     return response.data;
 };
 

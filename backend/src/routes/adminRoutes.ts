@@ -6,7 +6,8 @@ import {
     getClasses, createClass, generateClasses, updateClass, deleteClass, getClassDetail, getTeachersList,
     setupClassDatabase,
     addStudentsToClass,      // <-- IMPORT BARU
-    removeStudentsFromClass  // <-- IMPORT BARU
+    removeStudentsFromClass,
+    searchParents, addFamilyRelation, removeFamilyRelation
 } from '../controllers/adminController';
 
 const router = Router();
@@ -50,5 +51,9 @@ router.get('/classes/:id', getClassDetail as RequestHandler);
 // --- NEW: Bulk Student Management (Tambah/Hapus Siswa Massal) ---
 router.post('/classes/:classId/add-students', addStudentsToClass as RequestHandler);
 router.post('/classes/:classId/remove-students', removeStudentsFromClass as RequestHandler);
+
+router.get('/parents/search', searchParents as RequestHandler);
+router.post('/family/link', addFamilyRelation as RequestHandler);
+router.post('/family/unlink', removeFamilyRelation as RequestHandler);
 
 export default router;

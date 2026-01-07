@@ -116,6 +116,26 @@ const removeStudentsFromClass = async (classId: number, studentIds: number[]) =>
     return response.data;
 };
 
+const searchParents = async (query: string) => {
+    const response = await axios.get(`${API_URL}/parents/search`, {
+        ...getAuthHeaders(),
+        params: { q: query }
+    });
+    return response.data;
+};
+
+// [BARU] Link Orang Tua
+const linkParent = async (data: { studentId: number, parentId: number, relationship: string }) => {
+    const response = await axios.post(`${API_URL}/family/link`, data, getAuthHeaders());
+    return response.data;
+};
+
+// [BARU] Unlink Orang Tua
+const unlinkParent = async (data: { studentId: number, parentId: number }) => {
+    const response = await axios.post(`${API_URL}/family/unlink`, data, getAuthHeaders());
+    return response.data;
+};
+
 const adminService = {
     getDashboardStats,
     generateAIAnalysis,
@@ -134,7 +154,10 @@ const adminService = {
     getTeachersList,
     addStudentsToClass,
     removeStudentsFromClass,
-    getUserDetail
+    getUserDetail,
+    searchParents,
+    linkParent,
+    unlinkParent
 };
 
 export default adminService;

@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
     Search, Plus, Trash2, ChevronLeft, ChevronRight, 
     GraduationCap, Briefcase, 
-    Mail, Hash, Phone, BookOpen, Edit, Sparkles, Save, ArrowLeft, User, Filter, Shield, Eye, Heart, Users, Calendar, Lock
+    Mail, Hash, Phone, BookOpen, Edit, Sparkles, Save, ArrowLeft, User, Filter, Shield, Eye, Heart, Users, Calendar, Lock, Link as LinkIcon, X, UserPlus, AlertCircle
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import adminService from '../../../services/adminService';
 
+// ... (Interface & Initial State sama seperti sebelumnya) ...
 // --- TIPE DATA ---
 interface UserFormState {
     full_name: string;
@@ -20,7 +21,7 @@ interface UserFormState {
 }
 
 const UserManagement: React.FC = () => {
-    // --- STATE UTAMA (List | Form | Detail) ---
+    // --- STATE UTAMA ---
     const [viewMode, setViewMode] = useState<'list' | 'form' | 'detail'>('list');
     const [isEditMode, setIsEditMode] = useState(false);
     const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
@@ -35,14 +36,20 @@ const UserManagement: React.FC = () => {
     const [selectedUserDetail, setSelectedUserDetail] = useState<any>(null);
     const [loadingDetail, setLoadingDetail] = useState(false);
 
-    // --- FORM STATE ---
+    // --- STATE LINK PARENT (EMBEDDED) ---
+    const [isLinking, setIsLinking] = useState(false); // Mode input aktif/tidak
+    const [parentSearch, setParentSearch] = useState('');
+    const [foundParents, setFoundParents] = useState<any[]>([]);
+    const [selectedParentId, setSelectedParentId] = useState<number | null>(null);
+    const [selectedRelationship, setSelectedRelationship] = useState('Wali');
+    const [loadingSearch, setLoadingSearch] = useState(false);
+
+    // ... (Form State & Filter State sama) ...
     const initialForm: UserFormState = { 
         full_name: '', email: '', role: 'student', class_id: '', 
         nisn: '', nip: '', whatsapp_number: '', password: '' 
     };
     const [formData, setFormData] = useState<UserFormState>(initialForm);
-
-    // --- FILTER STATE ---
     const [filters, setFilters] = useState({ role: 'all', class_id: 'all', status: 'all', search: '', limit: 6 });
 
     const roles = [
@@ -53,7 +60,7 @@ const UserManagement: React.FC = () => {
         { value: 'admin', label: 'Administrator' }
     ];
 
-    // --- INITIAL FETCH ---
+    // ... (useEffect & fetchUsers sama) ...
     useEffect(() => {
         const initData = async () => {
             try {
@@ -69,7 +76,6 @@ const UserManagement: React.FC = () => {
         initData();
     }, []);
 
-    // Debounce Search & Filter Change
     useEffect(() => {
         const timer = setTimeout(() => fetchUsers(1), 300);
         return () => clearTimeout(timer);
@@ -84,12 +90,12 @@ const UserManagement: React.FC = () => {
         } catch (error) { console.error(error); } finally { setLoading(false); }
     };
 
-    // --- HANDLERS NAVIGASI ---
+    // --- HANDLERS UTAMA ---
 
-    // 1. Masuk ke Mode Detail
     const handleViewDetail = async (userId: number) => {
         setLoadingDetail(true);
         setViewMode('detail');
+        setIsLinking(false); // Reset mode linking saat buka detail baru
         try {
             const data = await adminService.getUserDetail(userId);
             setSelectedUserDetail(data);
@@ -102,7 +108,13 @@ const UserManagement: React.FC = () => {
         }
     };
 
-    // 2. Masuk ke Mode Form (Tambah Baru)
+    const handleBackToList = () => {
+        setViewMode('list');
+        setFormData(initialForm);
+        setSelectedUserDetail(null);
+        fetchUsers(meta.page);
+    };
+
     const handleAddNew = () => {
         setFormData(initialForm);
         setIsEditMode(false);
@@ -110,7 +122,6 @@ const UserManagement: React.FC = () => {
         setViewMode('form');
     };
 
-    // 3. Masuk ke Mode Form (Edit)
     const handleEdit = (user: any) => {
         setFormData({
             full_name: user.full_name,
@@ -127,42 +138,72 @@ const UserManagement: React.FC = () => {
         setViewMode('form');
     };
 
-    // 4. Kembali ke List
-    const handleBackToList = () => {
-        setViewMode('list');
-        setFormData(initialForm);
-        setSelectedUserDetail(null);
-        fetchUsers(meta.page);
+    // --- HANDLERS PARENT LINKING ---
+
+    const handleSearchParents = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        setParentSearch(val);
+        if (val.length > 2) {
+            setLoadingSearch(true);
+            try {
+                const res = await adminService.searchParents(val);
+                setFoundParents(res);
+            } catch (err) { console.error(err); } 
+            finally { setLoadingSearch(false); }
+        } else {
+            setFoundParents([]);
+        }
     };
 
-    // --- HELPER RENDER ---
-    const renderParentRow = (relationshipType: string, iconColor: string) => {
-        const parent = selectedUserDetail?.family_data?.find((p: any) => p.relationship === relationshipType);
-        return (
-            <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-100 shadow-sm transition-all hover:border-indigo-100">
-                <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-full bg-${iconColor}-50 text-${iconColor}-500`}>
-                        <User size={18} />
-                    </div>
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{relationshipType}</p>
-                        {parent ? (
-                            <p className="font-bold text-slate-800 text-sm">{parent.full_name}</p>
-                        ) : (
-                            <p className="text-sm text-slate-400 italic font-medium">(Belum Terhubung)</p>
-                        )}
-                    </div>
-                </div>
-                {parent && parent.whatsapp_number && (
-                    <div className="text-right hidden sm:block">
-                        <span className="text-[10px] text-slate-400 uppercase font-bold">WhatsApp</span>
-                        <p className="text-sm font-mono text-slate-600">{parent.whatsapp_number}</p>
-                    </div>
-                )}
-            </div>
-        );
+    const handleLinkParent = async () => {
+        if (!selectedParentId || !selectedUserDetail?.id) return;
+        try {
+            await adminService.linkParent({
+                studentId: selectedUserDetail.id,
+                parentId: selectedParentId,
+                relationship: selectedRelationship
+            });
+            Swal.fire("Sukses", "Orang tua berhasil dihubungkan.", "success");
+            setIsLinking(false); // Tutup form embedded
+            
+            // Refresh detail
+            handleViewDetail(selectedUserDetail.id);
+            
+            // Reset state
+            setParentSearch('');
+            setFoundParents([]);
+            setSelectedParentId(null);
+        } catch (error: any) {
+            Swal.fire("Gagal", error.response?.data?.message || "Terjadi kesalahan", "error");
+        }
     };
 
+    const handleUnlinkParent = async (parentId: number, parentName: string) => {
+        const result = await Swal.fire({
+            title: 'Lepas Kaitan?',
+            text: `Yakin ingin melepas ${parentName}?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#EF4444',
+            confirmButtonText: 'Ya, Lepas'
+        });
+
+        if (result.isConfirmed) {
+            try {
+                await adminService.unlinkParent({
+                    studentId: selectedUserDetail.id,
+                    parentId: parentId
+                });
+                Swal.fire("Berhasil", "Hubungan dilepas.", "success");
+                handleViewDetail(selectedUserDetail.id);
+            } catch (error) {
+                Swal.fire("Gagal", "Tidak bisa melepas hubungan.", "error");
+            }
+        }
+    };
+
+    // ... (renderParentRow dihapus, diganti langsung di JSX agar lebih fleksibel) ...
+    // ... (getRoleBadge, handleClassChangeForTeacher, handleSave, handleDelete tetap sama) ...
     const getRoleBadge = (role: string) => {
         const base = "px-3 py-1 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1.5 border";
         if (role === 'student') return <span className={`${base} bg-blue-50 text-blue-600 border-blue-100`}><GraduationCap size={14}/> Siswa</span>;
@@ -171,7 +212,6 @@ const UserManagement: React.FC = () => {
         return <span className={`${base} bg-gray-50 text-gray-600 border-gray-100`}>{role}</span>;
     };
 
-    // --- FORM LOGIC ---
     const handleClassChangeForTeacher = async (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newClassId = e.target.value;
         if (!newClassId) { setFormData({ ...formData, class_id: '' }); return; }
@@ -231,7 +271,8 @@ const UserManagement: React.FC = () => {
     // ==========================================
     if (viewMode === 'detail') {
         return (
-            <div className="animate-fade-in-up space-y-6">
+            <div className="animate-fade-in-up space-y-6 pb-20">
+                {/* Header Navigasi Detail */}
                 <div className="flex items-center justify-between mb-6">
                     <button onClick={handleBackToList} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-colors group">
                         <div className="p-2 bg-white rounded-lg border border-slate-200 group-hover:bg-indigo-50 group-hover:border-indigo-100"><ArrowLeft size={18}/></div>
@@ -254,7 +295,7 @@ const UserManagement: React.FC = () => {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* KIRI: Profil Utama */}
+                        {/* KIRI: Profil Utama (Sama seperti sebelumnya) */}
                         <div className="lg:col-span-1 space-y-6">
                             <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 overflow-hidden border border-white">
                                 <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-8 text-center relative overflow-hidden">
@@ -265,75 +306,196 @@ const UserManagement: React.FC = () => {
                                         </div>
                                         <h1 className="text-xl font-black text-white leading-tight mb-2">{selectedUserDetail.full_name}</h1>
                                         
-                                        {/* Status Aktivasi Badge di Detail */}
                                         {selectedUserDetail.role === 'student' && !selectedUserDetail.is_active && (
-                                            <div className="mb-3">
-                                                <span className="bg-amber-400/90 text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm backdrop-blur-sm">
-                                                    <Lock size={10} /> Belum Aktivasi
-                                                </span>
-                                            </div>
+                                            <div className="mb-3"><span className="bg-amber-400/90 text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm backdrop-blur-sm"><Lock size={10} /> Belum Aktivasi</span></div>
                                         )}
 
                                         <div className="flex flex-wrap justify-center gap-2">
-                                            <span className="bg-black/20 text-white/90 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-sm">
-                                                <Shield size={10} /> {selectedUserDetail.role}
-                                            </span>
-                                            {selectedUserDetail.class_name && (
-                                                <span className="bg-emerald-500/80 text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-sm shadow-sm">
-                                                    <GraduationCap size={10} /> {selectedUserDetail.role === 'teacher' ? 'Wali' : 'Kelas'} {selectedUserDetail.class_name}
-                                                </span>
-                                            )}
+                                            <span className="bg-black/20 text-white/90 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-sm"><Shield size={10} /> {selectedUserDetail.role}</span>
+                                            {selectedUserDetail.class_name && (<span className="bg-emerald-500/80 text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-sm shadow-sm"><GraduationCap size={10} /> {selectedUserDetail.role === 'teacher' ? 'Wali' : 'Kelas'} {selectedUserDetail.class_name}</span>)}
                                         </div>
                                     </div>
                                 </div>
                                 <div className="p-6 space-y-4">
                                     <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
                                         <div className="p-2 bg-white rounded-lg text-violet-500 shadow-sm"><Mail size={18}/></div>
-                                        <div className="overflow-hidden">
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email</p>
-                                            <p className="font-bold text-slate-700 text-sm truncate">{selectedUserDetail.email}</p>
-                                        </div>
+                                        <div className="overflow-hidden"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email</p><p className="font-bold text-slate-700 text-sm truncate">{selectedUserDetail.email}</p></div>
                                     </div>
                                     {(selectedUserDetail.nisn || selectedUserDetail.nip) && (
                                         <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
                                             <div className="p-2 bg-white rounded-lg text-blue-500 shadow-sm"><Hash size={18}/></div>
-                                            <div>
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{selectedUserDetail.role === 'student' ? 'NISN' : 'NIP'}</p>
-                                                <p className="font-mono font-bold text-slate-700 text-sm">{selectedUserDetail.nisn || selectedUserDetail.nip}</p>
-                                            </div>
+                                            <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{selectedUserDetail.role === 'student' ? 'NISN' : 'NIP'}</p><p className="font-mono font-bold text-slate-700 text-sm">{selectedUserDetail.nisn || selectedUserDetail.nip}</p></div>
                                         </div>
                                     )}
                                     <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
                                         <div className="p-2 bg-white rounded-lg text-amber-500 shadow-sm"><Calendar size={18}/></div>
-                                        <div>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bergabung</p>
-                                            <p className="font-bold text-slate-700 text-sm">
-                                                {new Date(selectedUserDetail.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                                            </p>
-                                        </div>
+                                        <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bergabung</p><p className="font-bold text-slate-700 text-sm">{new Date(selectedUserDetail.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p></div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
+                        {/* KANAN: Data Keluarga / Relasi */}
                         <div className="lg:col-span-2 space-y-6">
+                            
+                            {/* --- JIKA SISWA --- */}
                             {selectedUserDetail.role === 'student' && (
-                                <div className="bg-white rounded-[2rem] p-8 shadow-xl shadow-slate-200/50 border border-white h-full">
-                                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
-                                        <div className="p-3 bg-rose-50 text-rose-500 rounded-xl"><Heart size={24} /></div>
-                                        <div>
-                                            <h3 className="font-black text-xl text-slate-800">Data Orang Tua / Wali</h3>
-                                            <p className="text-sm text-slate-500 font-medium">Informasi hubungan keluarga yang terhubung.</p>
+                                <div className="bg-white rounded-[2rem] p-8 shadow-xl shadow-slate-200/50 border border-white h-full relative overflow-hidden">
+                                    
+                                    {/* Header Section */}
+                                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-3 bg-rose-50 text-rose-500 rounded-xl"><Heart size={24} /></div>
+                                            <div>
+                                                <h3 className="font-black text-xl text-slate-800">Orang Tua / Wali</h3>
+                                                <p className="text-sm text-slate-500 font-medium">Data keluarga yang terhubung.</p>
+                                            </div>
                                         </div>
+                                        {!isLinking && (
+                                            <button 
+                                                onClick={() => setIsLinking(true)}
+                                                className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-100 transition-colors shadow-sm"
+                                            >
+                                                <UserPlus size={16}/> Hubungkan Baru
+                                            </button>
+                                        )}
                                     </div>
+
+                                    {/* FORM LINKING (EMBEDDED) */}
+                                    {isLinking && (
+                                        <div className="mb-8 bg-slate-50 p-6 rounded-2xl border border-slate-200 animate-slide-up relative">
+                                            <button onClick={() => setIsLinking(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                                            
+                                            <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><LinkIcon size={16} className="text-indigo-500"/> Hubungkan Akun Orang Tua</h4>
+                                            
+                                            <div className="space-y-4">
+                                                {/* Cari Orang Tua */}
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Cari (Hanya yang belum terhubung)</label>
+                                                    <div className="relative">
+                                                        <Search className="absolute left-3 top-3 text-slate-400" size={18}/>
+                                                        <input 
+                                                            type="text" 
+                                                            placeholder="Nama / Email / WA..." 
+                                                            className="w-full pl-10 p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                                                            value={parentSearch}
+                                                            onChange={handleSearchParents}
+                                                        />
+                                                    </div>
+                                                    {loadingSearch && <p className="text-xs text-indigo-500 mt-1 italic">Mencari database...</p>}
+                                                </div>
+
+                                                {/* Hasil Pencarian */}
+                                                {parentSearch.length > 2 && (
+                                                    <div className="bg-white border border-slate-200 rounded-xl max-h-40 overflow-y-auto p-2 custom-scrollbar">
+                                                        {foundParents.length === 0 ? (
+                                                            <div className="text-center py-4 text-xs text-slate-400">
+                                                                <p className="font-bold">Tidak ditemukan.</p>
+                                                                <p>Pastikan akun Orang Tua sudah dibuat dan belum terhubung ke siswa lain.</p>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="space-y-2">
+                                                                {foundParents.map(p => (
+                                                                    <div 
+                                                                        key={p.id} 
+                                                                        onClick={() => setSelectedParentId(p.id)}
+                                                                        className={`p-3 rounded-lg border cursor-pointer flex items-center justify-between transition-all ${selectedParentId === p.id ? 'bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500' : 'hover:bg-slate-50 border-slate-100'}`}
+                                                                    >
+                                                                        <div>
+                                                                            <p className="font-bold text-sm text-slate-800">{p.full_name}</p>
+                                                                            <p className="text-xs text-slate-500">{p.email || p.whatsapp_number}</p>
+                                                                        </div>
+                                                                        {selectedParentId === p.id && <div className="w-4 h-4 bg-indigo-500 rounded-full"/>}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* Pilih Hubungan & Submit */}
+                                                <div className="flex gap-4 items-end">
+                                                    <div className="flex-1">
+                                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Sebagai</label>
+                                                        <select 
+                                                            className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                                                            value={selectedRelationship}
+                                                            onChange={(e) => setSelectedRelationship(e.target.value)}
+                                                        >
+                                                            <option value="Ayah">Ayah</option>
+                                                            <option value="Ibu">Ibu</option>
+                                                            <option value="Wali">Wali</option>
+                                                        </select>
+                                                    </div>
+                                                    <button 
+                                                        onClick={handleLinkParent}
+                                                        disabled={!selectedParentId}
+                                                        className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
+                                                    >
+                                                        Simpan
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* LIST ORANG TUA YANG SUDAH TERHUBUNG */}
                                     <div className="space-y-4">
-                                        {renderParentRow('Ayah', 'blue')}
-                                        {renderParentRow('Ibu', 'rose')}
-                                        {renderParentRow('Wali', 'emerald')}
+                                        {[
+                                            { type: 'Ayah', color: 'blue' },
+                                            { type: 'Ibu', color: 'rose' },
+                                            { type: 'Wali', color: 'emerald' }
+                                        ].map((rel) => {
+                                            const parent = selectedUserDetail?.family_data?.find((p: any) => p.relationship === rel.type);
+                                            return (
+                                                <div key={rel.type} className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-100 shadow-sm transition-all hover:border-indigo-100 group">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`p-2 rounded-full bg-${rel.color}-50 text-${rel.color}-500`}>
+                                                            <User size={18} />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{rel.type}</p>
+                                                            {parent ? (
+                                                                <p className="font-bold text-slate-800 text-sm">{parent.full_name}</p>
+                                                            ) : (
+                                                                <p className="text-sm text-slate-400 italic font-medium">(Belum Terhubung)</p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        {parent && parent.whatsapp_number && (
+                                                            <div className="text-right hidden sm:block">
+                                                                <span className="text-[10px] text-slate-400 uppercase font-bold">WhatsApp</span>
+                                                                <p className="text-sm font-mono text-slate-600">{parent.whatsapp_number}</p>
+                                                            </div>
+                                                        )}
+                                                        {/* Tombol Unlink */}
+                                                        {parent && (
+                                                            <button 
+                                                                onClick={() => handleUnlinkParent(parent.id, parent.full_name)}
+                                                                className="p-2 bg-rose-50 text-rose-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-100"
+                                                                title="Lepas Hubungan"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    
+                                    {/* Info Footer */}
+                                    <div className="mt-6 p-4 bg-indigo-50/50 rounded-xl flex items-start gap-3">
+                                        <AlertCircle size={18} className="text-indigo-500 shrink-0 mt-0.5"/>
+                                        <p className="text-xs text-indigo-700 leading-relaxed">
+                                            <strong>Catatan:</strong> Akun orang tua yang sudah dihubungkan di sini akan otomatis bisa mengakses data siswa ini saat mereka login. Tidak perlu aktivasi NISN manual lagi.
+                                        </p>
                                     </div>
                                 </div>
                             )}
 
+                            {/* --- JIKA PARENT (LIST ANAK) --- */}
                             {selectedUserDetail.role === 'parent' && (
                                 <div className="bg-white rounded-[2rem] p-8 shadow-xl shadow-slate-200/50 border border-white h-full">
                                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
@@ -371,6 +533,7 @@ const UserManagement: React.FC = () => {
                                 </div>
                             )}
 
+                            {/* --- DEFAULT EMPTY --- */}
                             {(selectedUserDetail.role === 'teacher' || selectedUserDetail.role === 'contributor' || selectedUserDetail.role === 'admin') && (
                                 <div className="bg-white rounded-[2rem] p-8 shadow-xl shadow-slate-200/50 border border-white h-full flex flex-col items-center justify-center text-center opacity-60 min-h-[300px]">
                                     <Shield size={64} className="text-slate-200 mb-4"/>
@@ -385,9 +548,7 @@ const UserManagement: React.FC = () => {
         );
     }
 
-    // ==========================================
-    // RENDER: VIEW FORM (EDIT / CREATE)
-    // ==========================================
+    // --- FORM VIEW SAMA SEPERTI SEBELUMNYA ---
     if (viewMode === 'form') {
         return (
             <div className="animate-fade-in-up space-y-6">
@@ -423,9 +584,7 @@ const UserManagement: React.FC = () => {
         );
     }
 
-    // ==========================================
-    // RENDER: VIEW LIST (GRID USER)
-    // ==========================================
+    // --- LIST VIEW SAMA SEPERTI SEBELUMNYA ---
     return (
         <div className="space-y-6 animate-fade-in relative">
             <div className="flex flex-col lg:flex-row gap-4">

@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { 
-  LayoutDashboard, 
-  CheckSquare, 
-  CalendarDays, 
-  LogOut, 
-  Menu, 
-  X,
-  Search,
-  UserPlus,
-  UserCheck,
-  Lock,
-  Unlock, 
-  Users,
-  ShieldCheck,
-  ArrowRight
+    LayoutDashboard, 
+    CheckSquare, 
+    CalendarDays, 
+    LogOut, 
+    Menu, 
+    X,
+    Search,
+    UserPlus,
+    UserCheck,
+    Lock,
+    Unlock, 
+    Users,
+    ShieldCheck,
+    ArrowRight,
+    KeyRound
 } from 'lucide-react';
 
 import parentService, { ParentDashboardData } from '../../services/parentService';
@@ -44,7 +45,7 @@ const parentHabits = [
   { icon: "🌙", title: "Tidur Cepat", desc: "Sepakati waktu tidur malam yang konsisten.", color: "bg-indigo-50 border-indigo-200 text-indigo-800" }
 ];
 
-// --- COMPONENT: FORM LINK STUDENT ---
+// --- COMPONENT: FORM LINK STUDENT (SEARCH MODE) ---
 interface LinkFormProps {
     onLinkSuccess: (data: ParentDashboardData) => void;
     onLogout: () => void;
@@ -61,7 +62,6 @@ const LinkStudentForm: React.FC<LinkFormProps> = ({ onLinkSuccess, onLogout }) =
     const [studentPassword, setStudentPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Fungsi Cari Manual (Triggered by button/enter)
     const handleSearch = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         
@@ -132,7 +132,6 @@ const LinkStudentForm: React.FC<LinkFormProps> = ({ onLinkSuccess, onLogout }) =
 
             <div className="flex-1 max-w-2xl mx-auto w-full p-4 pb-32 flex flex-col items-center justify-center -mt-20">
                 
-                {/* FORM PENCARIAN (MANUAL & STRICT) */}
                 <div className="w-full bg-white p-8 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-white relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
                     
@@ -159,7 +158,6 @@ const LinkStudentForm: React.FC<LinkFormProps> = ({ onLinkSuccess, onLogout }) =
                     </form>
                 </div>
 
-                {/* HASIL PENCARIAN */}
                 {hasSearched && (
                     <div className="w-full mt-8 animate-in slide-in-from-bottom-4 duration-500">
                         {students.length > 0 ? (
@@ -221,7 +219,7 @@ const LinkStudentForm: React.FC<LinkFormProps> = ({ onLinkSuccess, onLogout }) =
                 )}
             </div>
 
-            {/* MODAL LINKING */}
+            {/* MODAL LINKING (MANUAL) */}
             <div className={`fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] transition-transform duration-300 z-50 rounded-t-[2rem] ${selectedStudent ? 'translate-y-0' : 'translate-y-full'}`}>
                 {selectedStudent && (
                     <div className="max-w-xl mx-auto p-6 md:p-8">
@@ -302,6 +300,88 @@ const LinkStudentForm: React.FC<LinkFormProps> = ({ onLinkSuccess, onLogout }) =
     );
 };
 
+// --- COMPONENT: ACTIVATION FORM (FOR PRE-LINKED USERS) ---
+// Ini muncul jika Admin sudah menghubungkan orang tua, tapi akun siswa belum diaktivasi (belum ada password)
+const ActivationStudentForm: React.FC<{ studentName: string, studentNisn: string, onActivateSuccess: (data: any) => void, onLogout: () => void }> = ({ studentName, studentNisn, onActivateSuccess, onLogout }) => {
+    const [password, setPassword] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleActivate = async () => {
+        if (password.length < 6) {
+            toast.error("Password minimal 6 karakter.");
+            return;
+        }
+
+        setIsSubmitting(true);
+        const toastId = toast.loading('Mengaktifkan akun siswa...');
+
+        try {
+            await parentService.linkStudent({
+                nisn: studentNisn,
+                studentPassword: password,
+                relationship: 'Wali'
+            });
+
+            toast.success('Akun siswa berhasil diaktifkan!', { id: toastId });
+            const initialData = await parentService.getDashboardData();
+            onActivateSuccess(initialData);
+
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || "Gagal aktivasi.", { id: toastId });
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-sans">
+            <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl p-8 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-amber-400 to-orange-500"></div>
+                
+                <div className="text-center mb-8">
+                    <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-500">
+                        <KeyRound size={40} />
+                    </div>
+                    <h2 className="text-2xl font-black text-slate-800 mb-2">Aktivasi Akun Siswa</h2>
+                    <p className="text-slate-500 text-sm">
+                        Halo Ayah/Bunda! Anda telah terhubung dengan <span className="font-bold text-slate-800">{studentName}</span>.
+                    </p>
+                </div>
+
+                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 mb-6">
+                    <p className="text-xs text-slate-600 leading-relaxed text-center">
+                        Untuk keamanan dan agar ananda bisa login ke aplikasi siswa, mohon buatkan <strong>Password</strong> terlebih dahulu.
+                    </p>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Buat Password Baru</label>
+                        <input 
+                            type="text" 
+                            placeholder="Minimal 6 Karakter"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full px-5 py-4 bg-white border-2 border-slate-200 rounded-xl text-slate-800 font-bold focus:ring-4 focus:ring-amber-100 focus:border-amber-400 outline-none transition-all text-center text-lg"
+                        />
+                    </div>
+
+                    <button 
+                        onClick={handleActivate}
+                        disabled={isSubmitting}
+                        className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition-all disabled:opacity-70 flex justify-center items-center gap-2"
+                    >
+                        {isSubmitting ? <Spinner /> : "Simpan & Masuk Dashboard"}
+                    </button>
+
+                    <button onClick={onLogout} className="w-full py-3 text-slate-400 font-bold text-sm hover:text-slate-600 transition">
+                        Logout / Batal
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- UTAMA: PARENT DASHBOARD ---
 const ParentDashboard: React.FC = () => {
     const { logout: authLogout } = useAuth();
@@ -332,12 +412,32 @@ const ParentDashboard: React.FC = () => {
 
     useEffect(() => { fetchData(); }, []);
 
-    if (!isLoading && !dashboardData?.student) {
+    // 1. Loading State
+    if (isLoading) return <div className="flex h-screen items-center justify-center bg-slate-50"><Spinner /></div>;
+
+    // 2. Logic Pengecekan Data Siswa
+    if (dashboardData && dashboardData.student) {
+        
+        // Cek status aktif (apakah sudah punya password)
+        // Backend harus mengirimkan flag 'is_active' (boolean/number)
+        const isStudentActive = Boolean((dashboardData.student as any).is_active);
+
+        if (!isStudentActive) {
+            return (
+                <ActivationStudentForm 
+                    studentName={dashboardData.student.full_name}
+                    studentNisn={dashboardData.student.nisn || ''} 
+                    onActivateSuccess={setDashboardData}
+                    onLogout={authLogout}
+                />
+            );
+        }
+
+        // Jika Aktif -> Lanjut render Dashboard
+    } else {
+        // Belum terhubung sama sekali -> Tampilkan Form Search
         return <LinkStudentForm onLinkSuccess={setDashboardData} onLogout={authLogout} />;
     }
-
-    if (isLoading) return <div className="flex h-screen items-center justify-center bg-slate-50"><Spinner /></div>;
-    if (!dashboardData?.student) return null; 
 
     // --- DASHBOARD DATA UI ---
     const pendingCount = dashboardData.logs.filter(l => l.status === 'Tersimpan').length;
@@ -436,7 +536,7 @@ const ParentDashboard: React.FC = () => {
                                 <ApprovalPanel 
                                     logs={dashboardData.logs} 
                                     onApproveSuccess={() => fetchData()} 
-                                    currentUserId={user.id} // [PENTING] Kirim ID user login ke ApprovalPanel
+                                    currentUserId={user.id}
                                 />
                             </div>
                         </div>

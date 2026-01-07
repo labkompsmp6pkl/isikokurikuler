@@ -636,3 +636,99 @@ export const getUserDetail = async (req: Request, res: Response) => {
       res.status(500).json({ message: "Terjadi kesalahan server" });
     }
   };
+
+  export const searchParents = async (req: Request, res: Response) => {
+    const { q } = req.query;
+    try {
+        const query = `
+            SELECT u.id, u.full_name, u.email, u.whatsapp_number 
+            FROM users u
+            LEFT JOIN family_relations fr ON u.id = fr.parent_id
+            WHERE u.role = 'parent' 
+            AND (u.full_name LIKE ? OR u.email LIKE ? OR u.whatsapp_number LIKE ?)
+            AND fr.id IS NULL  -- [FILTER] Hanya yang belum ada di tabel relasi
+            LIMIT 10
+        `;
+        const searchTerm = `%${q}%`;
+        const [parents]: any = await pool.query(query, [searchTerm, searchTerm, searchTerm]);
+        res.json(parents);
+    } catch (error) {
+        res.status(500).json({ message: "Gagal mencari orang tua" });
+    }
+};
+
+// [BARU] Tambah Relasi Keluarga (Admin menghubungkan ortu ke siswa)
+export const addFamilyRelation = async (req: Request, res: Response) => {
+    const { studentId, parentId, relationship } = req.body;
+
+    if (!studentId || !parentId || !relationship) {
+        return res.status(400).json({ message: "Data tidak lengkap" });
+    }
+
+    try {
+        // Cek apakah sudah ada relasi
+        const [existing]: any = await pool.query(
+            "SELECT id FROM family_relations WHERE student_id = ? AND parent_id = ?",
+            [studentId, parentId]
+        );
+
+        if (existing.length > 0) {
+            return res.status(400).json({ message: "Orang tua ini sudah terhubung dengan siswa tersebut." });
+        }
+
+        // Insert Relasi
+        await pool.query(
+            "INSERT INTO family_relations (student_id, parent_id, relationship) VALUES (?, ?, ?)",
+            [studentId, parentId, relationship]
+        );
+
+        res.json({ message: "Berhasil menghubungkan orang tua." });
+    } catch (error) {
+        console.error("Add Relation Error:", error);
+        res.status(500).json({ message: "Gagal menghubungkan orang tua." });
+    }
+};
+
+export const removeFamilyRelation = async (req: Request, res: Response) => {
+    const { studentId, parentId } = req.body;
+
+    try {
+        // 1. Hapus hubungan spesifik ini dulu
+        await pool.query(
+            "DELETE FROM family_relations WHERE student_id = ? AND parent_id = ?",
+            [studentId, parentId]
+        );
+
+        // 2. Cek apakah masih ada orang tua/wali LAIN yang terhubung dengan siswa ini?
+        const [remaining]: any[] = await pool.query(
+            "SELECT COUNT(*) as count FROM family_relations WHERE student_id = ?",
+            [studentId]
+        );
+
+        const sisaOrangTua = remaining[0].count;
+
+        // 3. Logika Reset
+        if (sisaOrangTua === 0) {
+            // JIKA KOSONG (0): Artinya ini adalah orang tua terakhir yang dihapus.
+            // Reset akun siswa (hapus password) agar kembali ke status "Belum Aktivasi"
+            await pool.query(
+                "UPDATE users SET password = NULL WHERE id = ?",
+                [studentId]
+            );
+            
+            return res.json({ 
+                message: "Hubungan dilepas. Akun siswa di-reset (Password dihapus) karena tidak ada wali lain yang terhubung." 
+            });
+        } else {
+            // JIKA > 0: Masih ada orang tua lain (misal Ibu masih ada).
+            // Password siswa JANGAN dihapus.
+            return res.json({ 
+                message: "Hubungan dilepas. Password siswa tetap aktif karena masih ada wali lain yang terhubung." 
+            });
+        }
+
+    } catch (error) {
+        console.error("Remove Relation Error:", error);
+        res.status(500).json({ message: "Gagal menghapus hubungan." });
+    }
+};

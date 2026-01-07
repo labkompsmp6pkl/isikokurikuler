@@ -64,15 +64,11 @@ export const searchStudents = async (req: AuthenticatedRequest, res: Response) =
     }
 };
 
-// --- LINK STUDENT ---
 export const linkStudent = async (req: AuthenticatedRequest, res: Response) => {
     const { nisn, studentPassword, relationship } = req.body;
     const parentId = req.user?.id;
 
     if (!nisn) return res.status(400).json({ message: 'NISN siswa diperlukan.' });
-    if (!relationship || !['Ayah', 'Ibu', 'Wali'].includes(relationship)) {
-        return res.status(400).json({ message: 'Status hubungan tidak valid.' });
-    }
 
     try {
         // 1. Ambil data siswa
@@ -86,6 +82,7 @@ export const linkStudent = async (req: AuthenticatedRequest, res: Response) => {
         }
         
         const student = studentRows[0];
+        const isStudentAlreadyActive = student.password && student.password !== '';
 
         // 2. Cek apakah orang tua INI sudah terhubung?
         const [existingLink]: any[] = await pool.query(
@@ -93,18 +90,34 @@ export const linkStudent = async (req: AuthenticatedRequest, res: Response) => {
             [parentId, student.id]
         );
 
-        if (existingLink.length > 0) {
+        const isLinked = existingLink.length > 0;
+
+        // 3. LOGIKA AKTIVASI / LINKING
+        
+        // Skenario A: Sudah terhubung (oleh Admin), tapi Siswa Belum Aktif (Password Kosong)
+        if (isLinked && !isStudentAlreadyActive) {
+            if (!studentPassword || studentPassword.length < 6) {
+                return res.status(400).json({ message: 'Akun belum aktif. Masukkan password minimal 6 karakter.' });
+            }
+            // Update password siswa
+            const hashedPassword = await bcrypt.hash(studentPassword, 10);
+            await pool.query("UPDATE users SET password = ? WHERE id = ?", [hashedPassword, student.id]);
+            
+            return res.status(200).json({ 
+                message: 'Akun siswa berhasil diaktifkan!',
+                studentName: student.full_name
+            });
+        }
+
+        // Skenario B: Sudah terhubung dan Sudah Aktif
+        if (isLinked) {
             return res.status(400).json({ message: 'Anda sudah terhubung dengan siswa ini.' });
         }
 
-        // 3. LOGIKA PASSOWRD
-        // Cek apakah siswa SUDAH punya password?
-        if (student.password && student.password !== '') {
-            // JIKA SUDAH ADA (Misal diset oleh Ayah):
-            // Kita ABAIKAN input studentPassword dari request.
-        } else {
-            // JIKA BELUM ADA (Null/Kosong):
-            // Wajibkan Orang Tua untuk membuat password
+        // Skenario C: Belum terhubung (Baru Link)
+        
+        // Cek/Set Password jika belum ada
+        if (!isStudentAlreadyActive) {
             if (!studentPassword || studentPassword.length < 6) {
                 return res.status(400).json({ message: 'Akun siswa belum aktif. Harap buatkan password (min 6 karakter).' });
             }
@@ -112,7 +125,7 @@ export const linkStudent = async (req: AuthenticatedRequest, res: Response) => {
             await pool.query("UPDATE users SET password = ? WHERE id = ?", [hashedPassword, student.id]);
         }
 
-        // 4. Buat Hubungan Keluarga
+        // Buat Hubungan Keluarga
         await pool.query(
             "INSERT INTO family_relations (parent_id, student_id, relationship) VALUES (?, ?, ?)",
             [parentId, student.id, relationship]
@@ -129,14 +142,21 @@ export const linkStudent = async (req: AuthenticatedRequest, res: Response) => {
     }
 };
 
-// --- DASHBOARD DATA ---
 export const getDashboardData = async (req: AuthenticatedRequest, res: Response) => {
     const parentId = req.user?.id;
 
     try {
         // Ambil Data Siswa (Limit 1)
+        // [MODIFIKASI] Tambahkan logika cek password untuk field is_active
         const [studentRows]: any[] = await pool.query(
-            `SELECT u.id, u.full_name, u.class_id, u.nisn, c.name as class, fr.relationship 
+            `SELECT 
+                u.id, 
+                u.full_name, 
+                u.class_id, 
+                u.nisn, 
+                c.name as class, 
+                fr.relationship,
+                (u.password IS NOT NULL AND u.password != '') as is_active 
              FROM users u 
              JOIN family_relations fr ON u.id = fr.student_id
              LEFT JOIN classes c ON u.class_id = c.id 
@@ -151,7 +171,7 @@ export const getDashboardData = async (req: AuthenticatedRequest, res: Response)
         
         const student = studentRows[0]; 
 
-        // [UPDATE] Query Logs: Join ke users untuk ambil nama approver
+        // Query Logs (Sama seperti sebelumnya)
         const [logRows]: any[] = await pool.query(
             `SELECT cl.*, approver.full_name as approver_name
              FROM character_logs cl 

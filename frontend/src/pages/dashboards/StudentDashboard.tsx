@@ -10,7 +10,7 @@ import {
   learningOptions, 
   socialOptions 
 } from './student/components/options';
-import { Trophy, BarChart3 } from 'lucide-react';
+import { Trophy, BarChart3, CalendarClock } from 'lucide-react';
 
 const StudentDashboard: React.FC = () => {
   useAuth();
@@ -29,6 +29,9 @@ const StudentDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'plan' | 'execution'>('plan');
   const [date, setDate] = useState(urlDate || getLocalDateString()); 
   
+  // Cek apakah tanggal yang dipilih lebih besar dari hari ini
+  const isFutureDate = date > getLocalDateString();
+
   const [loading, setLoading] = useState(false);
   const [apiData, setApiData] = useState<any>(null);
   const [dashData, setDashData] = useState<any>(null);
@@ -73,6 +76,13 @@ const StudentDashboard: React.FC = () => {
     fetchDashboardData();
   }, [urlDate]); 
 
+  // Efek untuk memaksa pindah ke tab 'plan' jika tanggal masa depan dipilih
+  useEffect(() => {
+    if (isFutureDate) {
+      setActiveTab('plan');
+    }
+  }, [isFutureDate]);
+
   const fetchLog = async (currentDate: string) => {
     setLoading(true);
     try {
@@ -82,8 +92,10 @@ const StudentDashboard: React.FC = () => {
         setIsPlanSubmitted(!!data.is_plan_submitted);
         setIsExecutionSubmitted(!!data.is_execution_submitted);
         
-        // Logika Tab Otomatis
-        if (data.is_plan_submitted && !data.is_execution_submitted) {
+        // Logika Tab Otomatis (Hanya jika bukan masa depan)
+        if (currentDate > getLocalDateString()) {
+             setActiveTab('plan');
+        } else if (data.is_plan_submitted && !data.is_execution_submitted) {
             setActiveTab('execution');
         } else {
             setActiveTab('plan'); 
@@ -175,21 +187,8 @@ const StudentDashboard: React.FC = () => {
     });
   };
 
-  // --- VALIDASI FORM ---
-  const validateForm = () => {
-    if (!formData.wake_up_time) return "Jam Bangun Pagi belum diisi!";
-    if (formData.worship_activities.length === 0) return "Pilih minimal satu aktivitas Beribadah!";
-    if (!formData.worship_detail || !formData.worship_detail.trim()) return "Detail Beribadah belum diisi!";
-    if (!formData.sport_activities) return "Pilih jenis Olahraga!";
-    if (!formData.sport_detail || !formData.sport_detail.trim()) return "Detail Olahraga belum diisi!";
-    if (!formData.meal_text || !formData.meal_text.trim()) return "Menu Makan Sehat belum diisi!";
-    if (formData.study_activities.length === 0) return "Pilih minimal satu topik Belajar!";
-    if (!formData.study_detail || !formData.study_detail.trim()) return "Detail Belajar belum diisi!";
-    if (formData.social_activities.length === 0) return "Pilih minimal satu aktivitas Bermasyarakat!";
-    if (!formData.social_detail || !formData.social_detail.trim()) return "Detail Bermasyarakat belum diisi!";
-    if (!formData.sleep_time) return "Jam Tidur belum diisi!";
-    return null;
-  };
+  // --- VALIDASI FORM DIHAPUS ---
+  // Kita kembalikan null agar dianggap selalu valid, sehingga form kosong pun bisa disimpan
 
   const handleSave = async () => {
     const toastId = 'save-journal'; 
@@ -199,11 +198,9 @@ const StudentDashboard: React.FC = () => {
         return;
     }
 
-    const errorMsg = validateForm();
-    if (errorMsg) {
-        toast.error(errorMsg, { id: toastId });
-        return;
-    }
+    // Validasi dihapus/dilewati
+    // const errorMsg = validateForm();
+    // if (errorMsg) { ... }
     
     const payload: any = { log_date: date, mode: activeTab };
     
@@ -259,7 +256,7 @@ const StudentDashboard: React.FC = () => {
 
   const renderPlanLabel = (field: string, isArray = false) => {
     if (activeTab !== 'execution') return null;
-    if (!apiData) return <span className="text-rose-500 text-xs italic ml-2">⚠️ Rencana belum diisi!</span>;
+    if (!apiData) return <span className="text-gray-400 text-xs italic ml-2">(Rencana kosong)</span>;
     const planKey = 'plan_' + field;
     let val = apiData[planKey];
     if (isArray && Array.isArray(val)) val = val.join(', ');
@@ -305,11 +302,17 @@ const StudentDashboard: React.FC = () => {
                 <h2 className="text-2xl font-bold text-gray-800 mb-1">
                     {urlDate ? `Jurnal Tanggal ${urlDate}` : 'Input Karakter Harian'}
                 </h2>
-                <p className="text-sm text-gray-500">
-                    {urlDate ? 'Mengisi/Melihat data masa lalu' : 'Isi kegiatanmu hari ini'}
-                </p>
+                <div className="text-sm text-gray-500 flex items-center gap-2">
+                    {isFutureDate ? (
+                        <span className="text-indigo-600 font-bold flex items-center gap-1">
+                            <CalendarClock size={16} /> Mode Perencanaan Masa Depan
+                        </span>
+                    ) : (
+                        urlDate ? 'Mengisi/Melihat data masa lalu' : 'Isi kegiatanmu hari ini'
+                    )}
+                </div>
             </div>
-            <div className="flex items-center gap-2 text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-100">
+            <div className={`flex items-center gap-2 p-3 rounded-lg border ${isFutureDate ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-blue-50 border-blue-100 text-gray-600'}`}>
                 <span className="text-xl">📅</span>
                 <span className="font-bold text-lg">{displayDateStr}</span>
             </div>
@@ -330,7 +333,7 @@ const StudentDashboard: React.FC = () => {
       )}
       
       {/* Tabs Switcher */}
-      <div className="flex gap-4 mb-6">
+      <div className="flex gap-4 mb-6 relative">
         <button
           onClick={() => setActiveTab('plan')}
           className={`flex-1 py-3 rounded-xl font-bold transition-all shadow-sm ${
@@ -341,17 +344,31 @@ const StudentDashboard: React.FC = () => {
         >
           Rencana {isPlanSubmitted ? '✅' : '○'}
         </button>
+        
+        {/* Tombol Eksekusi (Disabled jika masa depan) */}
         <button
-          onClick={() => setActiveTab('execution')}
-          className={`flex-1 py-3 rounded-xl font-bold transition-all shadow-sm ${
+          onClick={() => !isFutureDate && setActiveTab('execution')}
+          disabled={isFutureDate}
+          className={`flex-1 py-3 rounded-xl font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${
             activeTab === 'execution' 
               ? 'bg-green-600 text-white shadow-lg scale-105' 
-              : 'bg-white text-gray-500 hover:bg-gray-50'
+              : isFutureDate 
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                : 'bg-white text-gray-500 hover:bg-gray-50'
           }`}
         >
+          {isFutureDate && <span className="text-[10px] bg-gray-200 px-2 py-0.5 rounded text-gray-500">Terkunci</span>}
           Eksekusi {isExecutionSubmitted ? '✅' : '○'}
         </button>
       </div>
+
+      {/* Alert jika memilih tanggal masa depan */}
+      {isFutureDate && activeTab === 'plan' && !isPlanSubmitted && (
+        <div className="mb-6 bg-indigo-50 border-l-4 border-indigo-500 p-4 rounded-r-xl text-indigo-800 text-sm font-medium">
+            🚀 Kamu sedang mengisi rencana untuk masa depan. Bagus! Persiapkan harimu dengan baik.
+            <br/><span className="text-xs opacity-75">*Laporan eksekusi baru bisa diisi pada tanggal tersebut.</span>
+        </div>
+      )}
 
       {/* --- PROGRESS BAR (Indikator Kelengkapan) --- */}
       <div className="mb-6 bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
@@ -434,7 +451,7 @@ const StudentDashboard: React.FC = () => {
           <div className="flex items-center gap-3 mb-4"><span className="text-3xl">🏃</span><h3 className="text-xl font-bold text-gray-800">Berolahraga</h3></div>
           {renderPlanLabel('sport_activities')}
           <select className="w-full border p-3 rounded-lg mb-3 focus:ring-2 focus:ring-blue-200 outline-none bg-white disabled:bg-gray-100" value={formData.sport_activities} onChange={(e) => handleChange('sport_activities', e.target.value)}>
-            <option value="">Pilih Olahraga...</option>
+            <option value="">Pilih Olahraga (Opsional)...</option>
             {exerciseOptions.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
           </select>
           <textarea placeholder="Contoh: Lari 30 menit..." className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none text-sm disabled:bg-gray-100" rows={2} value={formData.sport_detail} onChange={(e) => handleChange('sport_detail', e.target.value)}/>

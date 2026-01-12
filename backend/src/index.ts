@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { errorHandler } from './middleware/errorMiddleware';
 import passport from 'passport'; 
+import helmet from 'helmet';
 
 // 2. IMPORT FILE KONFIGURASI YANG TADI DIBUAT (Hanya untuk dijalankan kodenya)
 import './config/passport'; // Pastikan pathnya sesuai dengan lokasi file Anda
@@ -20,6 +21,10 @@ import adminRoutes from './routes/adminRoutes'
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+app.use(helmet());
+
+// 2. Sembunyikan informasi server (Mencegah 'Information Disclosure')
+app.disable('x-powered-by');
 // --- Konfigurasi CORS ---
 
 // 1. Daftar Origin yang Diizinkan di Production

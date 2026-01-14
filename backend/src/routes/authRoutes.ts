@@ -5,7 +5,8 @@ import {
     googleCallbackHandler, 
     completeGoogleRegistration,
     getStudentsList,
-    getClasses // <<< PERBAIKAN: Impor dari authController
+    getClasses, // <<< PERBAIKAN: Impor dari authController
+    getMe
 } from '../controllers/authController';
 import passport from 'passport';
 import { authMiddleware } from '../middleware/authMiddleware'; 
@@ -24,6 +25,7 @@ router.get('/google', passport.authenticate('google', { scope: ['profile', 'emai
 
 // Endpoint untuk admin mengambil daftar siswa (jika diperlukan)
 router.get('/students-list', getStudentsList as RequestHandler);
+router.get('/me', authMiddleware as RequestHandler, getMe as RequestHandler);
 
 // Callback setelah login Google berhasil
 router.get(

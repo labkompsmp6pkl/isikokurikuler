@@ -1,4 +1,4 @@
-import { Router, RequestHandler } from 'express'; // 1. Import RequestHandler
+import { Router, RequestHandler } from 'express'; 
 import { 
     getCharacterLogs, 
     upsertCharacterLog, 
@@ -10,20 +10,26 @@ import { authMiddleware, roleMiddleware } from '../middleware/authMiddleware';
 
 const router = Router();
 
-// Middleware
-// FIX: Tambahkan 'as RequestHandler'
+// 1. Middleware Authentication (Wajib Login)
 router.use(authMiddleware as RequestHandler);
-router.use(roleMiddleware(['student']) as RequestHandler);
 
-// Fitur Lama (Jurnal)
-// FIX: Cast controller ke RequestHandler
+// 2. [FIX UTAMA] Middleware Role
+// Izinkan 'student' DAN 'alumni' untuk mengakses route di bawah ini.
+// Akses dashboard dan misi (GET) diperbolehkan untuk Alumni.
+// Akses input data (POST) akan diblokir di level Controller dengan pesan khusus.
+router.use(roleMiddleware(['student', 'alumni']) as RequestHandler);
+
+// --- Routes ---
+
+// Fitur Jurnal (Log Karakter)
 router.get('/', getCharacterLogs as RequestHandler);
-router.post('/', upsertCharacterLog as RequestHandler);
+router.post('/', upsertCharacterLog as RequestHandler); 
+// ^ Controller upsertCharacterLog akan cek: Jika Alumni -> Return 403 (Data Terkunci)
 
-// Fitur Baru (Dashboard & Misi)
-// FIX: Cast controller ke RequestHandler
+// Fitur Dashboard & Misi
 router.get('/dashboard', getStudentDashboardData as RequestHandler);
 router.get('/missions', getStudentMissions as RequestHandler);
 router.post('/missions/complete', completeMission as RequestHandler);
+// ^ Controller completeMission akan cek: Jika Alumni -> Return 403 (Tidak bisa selesaikan misi)
 
 export default router;

@@ -2,7 +2,7 @@ import { Request, Response, RequestHandler } from 'express';
 import pool from '../config/db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { UserPayload } from '../middleware/authMiddleware';
+import { AuthenticatedRequest, UserPayload } from '../middleware/authMiddleware';
 
 export const getClasses: RequestHandler = async (req, res) => {
   try {
@@ -26,6 +26,28 @@ export const getClasses: RequestHandler = async (req, res) => {
   } catch (error) {
     console.error("Gagal mengambil data kelas:", error);
     res.status(500).json({ message: "Gagal mengambil data kelas" });
+  }
+};
+
+export const getMe = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      // Ambil data terbaru dari Database langsung
+      const [rows]: any = await pool.query("SELECT * FROM users WHERE id = ?", [userId]);
+      
+      if (rows.length === 0) {
+          return res.status(404).json({ message: "User not found" });
+      }
+
+      const user = rows[0];
+      delete user.password; // Jangan kirim password
+
+      res.json(user); // Kirim data fresh (termasuk whatsapp_number & agency_name)
+  } catch (error) {
+      console.error("Get Me Error:", error);
+      res.status(500).json({ message: "Server Error" });
   }
 };
 

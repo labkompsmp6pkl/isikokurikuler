@@ -20,7 +20,8 @@ import {
   AlertCircle,
   Trophy,
   CheckCircle2,
-  Info
+  Info,
+  School
 } from 'lucide-react';
 
 // ==========================================
@@ -61,7 +62,7 @@ type SelectOption = {
     label: string;
     disabled?: boolean;
     className?: string;
-    subLabel?: string; // Tambahan untuk detail semester/kuota
+    subLabel?: string;
 };
 
 type SelectFieldProps = {
@@ -126,6 +127,7 @@ const Register: React.FC = () => {
     { id: 'contributor', label: 'Kontributor', icon: <Trophy size={24}/> }
   ] as const;
 
+  // State Form (Ditambah field kontributor)
   const [formData, setFormData] = useState({
     fullName: '',
     nisn: '',
@@ -133,12 +135,23 @@ const Register: React.FC = () => {
     whatsappNumber: '',
     classId: '', 
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    contributor_type: '', // Baru
+    agency_name: ''       // Baru
   });
 
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [isClassLoading, setIsClassLoading] = useState<boolean>(true);
+
+  // Opsi Dropdown Kontributor
+  const contributorTypeOptions = [
+    { value: 'Guru', label: 'Guru' },
+    { value: 'Dinas Pendidikan', label: 'Dinas Pendidikan' },
+    { value: 'Komite Sekolah', label: 'Komite Sekolah' },
+    { value: 'KPAI', label: 'KPAI' },
+    { value: 'Lainnya', label: 'Lainnya (Umum)' }
+  ];
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -158,20 +171,14 @@ const Register: React.FC = () => {
     fetchClasses();
   }, []);
 
-  // --- OPSI KELAS UNTUK SISWA (TANPA FILTER TAHUN) ---
+  // --- OPSI KELAS SISWA ---
   const studentClassOptions = useMemo(() => {
-    // Urutkan kelas berdasarkan nama, lalu tahun (opsional)
     const sortedClasses = [...classList].sort((a, b) => a.name.localeCompare(b.name));
-
     return sortedClasses.map(c => {
         const currentFilled = c.student_count !== undefined ? c.student_count : (c.terisi || 0);
         const capacity = c.kapasitas || 40; 
         const remaining = capacity - currentFilled;
         const isFull = remaining <= 0;
-
-        // Label Semester & Tahun (Misal: "Ganjil 2025/2026")
-        // Asumsi data 'academic_year' format "2025/2026" dan mungkin ada field 'semester'
-        // Jika tidak ada semester di data, default tampilkan tahun saja
         const periodLabel = `${c.semester || 'Ganjil'} ${c.academic_year || ''}`;
 
         return {
@@ -179,16 +186,12 @@ const Register: React.FC = () => {
             label: `Kelas ${c.name}`,
             subLabel: isFull ? `Penuh • ${periodLabel}` : `Sisa ${remaining} • ${periodLabel}`,
             disabled: isFull, 
-            // Style: Penuh -> Abu-abu pudar + Coretan
-            // Tersedia -> Hitam/Slate normal
-            className: isFull 
-                ? 'text-slate-400 bg-slate-100 line-through italic' 
-                : 'text-slate-800 font-bold bg-white'
+            className: isFull ? 'text-slate-400 bg-slate-100 line-through italic' : 'text-slate-800 font-bold bg-white'
         };
     });
   }, [classList]); 
 
-  // --- OPSI KELAS UNTUK GURU ---
+  // --- OPSI KELAS GURU ---
   const teacherClassOptions = useMemo(() => {
     return classList.map(c => {
         const isTaken = c.teacher_id && c.teacher_id !== 0;
@@ -204,6 +207,17 @@ const Register: React.FC = () => {
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Handler Khusus Tipe Kontributor
+  const handleContributorTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setFormData(prev => ({
+        ...prev,
+        contributor_type: val,
+        // Jika bukan "Lainnya", agency_name otomatis terisi sesuai tipe
+        agency_name: val === 'Lainnya' ? '' : val
+    }));
   };
 
   const handleRegister = async (e: FormEvent) => {
@@ -240,6 +254,10 @@ const Register: React.FC = () => {
         nip: (selectedRole === 'teacher' || selectedRole === 'contributor') ? formData.nip : undefined,
         whatsappNumber: selectedRole === 'parent' ? formData.whatsappNumber : undefined,
         classId: (selectedRole === 'student' || selectedRole === 'teacher') ? (formData.classId || undefined) : undefined,
+        
+        // Data Baru Kontributor
+        contributor_type: selectedRole === 'contributor' ? formData.contributor_type : undefined,
+        agency_name: selectedRole === 'contributor' ? (formData.agency_name || formData.contributor_type) : undefined,
       };
       
       const response = await authRegister(registrationData);
@@ -288,8 +306,6 @@ const Register: React.FC = () => {
               onChange={handleFormChange}
               icon={<ShieldCheck size={22}/>}
             />
-            
-            {/* Dropdown Kelas Langsung (Tanpa Tahun) */}
             <SelectField 
               name="classId" 
               value={formData.classId} 
@@ -311,7 +327,6 @@ const Register: React.FC = () => {
               onChange={handleFormChange}
               icon={<ShieldCheck size={22}/>}
             />
-
             <SelectField 
               name="classId" 
               value={formData.classId} 
@@ -325,14 +340,39 @@ const Register: React.FC = () => {
           </>
         )}
 
+        {/* LOGIKA FORM KONTRIBUTOR */}
         {selectedRole === 'contributor' && (
-          <InputField 
-            name="nip" 
-            placeholder="NIP / Kode Identitas" 
-            value={formData.nip} 
-            onChange={handleFormChange}
-            icon={<ShieldCheck size={22}/>}
-          />
+          <>
+            <SelectField 
+                name="contributor_type"
+                value={formData.contributor_type}
+                options={contributorTypeOptions}
+                placeholder="Pilih Identitas / Instansi"
+                onChange={handleContributorTypeChange}
+                icon={<School size={22}/>}
+            />
+
+            {/* Munculkan input manual jika "Lainnya" dipilih */}
+            {(formData.contributor_type === 'Lainnya' || (formData.contributor_type && !contributorTypeOptions.some(o => o.value === formData.contributor_type))) && (
+                <div className="animate-in fade-in slide-in-from-top-2">
+                    <InputField 
+                        name="agency_name"
+                        placeholder="Nama Instansi / Detail Peran"
+                        value={formData.agency_name}
+                        onChange={handleFormChange}
+                        icon={<User size={22}/>}
+                    />
+                </div>
+            )}
+
+            <InputField 
+              name="nip" 
+              placeholder="NIP / Nomor Kepegawaian" 
+              value={formData.nip} 
+              onChange={handleFormChange}
+              icon={<ShieldCheck size={22}/>}
+            />
+          </>
         )}
 
         {selectedRole === 'parent' && (
@@ -400,7 +440,17 @@ const Register: React.FC = () => {
                   type="button" 
                   onClick={() => {
                     setSelectedRole(role.id as any);
-                    setFormData(prev => ({ ...prev, classId: '', nisn: '', nip: '', whatsappNumber: '', password: '', confirmPassword: '' }));
+                    setFormData(prev => ({ 
+                        ...prev, 
+                        classId: '', 
+                        nisn: '', 
+                        nip: '', 
+                        whatsappNumber: '', 
+                        password: '', 
+                        confirmPassword: '',
+                        contributor_type: '',
+                        agency_name: ''
+                    }));
                     setError('');
                   }} 
                   className={`

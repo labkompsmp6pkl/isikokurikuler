@@ -45,15 +45,15 @@
       };
     };
 
-    # Konfigurasi pratinjau web
     previews = {
       enable = true;
       previews = {
-        # Pratinjau untuk frontend (Vite)
         web = {
-          command = ["npm" "run" "dev" "--" "--port" "$PORT"];
+          # Gunakan --host agar bisa diakses dari luar container (Cloud Workstations)
+          # Gunakan variabel $PORT yang disediakan oleh IDX
+          command = ["npm" "run" "dev" "--" "--port" "$PORT" "--host" "0.0.0.0"];
           manager = "web";
-          cwd = "frontend"; # Direktori kerja untuk pratinjau
+          cwd = "frontend"; 
         };
       };
     };

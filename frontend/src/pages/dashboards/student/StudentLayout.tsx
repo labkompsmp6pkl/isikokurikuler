@@ -7,33 +7,61 @@ import {
   LogOut, 
   Menu, 
   X,
-  Target
-} from 'lucide-react';
+  Target,
+  GraduationCap} from 'lucide-react';
 import { useAuth, authApi } from '../../../services/authService';
+import characterService from '../../../services/characterService'; // Import service untuk ambil data angkatan
 import toast from 'react-hot-toast';
 
 const StudentLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [classNameFromApi, setClassNameFromApi] = useState<string | null>(null);
+  
+  // State tunggal untuk menyimpan info tambahan (Nama Kelas ATAU Tahun Angkatan)
+  const [extraInfo, setExtraInfo] = useState<string | null>(null);
 
+  const isAlumni = user?.role === 'alumni';
+
+  // [PERBAIKAN 1] Fetch Data Kelas / Angkatan
   useEffect(() => {
-    const fetchClassName = async () => {
-      const classId = (user as any)?.classId || (user as any)?.class_id;
-      if (classId) {
-        try {
-          const response = await authApi.get('/auth/classes-list');
-          const classes = response.data.data || response.data;
-          const found = classes.find((c: any) => c.id == classId);
-          if (found) setClassNameFromApi(found.name);
-        } catch (err) {
-          console.error("Gagal sinkronisasi nama kelas:", err);
+    const syncData = async () => {
+      if (!user) return;
+
+      if (isAlumni) {
+        // --- LOGIKA ALUMNI: Ambil Tahun Angkatan ---
+        // Cek dulu apakah sudah ada di user object
+        if ((user as any)?.graduation_year) {
+            setExtraInfo((user as any).graduation_year);
+        } else {
+            // Jika tidak, fetch dari Dashboard API yang sudah pasti punya datanya
+            try {
+                const data = await characterService.getStudentDashboard();
+                if (data?.student?.graduation_year) {
+                    setExtraInfo(data.student.graduation_year);
+                }
+            } catch (err) {
+                console.error("Gagal sinkronisasi data alumni:", err);
+            }
+        }
+      } else {
+        // --- LOGIKA SISWA: Ambil Nama Kelas ---
+        const classId = (user as any)?.classId || (user as any)?.class_id;
+        if (classId) {
+            try {
+                const response = await authApi.get('/auth/classes-list');
+                const classes = response.data.data || response.data;
+                const found = classes.find((c: any) => c.id == classId);
+                if (found) setExtraInfo(found.name);
+            } catch (err) {
+                console.error("Gagal sinkronisasi nama kelas:", err);
+            }
         }
       }
     };
-    if (user) fetchClassName();
-  }, [user]);
+
+    syncData();
+  }, [user, isAlumni]);
 
   const handleLogout = () => {
     const t = toast.loading('Keluar sistem...');
@@ -44,10 +72,15 @@ const StudentLayout: React.FC = () => {
     }, 800);
   };
 
+  // Setup Data Tampilan
   const userData = {
-    fullName: (user as any)?.fullName || user?.name || 'Siswa',
-    className: classNameFromApi || (user as any)?.class_name || (user as any)?.student_class || '-',
-    initial: ((user as any)?.fullName || user?.name || 'S').charAt(0)
+    fullName: (user as any)?.fullName || user?.name || 'User',
+    initial: ((user as any)?.fullName || user?.name || 'S').charAt(0),
+    roleLabel: isAlumni ? 'Alumni' : 'Siswa',
+    // Tampilkan data yang sudah di-fetch
+    infoLabel: isAlumni 
+        ? `Angkatan ${extraInfo || '-'}` 
+        : `Kelas ${extraInfo || (user as any)?.class_name || (user as any)?.class || '-'}`,
   };
 
   const navItems = [
@@ -57,6 +90,7 @@ const StudentLayout: React.FC = () => {
     { path: '/student/history', label: 'Riwayat', icon: <History size={20} /> },
   ];
 
+  // [PERBAIKAN 2] Warna dikembalikan ke Default (Biru/Indigo) untuk semua user
   return (
     <div className="min-h-screen bg-gray-50 flex font-sans text-slate-800">
       
@@ -66,7 +100,6 @@ const StudentLayout: React.FC = () => {
       )}
 
       {/* --- SIDEBAR --- */}
-      {/* Mobile: Fixed Off-canvas | Desktop: Sticky Sidebar */}
       <aside className={`fixed md:sticky top-0 h-screen w-72 bg-white border-r border-gray-200 z-50 transition-transform duration-300 ease-in-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         
         {/* Header Sidebar */}
@@ -92,7 +125,11 @@ const StudentLayout: React.FC = () => {
               key={item.path}
               to={item.path}
               onClick={() => setIsSidebarOpen(false)}
-              className={({ isActive }) => `flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold ${isActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-200 scale-[1.02]' : 'text-gray-500 hover:bg-blue-50 hover:text-blue-600'}`}
+              className={({ isActive }) => `flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold ${
+                isActive 
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-200 scale-[1.02]' 
+                  : 'text-gray-500 hover:bg-blue-50 hover:text-blue-600'
+              }`}
             >
               {item.icon}
               <span>{item.label}</span>
@@ -107,10 +144,13 @@ const StudentLayout: React.FC = () => {
                 {userData.initial}
             </div>
             <div className="overflow-hidden">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Siswa</p>
+                <div className="flex items-center gap-1 mb-0.5">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{userData.roleLabel}</p>
+                    {isAlumni && <GraduationCap size={10} className="text-blue-500"/>}
+                </div>
                 <p className="text-xs font-black text-gray-800 truncate">{userData.fullName}</p>
                 <div className="mt-1 inline-flex px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[10px] font-black uppercase tracking-wider">
-                    Kelas {userData.className}
+                    {userData.infoLabel}
                 </div>
             </div>
           </div>
@@ -123,11 +163,9 @@ const StudentLayout: React.FC = () => {
       </aside>
 
       {/* --- MAIN CONTENT WRAPPER --- */}
-      {/* Menggunakan min-w-0 agar konten tidak meluber, tapi membiarkan body yang scroll */}
       <div className="flex-1 min-w-0 flex flex-col">
         
-        {/* HEADER MOBILE (STICKY) */}
-        {/* 'sticky top-0 z-30' akan bekerja karena parent-nya tidak memiliki overflow-hidden */}
+        {/* HEADER MOBILE */}
         <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-gray-200 p-4 shadow-sm transition-all">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -144,17 +182,16 @@ const StudentLayout: React.FC = () => {
               {userData.initial}
             </div>
             <div className="flex-1 overflow-hidden">
-              <p className="text-[10px] font-bold text-gray-400 leading-none">Profil Siswa</p>
+              <p className="text-[10px] font-bold text-gray-400 leading-none">{userData.roleLabel}</p>
               <p className="text-xs font-black text-gray-800 truncate leading-tight mt-1">{userData.fullName}</p>
             </div>
             <div className="bg-indigo-600 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase shadow-sm shadow-indigo-100">
-              {userData.className}
+              {userData.infoLabel}
             </div>
           </div>
         </header>
 
         {/* CONTENT AREA */}
-        {/* Tidak ada overflow-auto disini agar scroll menggunakan scroll browser utama */}
         <main className="p-4 md:p-10 max-w-5xl mx-auto w-full pb-20">
           <Outlet />
         </main>

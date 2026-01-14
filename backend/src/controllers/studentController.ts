@@ -2,122 +2,24 @@ import { Response } from 'express';
 import pool from '../config/db';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 
-// [FUNGSI BARU] Mengambil semua log untuk siswa yang login
-export const getCharacterLogs = async (req: AuthenticatedRequest, res: Response) => {
-    const studentId = req.user?.id;
-
-    try {
-        const [logs]: any = await pool.execute(
-            'SELECT * FROM character_logs WHERE student_id = ? ORDER BY log_date DESC',
-            [studentId]
-        );
-
-        // Proses JSON string untuk worship_activities menjadi array
-        const processedLogs = logs.map((log: any) => {
-            if (log.worship_activities && typeof log.worship_activities === 'string') {
-                try {
-                    log.worship_activities = JSON.parse(log.worship_activities);
-                } catch (e) {
-                    log.worship_activities = []; // Default ke array kosong jika parse gagal
-                }
-            }
-            return log;
-        });
-
-        res.status(200).json(processedLogs);
-    } catch (error) {
-        console.error('Database error in getCharacterLogs:', error);
-        res.status(500).json({ message: 'Terjadi kesalahan pada server saat mengambil data.' });
-    }
-};
-
-interface CharacterLogData {
-    log_date: string;
-    wake_up_time: string;
-    worship_activities: string[];
-    healthy_food_notes: string;
-    exercise_type: string;
-    exercise_details: string;
-    learning_subject: string;
-    learning_details: string;
-    social_activity_notes: string;
-    sleep_time: string;
-}
-
-// [NAMA BARU] Mengganti nama fungsi menjadi lebih ringkas: upsert (update/insert)
-export const upsertCharacterLog = async (req: AuthenticatedRequest, res: Response) => {
-    const studentId = req.user?.id;
-    const userRole = req.user?.role; // Ambil role dari token
-
-    // --- [PERBAIKAN: PROTEKSI ALUMNI] ---
-    // Jika user adalah alumni, tolak penyimpanan jurnal
-    if (userRole === 'alumni') {
-        return res.status(403).json({ 
-            message: 'Status Anda adalah Alumni. Anda tidak dapat mengisi jurnal lagi. Silakan hubungi Admin jika ini kesalahan.' 
-        });
-    }
-    // ------------------------------------
-
-    const { 
-        log_date,
-        wake_up_time,
-        worship_activities,
-        healthy_food_notes,
-        exercise_type,
-        exercise_details,
-        learning_subject,
-        learning_details,
-        social_activity_notes,
-        sleep_time 
-    }: CharacterLogData = req.body;
-
-    if (!log_date) {
-        return res.status(400).json({ message: 'Tanggal log wajib diisi.' });
-    }
-
-    try {
-        const [existingLogs]: any = await pool.execute(
-            'SELECT id FROM character_logs WHERE student_id = ? AND log_date = ?',
-            [studentId, log_date]
-        );
-
-        const worshipActivitiesJson = JSON.stringify(worship_activities || []);
-
-        if (existingLogs.length > 0) {
-            const logId = existingLogs[0].id;
-            await pool.execute(
-                `UPDATE character_logs SET 
-                    wake_up_time = ?, worship_activities = ?, healthy_food_notes = ?, 
-                    exercise_type = ?, exercise_details = ?, learning_subject = ?, 
-                    learning_details = ?, social_activity_notes = ?, sleep_time = ?, 
-                    status = 'Tersimpan' 
-                WHERE id = ?`,
-                [wake_up_time, worshipActivitiesJson, healthy_food_notes, exercise_type, exercise_details, learning_subject, learning_details, social_activity_notes, sleep_time, logId]
-            );
-            res.status(200).json({ message: 'Catatan harian berhasil diperbarui.' });
-        } else {
-            await pool.execute(
-                `INSERT INTO character_logs (student_id, log_date, wake_up_time, worship_activities, healthy_food_notes, exercise_type, exercise_details, learning_subject, learning_details, social_activity_notes, sleep_time, status) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Tersimpan')`,
-                [studentId, log_date, wake_up_time, worshipActivitiesJson, healthy_food_notes, exercise_type, exercise_details, learning_subject, learning_details, social_activity_notes, sleep_time]
-            );
-            res.status(201).json({ message: 'Catatan harian berhasil disimpan.' });
-        }
-    } catch (error) {
-        console.error('Database error in upsertCharacterLog:', error);
-        res.status(500).json({ message: 'Terjadi kesalahan pada server saat menyimpan catatan.' });
-    }
-};
-
+// ------------------------------------------------------------------
+// [REVISI] Mengambil Data Dashboard Siswa
+// Perbaikan: Menambahkan kolom 'graduation_year' dan 'last_class_name'
+// ------------------------------------------------------------------
 export const getStudentDashboardData = async (req: AuthenticatedRequest, res: Response) => {
     const studentId = req.user?.id;
 
     try {
-        // 1. Data Siswa (Ditambahkan select role untuk keperluan frontend)
+        // [PASTIKAN QUERY SELECT MENGAMBIL graduation_year]
         const [userRows]: any = await pool.query(
-            'SELECT full_name, nisn, class, role FROM users WHERE id = ?', 
+            'SELECT full_name, nisn, class, role, graduation_year, last_class_name FROM users WHERE id = ?', 
             [studentId]
         );
+        
+        if (userRows.length === 0) {
+            return res.status(404).json({ message: 'Siswa tidak ditemukan' });
+        }
+        
         const user = userRows[0];
 
         // 2. Statistik Jurnal
@@ -126,15 +28,15 @@ export const getStudentDashboardData = async (req: AuthenticatedRequest, res: Re
             [studentId]
         );
 
-        // 3. [FITUR KONTRIBUTOR] Ambil Total Poin Sikap
+        // 3. Total Poin Sikap
         const [scoreData]: any = await pool.query(
             `SELECT SUM(score) as total_score FROM behavior_records WHERE student_id = ?`,
             [studentId]
         );
         const behaviorScore = scoreData[0].total_score || 0;
 
-        // 4. [FITUR KONTRIBUTOR] Ambil Misi Aktif
-        // Catatan: Pastikan tabel "missions" benar-benar ada, atau gunakan "mission_schedules" sesuai struktur DB
+        // 4. Misi Individu Aktif
+        // Alumni boleh melihat data ini (Read Only), jadi tidak ada blokir 403
         const [missions]: any = await pool.query(
             `SELECT m.*, u.full_name as contributor_name 
              FROM missions m
@@ -149,52 +51,32 @@ export const getStudentDashboardData = async (req: AuthenticatedRequest, res: Re
             stats: {
                 journalTotal: logStats[0].total,
                 journalApproved: logStats[0].approved,
-                behaviorScore: behaviorScore // Poin dari kontributor
+                behaviorScore: behaviorScore
             },
-            missions: missions // List misi
+            missions: missions
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("Error dashboard:", error);
         res.status(500).json({ message: 'Gagal memuat dashboard.' });
     }
 };
 
-// 2. Siswa Menyelesaikan Misi
-export const completeMission = async (req: AuthenticatedRequest, res: Response) => {
-    const studentId = req.user?.id;
-    const userRole = req.user?.role;
-    const { scheduleId } = req.body;
-
-    // --- [PERBAIKAN: PROTEKSI ALUMNI] ---
-    if (userRole === 'alumni') {
-        return res.status(403).json({ message: 'Akun Alumni tidak dapat menyelesaikan misi.' });
-    }
-    // ------------------------------------
-
-    try {
-        // Cek duplikasi hari ini
-        const [check]: any = await pool.query(
-            `SELECT id FROM mission_completions WHERE mission_schedule_id = ? AND student_id = ? AND DATE(completed_at) = CURDATE()`,
-            [scheduleId, studentId]
-        );
-
-        if (check.length > 0) return res.status(400).json({ message: 'Misi sudah diselesaikan hari ini.' });
-
-        await pool.query(
-            `INSERT INTO mission_completions (mission_schedule_id, student_id) VALUES (?, ?)`,
-            [scheduleId, studentId]
-        );
-
-        res.json({ message: 'Misi berhasil diselesaikan! Poin bertambah.' });
-    } catch (error) {
-        res.status(500).json({ message: 'Gagal menyelesaikan misi.' });
-    }
-};
-
+// ------------------------------------------------------------------
+// [REVISI] Mengambil Daftar Misi Harian
+// Perbaikan: Jika Alumni, return kosong (200 OK), JANGAN 403.
+// ------------------------------------------------------------------
 export const getStudentMissions = async (req: AuthenticatedRequest, res: Response) => {
     const studentId = req.user?.id;
+    const userRole = req.user?.role;
     
+    // [FIX 403 ERROR]
+    // Jika alumni, cukup berikan array kosong agar frontend tidak crash/error.
+    // Jangan kirim 403 Forbidden untuk request GET (Read).
+    if (userRole === 'alumni') {
+        return res.status(200).json([]); 
+    }
+
     try {
         // Ambil class_id siswa
         const [userRows]: any = await pool.query('SELECT class_id FROM users WHERE id = ?', [studentId]);
@@ -202,10 +84,12 @@ export const getStudentMissions = async (req: AuthenticatedRequest, res: Respons
         
         const classId = userRows[0].class_id;
         
+        // Jika classId null (misal transisi data), return kosong
+        if (!classId) return res.status(200).json([]);
+
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const todayName = days[new Date().getDay()];
 
-        // Query ini disesuaikan untuk mengambil misi harian yang relevan
         const query = `
             SELECT 
                 ms.*, 
@@ -227,5 +111,85 @@ export const getStudentMissions = async (req: AuthenticatedRequest, res: Respons
     } catch (error) {
         console.error("Error get missions:", error);
         res.status(500).json({ message: 'Gagal memuat misi.' });
+    }
+};
+
+// ------------------------------------------------------------------
+// FUNGSI LAIN (TETAP SAMA - Write Access tetap diblokir untuk Alumni)
+// ------------------------------------------------------------------
+
+export const getCharacterLogs = async (req: AuthenticatedRequest, res: Response) => {
+    const studentId = req.user?.id;
+    try {
+        const [logs]: any = await pool.execute(
+            'SELECT * FROM character_logs WHERE student_id = ? ORDER BY log_date DESC',
+            [studentId]
+        );
+        const processedLogs = logs.map((log: any) => {
+            if (log.worship_activities && typeof log.worship_activities === 'string') {
+                try { log.worship_activities = JSON.parse(log.worship_activities); } catch (e) { log.worship_activities = []; }
+            }
+            return log;
+        });
+        res.status(200).json(processedLogs);
+    } catch (error) {
+        res.status(500).json({ message: 'Terjadi kesalahan server.' });
+    }
+};
+
+export const upsertCharacterLog = async (req: AuthenticatedRequest, res: Response) => {
+    const studentId = req.user?.id;
+    const userRole = req.user?.role;
+
+    // [TETAP] Write Access diblokir
+    if (userRole === 'alumni') {
+        return res.status(403).json({ message: 'Status Alumni: Data terkunci.' });
+    }
+
+    const { log_date, wake_up_time, worship_activities, healthy_food_notes, exercise_type, exercise_details, learning_subject, learning_details, social_activity_notes, sleep_time }: any = req.body;
+    if (!log_date) return res.status(400).json({ message: 'Tanggal wajib diisi.' });
+
+    try {
+        const [existingLogs]: any = await pool.execute('SELECT id FROM character_logs WHERE student_id = ? AND log_date = ?', [studentId, log_date]);
+        const worshipJson = JSON.stringify(worship_activities || []);
+
+        if (existingLogs.length > 0) {
+            const logId = existingLogs[0].id;
+            await pool.execute(
+                `UPDATE character_logs SET wake_up_time=?, worship_activities=?, healthy_food_notes=?, exercise_type=?, exercise_details=?, learning_subject=?, learning_details=?, social_activity_notes=?, sleep_time=?, status='Tersimpan' WHERE id=?`,
+                [wake_up_time, worshipJson, healthy_food_notes, exercise_type, exercise_details, learning_subject, learning_details, social_activity_notes, sleep_time, logId]
+            );
+            res.status(200).json({ message: 'Diperbarui.' });
+        } else {
+            await pool.execute(
+                `INSERT INTO character_logs (student_id, log_date, wake_up_time, worship_activities, healthy_food_notes, exercise_type, exercise_details, learning_subject, learning_details, social_activity_notes, sleep_time, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Tersimpan')`,
+                [studentId, log_date, wake_up_time, worshipJson, healthy_food_notes, exercise_type, exercise_details, learning_subject, learning_details, social_activity_notes, sleep_time]
+            );
+            res.status(201).json({ message: 'Disimpan.' });
+        }
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Gagal menyimpan.' });
+    }
+};
+
+export const completeMission = async (req: AuthenticatedRequest, res: Response) => {
+    const studentId = req.user?.id;
+    const userRole = req.user?.role;
+    const { scheduleId } = req.body;
+
+    // [TETAP] Write Access diblokir
+    if (userRole === 'alumni') {
+        return res.status(403).json({ message: 'Akun Alumni tidak dapat menyelesaikan misi.' });
+    }
+
+    try {
+        const [check]: any = await pool.query(`SELECT id FROM mission_completions WHERE mission_schedule_id = ? AND student_id = ? AND DATE(completed_at) = CURDATE()`, [scheduleId, studentId]);
+        if (check.length > 0) return res.status(400).json({ message: 'Misi sudah selesai.' });
+
+        await pool.query(`INSERT INTO mission_completions (mission_schedule_id, student_id) VALUES (?, ?)`, [scheduleId, studentId]);
+        res.json({ message: 'Misi selesai!' });
+    } catch (error) {
+        res.status(500).json({ message: 'Gagal menyelesaikan misi.' });
     }
 };

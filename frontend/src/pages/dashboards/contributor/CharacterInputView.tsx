@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { 
-    Star, PenTool, Users, Briefcase, ChevronRight, Send
+    Star, PenTool, Users, ChevronRight, Send
 } from 'lucide-react';
 import contributorService from '../../../services/contributorService'; 
-import { authApi } from '../../../services/authService';
+import { authApi, useAuth } from '../../../services/authService';
 import StudentSelectorView from './StudentSelectorView';
 
 const CharacterInputView: React.FC = () => {
+    const { user } = useAuth();
     const [students, setStudents] = useState<any[]>([]);
-    const [contributorRole, setContributorRole] = useState('Guru Mata Pelajaran');
-    const [customRole, setCustomRole] = useState('');
+    
     const [targetStudentId, setTargetStudentId] = useState<string>(''); 
     const [score, setScore] = useState(80);
     const [notes, setNotes] = useState('');
@@ -31,15 +31,16 @@ const CharacterInputView: React.FC = () => {
         e.preventDefault();
         if (!targetStudentId) return toast.error('Mohon pilih target siswa.');
         if (!notes.trim()) return toast.error('Mohon isi bukti nyata.');
-        const finalRole = contributorRole === 'Lainnya' ? customRole.trim() : contributorRole;
-        if (!finalRole) return toast.error('Mohon isi identitas penilai.');
+        
+        // Otomatis ambil identitas dari profil user yang sedang login
+        const finalRole = (user as any)?.agency_name || (user as any)?.contributor_type || 'Kontributor';
 
         setIsSubmitting(true);
         const toastId = toast.loading('Mengirim bukti sikap...');
 
         try {
             const payloadBase = {
-                contributor_role: finalRole,
+                contributor_role: finalRole, // Identitas otomatis
                 behavior_category: 'Karakter Harian',
                 score: score,
                 notes: notes,
@@ -60,7 +61,6 @@ const CharacterInputView: React.FC = () => {
             setTargetStudentId('');
             setScore(80);
             setNotes('');
-            setCustomRole('');
         } catch (err) {
             toast.error('Gagal mengirim data.', { id: toastId });
         } finally {
@@ -98,26 +98,7 @@ const CharacterInputView: React.FC = () => {
             </div>
 
             <div className="space-y-8">
-                <div className="space-y-3">
-                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                        <Briefcase size={14}/> Identitas Penilai
-                    </label>
-                    <div className="relative">
-                        <select value={contributorRole} onChange={(e) => setContributorRole(e.target.value)} className="w-full bg-rose-50/50 border-2 border-rose-100 px-5 py-4 rounded-2xl font-bold text-gray-700 outline-none focus:border-rose-500 cursor-pointer">
-                            <option>Guru Mata Pelajaran</option>
-                            <option>Guru Tamu / Motivator</option>
-                            <option>Pelatih Ekskul / Coach</option>
-                            <option>Tamu / Masyarakat</option>
-                            <option value="Dinas Pendidikan">Dinas Pendidikan</option>
-  <option value="KPAI">KPAI</option>
-  <option value="Komite Sekolah">Komite Sekolah</option>
-                            <option>Lainnya</option>
-                        </select>
-                    </div>
-                    {contributorRole === 'Lainnya' && (
-                        <input type="text" placeholder="Tuliskan peran Anda..." value={customRole} onChange={(e) => setCustomRole(e.target.value)} className="w-full px-5 py-4 border-2 border-rose-200 rounded-2xl font-bold text-gray-700 outline-none focus:border-rose-600" />
-                    )}
-                </div>
+                {/* Bagian Identitas Penilai DIHAPUS karena sudah otomatis */}
 
                 <div className="space-y-3">
                     <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">

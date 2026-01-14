@@ -25,8 +25,17 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
         }
 
         const teacherData = teacherRows[0];
-        const teacherClassId = teacherData.class_id;
-        const teacherClassName = teacherData.class_name; // Nama kelas (misal: "7A")
+        // Logika kelas guru lebih baik ambil dari tabel classes langsung
+        const [actualClass]: any = await pool.query("SELECT id, name FROM classes WHERE teacher_id = ?", [teacherId]);
+        
+        let teacherClassId = null;
+        let teacherClassName = null;
+
+        if (actualClass.length > 0) {
+             teacherClassId = actualClass[0].id;
+             teacherClassName = actualClass[0].name;
+        }
+
         const teacherName = teacherData.full_name;
 
         // Cek apakah guru sudah punya kelas
@@ -37,6 +46,7 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
         }
 
         // 2. Ambil semua siswa di kelas ini
+        // Menggunakan logika is_active yang sudah diperbaiki
         const [students]: any[] = await pool.query(
             `SELECT 
                 s.id, 
@@ -44,7 +54,12 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
                 s.nisn, 
                 p.full_name AS parent_name,
                 c.name as class_name,
-                t.full_name as teacher_name
+                t.full_name as teacher_name,
+                CASE 
+                    WHEN (s.password IS NOT NULL AND s.password != '') THEN 1
+                    WHEN (SELECT COUNT(*) FROM family_relations fr WHERE fr.student_id = s.id) > 0 THEN 1
+                    ELSE 0 
+                END as is_active
              FROM users s
              LEFT JOIN classes c ON s.class_id = c.id
              LEFT JOIN users t ON c.teacher_id = t.id
@@ -183,16 +198,15 @@ export const getClassHistory = async (req: Request, res: Response) => {
     const { studentId } = req.query;
 
     try {
-        // 1. Ambil ID kelas guru dari database
+        // 1. Ambil ID kelas guru dari database (TABEL CLASSES)
         const [teacherRows]: any[] = await pool.query(
-            'SELECT class_id FROM users WHERE id = ?', 
+            'SELECT id FROM classes WHERE teacher_id = ?', 
             [teacherId]
         );
         
-        const teacherClassId = teacherRows[0]?.class_id;
+        const teacherClassId = teacherRows[0]?.id;
 
         if (!teacherClassId) {
-            // Ubah menjadi array kosong agar tidak error di frontend, atau 403 jika strict
             return res.status(403).json({ 
                 message: 'Akses ditolak. Anda tidak terdaftar sebagai wali kelas.' 
             });
@@ -283,5 +297,73 @@ export const generateStudentReport = async (req: Request, res: Response) => {
     } catch (error) {
         console.error("AI Error:", error);
         res.status(500).json({ message: 'Gagal menghasilkan analisis AI.' });
+    }
+};
+
+// [UPDATE] Kenaikan Kelas oleh Guru
+export const promoteStudents = async (req: Request, res: Response) => {
+    const teacherId = (req as any).user.id;
+    const { studentIds, targetClassId, isAlumni } = req.body; 
+
+    if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+        return res.status(400).json({ message: "Pilih minimal satu siswa." });
+    }
+
+    const currentYear = new Date().getFullYear();
+    const connection = await pool.getConnection();
+    
+    try {
+        await connection.beginTransaction();
+
+        // 1. KEAMANAN: Pastikan siswa-siswa ini BENAR murid dari Guru tersebut saat ini
+        const [checkOwnership]: any = await connection.query(
+            `SELECT u.id 
+             FROM users u 
+             JOIN classes c ON u.class_id = c.id 
+             WHERE c.teacher_id = ? AND u.id IN (?)`,
+            [teacherId, studentIds]
+        );
+
+        if (checkOwnership.length !== studentIds.length) {
+            throw new Error("Beberapa siswa tidak berada di bawah perwalian Anda. Akses ditolak.");
+        }
+
+        // 2. PROSES UPDATE (Termasuk Simpan Riwayat Alumni)
+        const placeholders = studentIds.map(() => '?').join(',');
+
+        if (isAlumni) {
+            // Skenario Lulus / Alumni
+            // Menggunakan JOIN di UPDATE query untuk mengambil nama kelas saat ini
+            await connection.query(
+                `UPDATE users u
+                 LEFT JOIN classes c ON u.class_id = c.id
+                 SET 
+                    u.role = 'alumni', 
+                    u.class_id = NULL,
+                    u.last_class_name = c.name,
+                    u.graduation_year = ?
+                 WHERE u.id IN (${placeholders})`,
+                [currentYear, ...studentIds]
+            );
+        } else {
+            // Skenario Pindah Kelas (Naik Kelas)
+            if (!targetClassId) throw new Error("Kelas tujuan wajib dipilih.");
+            
+            // Reset last_class_name jika naik kelas (karena masih aktif)
+            await connection.query(
+                `UPDATE users SET class_id = ?, last_class_name = NULL, graduation_year = NULL WHERE id IN (${placeholders})`,
+                [targetClassId, ...studentIds]
+            );
+        }
+
+        await connection.commit();
+        res.json({ message: isAlumni ? "Siswa berhasil diluluskan (Alumni)." : "Siswa berhasil dipindahkan ke kelas baru." });
+
+    } catch (error: any) {
+        await connection.rollback();
+        console.error("Promote Error:", error);
+        res.status(500).json({ message: error.message || "Gagal memproses data." });
+    } finally {
+        connection.release();
     }
 };

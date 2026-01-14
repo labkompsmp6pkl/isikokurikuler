@@ -1,4 +1,3 @@
-
 import { Response } from 'express';
 import pool from '../config/db';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
@@ -48,6 +47,17 @@ interface CharacterLogData {
 // [NAMA BARU] Mengganti nama fungsi menjadi lebih ringkas: upsert (update/insert)
 export const upsertCharacterLog = async (req: AuthenticatedRequest, res: Response) => {
     const studentId = req.user?.id;
+    const userRole = req.user?.role; // Ambil role dari token
+
+    // --- [PERBAIKAN: PROTEKSI ALUMNI] ---
+    // Jika user adalah alumni, tolak penyimpanan jurnal
+    if (userRole === 'alumni') {
+        return res.status(403).json({ 
+            message: 'Status Anda adalah Alumni. Anda tidak dapat mengisi jurnal lagi. Silakan hubungi Admin jika ini kesalahan.' 
+        });
+    }
+    // ------------------------------------
+
     const { 
         log_date,
         wake_up_time,
@@ -103,8 +113,11 @@ export const getStudentDashboardData = async (req: AuthenticatedRequest, res: Re
     const studentId = req.user?.id;
 
     try {
-        // 1. Data Siswa
-        const [userRows]: any = await pool.query('SELECT full_name, nisn, class FROM users WHERE id = ?', [studentId]);
+        // 1. Data Siswa (Ditambahkan select role untuk keperluan frontend)
+        const [userRows]: any = await pool.query(
+            'SELECT full_name, nisn, class, role FROM users WHERE id = ?', 
+            [studentId]
+        );
         const user = userRows[0];
 
         // 2. Statistik Jurnal
@@ -121,6 +134,7 @@ export const getStudentDashboardData = async (req: AuthenticatedRequest, res: Re
         const behaviorScore = scoreData[0].total_score || 0;
 
         // 4. [FITUR KONTRIBUTOR] Ambil Misi Aktif
+        // Catatan: Pastikan tabel "missions" benar-benar ada, atau gunakan "mission_schedules" sesuai struktur DB
         const [missions]: any = await pool.query(
             `SELECT m.*, u.full_name as contributor_name 
              FROM missions m
@@ -149,7 +163,14 @@ export const getStudentDashboardData = async (req: AuthenticatedRequest, res: Re
 // 2. Siswa Menyelesaikan Misi
 export const completeMission = async (req: AuthenticatedRequest, res: Response) => {
     const studentId = req.user?.id;
+    const userRole = req.user?.role;
     const { scheduleId } = req.body;
+
+    // --- [PERBAIKAN: PROTEKSI ALUMNI] ---
+    if (userRole === 'alumni') {
+        return res.status(403).json({ message: 'Akun Alumni tidak dapat menyelesaikan misi.' });
+    }
+    // ------------------------------------
 
     try {
         // Cek duplikasi hari ini
@@ -184,6 +205,7 @@ export const getStudentMissions = async (req: AuthenticatedRequest, res: Respons
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const todayName = days[new Date().getDay()];
 
+        // Query ini disesuaikan untuk mengambil misi harian yang relevan
         const query = `
             SELECT 
                 ms.*, 

@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { 
     LayoutDashboard, LogOut, Menu, X, Activity, 
     TrendingUp, Shield, UserCircle, BrainCircuit, Users, BookOpen,
-    Sun, Moon, Heart, Book, Globe, Smile, Zap
+    Sun, Moon, Heart, Book, Globe, Smile, Zap, ArrowUpCircle
 } from 'lucide-react';
 import adminService from '../../services/adminService';
 
@@ -11,19 +11,24 @@ import adminService from '../../services/adminService';
 import UserManagement from './admin/UserManagement';
 import ClassManagement from './admin/ClassManagement';
 import NationalAnalysis from './NationalAnalysis'; 
+// [BARU] Import Promotion Management
+import PromotionManagement from './admin/PromotionManagement'; 
 
 const AdminDashboard: React.FC = () => {
     const location = useLocation();
     
     // --- UI STATE ---
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<'beranda' | 'analysis' | 'users' | 'classes'>('beranda');
+    
+    // [UPDATE] Tambahkan 'promotion' ke activeTab
+    const [activeTab, setActiveTab] = useState<'beranda' | 'analysis' | 'users' | 'classes' | 'promotion'>('beranda');
 
     // Auto-switch tab based on URL
     useEffect(() => {
         if (location.pathname.includes('/admin/analysis')) setActiveTab('analysis');
         else if (location.pathname.includes('/admin/users')) setActiveTab('users');
         else if (location.pathname.includes('/admin/classes')) setActiveTab('classes');
+        else if (location.pathname.includes('/admin/promotion')) setActiveTab('promotion'); // [BARU]
     }, [location]);
 
     // --- DATA STATE ---
@@ -52,7 +57,6 @@ const AdminDashboard: React.FC = () => {
     };
 
     // --- CONFIG VISUALISASI DATA (Warna Warni) ---
-    // Di sini kita mendefinisikan warna spesifik untuk setiap icon agar tidak hitam
     const habitsList = stats ? [
         { title: "Bangun Pagi", icon: <Sun size={24} />, color: "text-amber-500", ring: "text-amber-500", percent: stats.habits.bangunPagi },
         { title: "Beribadah", icon: <Book size={24} />, color: "text-emerald-600", ring: "text-emerald-600", percent: stats.habits.beribadah },
@@ -80,6 +84,8 @@ const AdminDashboard: React.FC = () => {
         { id: 'analysis', label: 'Sintesis AI', icon: <BrainCircuit size={20}/> },
         { id: 'users', label: 'Manajemen User', icon: <Users size={20}/> },
         { id: 'classes', label: 'Manajemen Kelas', icon: <BookOpen size={20}/> },
+        // [BARU] Menu Kenaikan Kelas
+        { id: 'promotion', label: 'Kenaikan & Tahun Ajaran', icon: <ArrowUpCircle size={20}/> },
     ];
 
     if (loading) return (
@@ -97,7 +103,6 @@ const AdminDashboard: React.FC = () => {
             <aside className={`fixed md:sticky top-0 h-screen w-72 bg-white border-r border-slate-200 z-50 transition-transform duration-300 ease-in-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
                 <div className="p-6 flex justify-between items-center">
                     <div className="flex items-center gap-3">
-                        {/* Logo tanpa grayscale */}
                         <img src="/logo-smpn6.png" className="w-9 h-9" alt="Logo" />
                         <div>
                             <h1 className="font-black text-xl text-indigo-900 leading-none tracking-tight">KOKURIKULER</h1>
@@ -119,7 +124,6 @@ const AdminDashboard: React.FC = () => {
                                 }
                             `}
                         >
-                            {/* Icon inherits color naturally */}
                             <span className={activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-indigo-600 transition-colors'}>
                                 {item.icon}
                             </span>
@@ -160,25 +164,25 @@ const AdminDashboard: React.FC = () => {
                 <main className="flex-1 overflow-auto p-4 md:p-8">
                     <div className="max-w-7xl mx-auto pb-20 space-y-8 animate-fade-in-up">
                         
-                        {/* HEADER DASHBOARD */}
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div>
-                                <h2 className="text-3xl font-black text-slate-800 tracking-tight">
-                                    {activeTab === 'beranda' && 'Dashboard Utama'}
-                                    {activeTab === 'analysis' && 'Sintesis AI Nasional'}
-                                    {activeTab === 'users' && 'Manajemen User'}
-                                    {activeTab === 'classes' && 'Manajemen Kelas'}
-                                </h2>
-                                <p className="text-sm font-medium text-slate-500 mt-1">Selamat datang kembali di panel kontrol sistem karakter.</p>
+                        {/* HEADER DASHBOARD (Hanya muncul jika bukan tab Promotion, karena Promotion punya header sendiri) */}
+                        {activeTab !== 'promotion' && (
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div>
+                                    <h2 className="text-3xl font-black text-slate-800 tracking-tight">
+                                        {activeTab === 'beranda' && 'Dashboard Utama'}
+                                        {activeTab === 'analysis' && 'Sintesis AI Nasional'}
+                                        {activeTab === 'users' && 'Manajemen User'}
+                                        {activeTab === 'classes' && 'Manajemen Kelas'}
+                                    </h2>
+                                    <p className="text-sm font-medium text-slate-500 mt-1">Selamat datang kembali di panel kontrol sistem karakter.</p>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* TAB 1: BERANDA (DEFAULT STATS) */}
                         {activeTab === 'beranda' && (
                             <>
-                                {/* Welcome Stats - Menggunakan Gradient lembut, bukan hitam */}
                                 <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-8 rounded-[2rem] shadow-xl text-white flex flex-col md:flex-row justify-between items-center gap-8 relative overflow-hidden">
-                                    {/* Hiasan background */}
                                     <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                                     
                                     <div className="relative z-10">
@@ -201,7 +205,6 @@ const AdminDashboard: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* Kebiasaan - Icon berwarna warni */}
                                 <div>
                                     <h2 className="text-lg font-bold text-slate-800 mb-5 flex items-center gap-3">
                                         <span className="w-2 h-8 bg-indigo-600 rounded-full"></span>
@@ -214,8 +217,6 @@ const AdminDashboard: React.FC = () => {
                                                     {h.icon}
                                                 </div>
                                                 <h3 className="font-bold text-[10px] text-slate-400 uppercase tracking-tight mb-4 h-6 flex items-center justify-center">{h.title}</h3>
-                                                
-                                                {/* Circular Progress dengan warna dinamis */}
                                                 <div className="relative w-14 h-14">
                                                     <svg className="w-full h-full transform -rotate-90">
                                                         <circle cx="28" cy="28" r="22" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-slate-100" />
@@ -235,7 +236,6 @@ const AdminDashboard: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* Profil Lulusan - Kartu Putih dengan Icon Berwarna */}
                                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
                                     <div className="flex items-center gap-4 mb-8">
                                         <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600">
@@ -255,7 +255,6 @@ const AdminDashboard: React.FC = () => {
                                                     </div>
                                                     <div className="text-2xl font-black text-slate-800">{p.percent}%</div>
                                                 </div>
-                                                
                                                 <div className="w-full bg-slate-100 rounded-full h-2.5 mb-3 overflow-hidden">
                                                     <div className={`h-full rounded-full ${p.bar} transition-all duration-1000`} style={{ width: `${p.percent}%` }}></div>
                                                 </div>
@@ -271,6 +270,7 @@ const AdminDashboard: React.FC = () => {
                         {activeTab === 'analysis' && <div className="animate-fade-in"><NationalAnalysis /></div>}
                         {activeTab === 'users' && <UserManagement />}
                         {activeTab === 'classes' && <ClassManagement />}
+                        {activeTab === 'promotion' && <div className="animate-fade-in"><PromotionManagement /></div>}
 
                     </div>
                 </main>

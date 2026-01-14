@@ -27,8 +27,14 @@ const getClassHistory = async (studentId?: string) => (await apiClient.get('/api
 const generateReport = async (payload: { studentId: number, startDate: string, endDate: string }) => 
     (await apiClient.post('/api/teacher/generate-report', payload)).data;
 
-// [BARU] Tambahkan fungsi ini untuk mengambil antrean validasi
 const getValidationLogs = async () => (await apiClient.get('/api/teacher/validation-logs')).data;
+
+// [NEW] Function for Student Promotion
+const promoteStudents = async (payload: { studentIds: number[], targetClassId: number | null, isAlumni: boolean }) => 
+    (await apiClient.post('/api/teacher/promote-students', payload)).data;
+
+// [NEW] Helper to get all classes (to select target class)
+const getAllClasses = async () => (await apiClient.get('/api/auth/classes-list')).data;
 
 export default { 
     getDashboard, 
@@ -36,5 +42,7 @@ export default {
     getClassHistory, 
     generateReport, 
     getValidationLogs,
-    getStudentParents
+    getStudentParents,
+    promoteStudents, // Export here
+    getAllClasses    // Export here
 };

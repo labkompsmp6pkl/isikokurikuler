@@ -168,46 +168,86 @@ export const createUser = async (req: Request, res: Response) => {
 
 export const updateUser = async (req: Request, res: Response) => {
     const { id } = req.params;
+    // Ambil data yang dikirim, termasuk kemungkinan perubahan role
     const { full_name, email, role, nisn, nip, class_id, whatsapp_number, password } = req.body;
 
+    const connection = await pool.getConnection();
     try {
-        let query = `
-            UPDATE users 
-            SET full_name = ?, email = ?, role = ?, nisn = ?, nip = ?, 
-                class_id = ?, whatsapp_number = ? 
-        `;
-        const params = [full_name, email, role, nisn || null, nip || null, class_id || null, whatsapp_number || null];
+        await connection.beginTransaction();
 
-        if (password) {
-            const hashedPassword = await bcrypt.hash(password, 10);
-            query += `, password = ?`;
-            params.push(hashedPassword);
+        // 1. Ambil data user lama untuk cek perubahan
+        const [oldUserRows]: any = await connection.query("SELECT * FROM users WHERE id = ?", [id]);
+        if (oldUserRows.length === 0) {
+            connection.release();
+            return res.status(404).json({ message: "User tidak ditemukan" });
+        }
+        const oldUser = oldUserRows[0];
+
+        // 2. Logika Khusus: Jika berubah jadi ALUMNI
+        let lastClassName = oldUser.last_class_name;
+        let gradYear = oldUser.graduation_year;
+        let finalClassId = class_id;
+
+        if (role === 'alumni' && oldUser.role !== 'alumni') {
+            // Jika sebelumnya punya kelas, simpan namanya
+            if (oldUser.class_id) {
+                const [cls]: any = await connection.query("SELECT name FROM classes WHERE id = ?", [oldUser.class_id]);
+                if (cls.length > 0) {
+                    lastClassName = cls[0].name;
+                }
+            }
+            // Set tahun lulus otomatis tahun ini
+            gradYear = new Date().getFullYear().toString();
+            // Pastikan class_id NULL
+            finalClassId = null; 
+        } 
+        // Jika berubah DARI Alumni KE Siswa
+        else if (role === 'student' && oldUser.role === 'alumni') {
+            lastClassName = null;
+            gradYear = null;
+            // finalClassId akan mengikuti input dari frontend
         }
 
-        query += ` WHERE id = ?`;
+        // 3. Query Update Utama
+        let query = `
+            UPDATE users 
+            SET full_name=?, email=?, role=?, nisn=?, nip=?, 
+                class_id=?, whatsapp_number=?, last_class_name=?, graduation_year=?
+        `;
+        const params = [
+            full_name, email, role, nisn || null, nip || null, 
+            finalClassId || null, whatsapp_number || null, lastClassName, gradYear
+        ];
+
+        if (password) {
+            query += `, password=?`;
+            params.push(await bcrypt.hash(password, 10));
+        }
+        
+        query += ` WHERE id=?`;
         params.push(id);
-
-        await pool.query(query, params);
-
-        // AUTO SYNC: Logika Jabatan Guru
+        
+        await connection.query(query, params);
+        
+        // 4. Update relasi guru (jika role teacher)
         if (role === 'teacher') {
             if (class_id) {
-                // Jika ditugaskan ke kelas baru:
-                // 1. Copot guru lain dari kelas tersebut
-                await pool.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND role = 'teacher' AND id != ?", [class_id, id]);
-                // 2. Set tabel classes ke guru ini
-                await pool.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [id, class_id]);
+                await connection.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND role = 'teacher' AND id != ?", [class_id, id]);
+                await connection.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [id, class_id]);
             } else {
-                // Jika jabatan dicopot (class_id kosong):
-                // Hapus nama dia dari tabel classes
-                await pool.query("UPDATE classes SET teacher_id = NULL WHERE teacher_id = ?", [id]);
+                await connection.query("UPDATE classes SET teacher_id = NULL WHERE teacher_id = ?", [id]);
             }
         }
 
+        await connection.commit();
         res.json({ message: 'User updated successfully' });
+
     } catch (error) {
+        await connection.rollback();
         console.error(error);
-        res.status(500).json({ message: 'Database error' });
+        res.status(500).json({ message: 'Error updating user' });
+    } finally {
+        connection.release();
     }
 };
 
@@ -225,25 +265,26 @@ export const deleteUser = async (req: Request, res: Response) => {
 
 export const getClasses = async (req: Request, res: Response) => {
     try {
-        // Query ini mengambil data kelas beserta jumlah siswa yang sudah mendaftar (role='student')
+        // [FIX] Mengambil kolom 'capacity' dan 'academic_year'
         const query = `
             SELECT 
                 c.id, 
                 c.name, 
                 c.teacher_id, 
-                c.kapasitas, 
-                (SELECT COUNT(*) FROM users u WHERE u.class_id = c.id AND u.role = 'student') as student_count,
-                u.full_name as teacher_name
+                c.capacity as kapasitas,   -- Mapping ke frontend (capacity -> kapasitas)
+                c.academic_year,           -- Tahun Ajaran
+                u.full_name as teacher_name,
+                (SELECT COUNT(*) FROM users s WHERE s.class_id = c.id AND s.role = 'student') as student_count
             FROM classes c
             LEFT JOIN users u ON c.teacher_id = u.id
-            ORDER BY c.name ASC
+            ORDER BY c.academic_year DESC, c.name ASC
         `;
         
         const [rows] = await pool.query(query);
-        res.json(rows);
+        res.json({ data: rows }); // Format response { data: [] } agar konsisten dengan frontend
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Gagal mengambil data kelas' });
+        console.error("Get Classes Error:", error);
+        res.status(500).json({ message: 'Gagal mengambil data kelas.' });
     }
 };
 
@@ -303,14 +344,17 @@ export const setupClassDatabase = async (req: Request, res: Response) => {
 };
 
 export const createClass = async (req: Request, res: Response) => {
-    const { name, teacher_id, kapasitas } = req.body; // Ambil kapasitas dari body
-    try {
-        // Gunakan kapasitas dari input, atau default 40 jika kosong/invalid
-        const limit = kapasitas ? parseInt(kapasitas) : 40;
+    // Frontend mengirim: kapasitas, academic_year
+    const { name, teacher_id, kapasitas, academic_year } = req.body;
 
+    try {
+        const limit = kapasitas ? parseInt(kapasitas) : 40;
+        const year = academic_year || '2025/2026';
+
+        // [FIX] Insert ke kolom 'capacity' dan 'academic_year'
         const [result]: any = await pool.query(
-            "INSERT INTO classes (name, teacher_id, kapasitas) VALUES (?, ?, ?)", 
-            [name, teacher_id || null, limit]
+            "INSERT INTO classes (name, teacher_id, capacity, academic_year) VALUES (?, ?, ?, ?)", 
+            [name, teacher_id || null, limit, year]
         );
         
         if (teacher_id) {
@@ -320,50 +364,70 @@ export const createClass = async (req: Request, res: Response) => {
 
         res.status(201).json({ message: "Kelas berhasil dibuat" });
     } catch (error: any) {
-        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ message: "Nama kelas sudah ada" });
+        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ message: "Nama kelas sudah ada di tahun ini." });
         console.error(error);
         res.status(500).json({ message: "Gagal membuat kelas" });
     }
 };
 
 export const generateClasses = async (req: Request, res: Response) => {
-    const { grade, startLetter, endLetter, kapasitas } = req.body; // Ambil kapasitas
+    const { grade, startLetter, endLetter, kapasitas, academic_year } = req.body;
     
     if (!grade || !startLetter || !endLetter) return res.status(400).json({ message: "Parameter tidak lengkap" });
     
     const startCode = startLetter.toUpperCase().charCodeAt(0);
     const endCode = endLetter.toUpperCase().charCodeAt(0);
-    const limit = kapasitas ? parseInt(kapasitas) : 40; // Default 40
+    const limit = kapasitas ? parseInt(kapasitas) : 40;
+    const year = academic_year || '2025/2026';
 
     let createdCount = 0;
+    const connection = await pool.getConnection();
+
     try {
+        await connection.beginTransaction();
         for (let i = startCode; i <= endCode; i++) {
             const className = `${grade}${String.fromCharCode(i)}`;
-            // Masukkan kapasitas ke query insert
-            const [result]: any = await pool.query(
-                "INSERT IGNORE INTO classes (name, kapasitas) VALUES (?, ?)", 
-                [className, limit]
+            
+            // Cek duplikasi manual agar tidak error
+            const [existing]: any = await connection.query(
+                "SELECT id FROM classes WHERE name = ? AND academic_year = ?", 
+                [className, year]
             );
-            if (result.affectedRows > 0) createdCount++;
+
+            if (existing.length === 0) {
+                await connection.query(
+                    "INSERT INTO classes (name, capacity, academic_year) VALUES (?, ?, ?)", 
+                    [className, limit, year]
+                );
+                createdCount++;
+            }
         }
-        res.json({ message: `Berhasil membuat ${createdCount} kelas baru dengan kuota ${limit}.` });
+        await connection.commit();
+        res.json({ message: `Berhasil membuat ${createdCount} kelas baru (${year}) dengan kuota ${limit}.` });
     } catch (error) {
+        await connection.rollback();
         console.error(error);
         res.status(500).json({ message: "Gagal generate kelas" });
+    } finally {
+        connection.release();
     }
 };
 
 export const updateClass = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, teacher_id, kapasitas } = req.body; // Tambahkan kapasitas
+    const { name, teacher_id, kapasitas, academic_year } = req.body;
 
     try {
+        const limit = kapasitas ? parseInt(kapasitas) : 40;
+        
+        // [FIX] Update kolom 'capacity' dan 'academic_year'
         await pool.query(
-            'UPDATE classes SET name = ?, teacher_id = ?, kapasitas = ? WHERE id = ?',
-            [name, teacher_id || null, kapasitas || 40, id]
+            'UPDATE classes SET name = ?, teacher_id = ?, capacity = ?, academic_year = ? WHERE id = ?',
+            [name, teacher_id || null, limit, academic_year, id]
         );
         res.json({ message: 'Kelas berhasil diperbarui' });
     } catch (error) {
+        console.error("Update Error:", error);
         res.status(500).json({ message: 'Gagal update kelas' });
     }
 };
@@ -383,7 +447,7 @@ export const getClassDetail = async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
         const [classRows]: any = await pool.query(`
-            SELECT c.*, u.full_name as teacher_name 
+            SELECT c.*, c.capacity as kapasitas, u.full_name as teacher_name 
             FROM classes c 
             LEFT JOIN users u ON c.teacher_id = u.id 
             WHERE c.id = ?`, [id]);
@@ -592,7 +656,7 @@ export const getUserDetail = async (req: Request, res: Response) => {
     try {
       const queryUser = `
         SELECT 
-          u.id, u.full_name, u.email, u.role, u.nisn, u.nip, u.whatsapp_number, u.google_id, u.created_at,
+          u.*,
           c.name as class_name,
           (u.password IS NOT NULL AND u.password != '') as is_active
         FROM users u
@@ -601,16 +665,15 @@ export const getUserDetail = async (req: Request, res: Response) => {
       `;
       const [rows]: any[] = await pool.query(queryUser, [id]);
   
-      if (rows.length === 0) {
-        return res.status(404).json({ message: "User tidak ditemukan" });
-      }
+      if (rows.length === 0) return res.status(404).json({ message: "User tidak ditemukan" });
   
       const user = rows[0];
       let familyData: any[] = [];
   
-      if (user.role === 'student') {
+      // [FIX] Pastikan logika ini mencakup 'student' DAN 'alumni'
+      if (user.role === 'student' || user.role === 'alumni') {
         const queryParents = `
-          SELECT p.id, p.full_name, p.whatsapp_number, fr.relationship 
+          SELECT p.id, p.full_name, p.whatsapp_number, p.email, fr.relationship 
           FROM family_relations fr
           JOIN users p ON fr.parent_id = p.id
           WHERE fr.student_id = ?
@@ -619,8 +682,9 @@ export const getUserDetail = async (req: Request, res: Response) => {
         familyData = parentRows;
   
       } else if (user.role === 'parent') {
+        // ... (logika parent tetap sama)
         const queryChildren = `
-          SELECT s.id, s.full_name, s.nisn, c.name as class_name, fr.relationship 
+          SELECT s.id, s.full_name, s.nisn, s.role, s.class_id, c.name as class_name, fr.relationship 
           FROM family_relations fr
           JOIN users s ON fr.student_id = s.id
           LEFT JOIN classes c ON s.class_id = c.id
@@ -633,9 +697,10 @@ export const getUserDetail = async (req: Request, res: Response) => {
       res.json({ ...user, family_data: familyData });
   
     } catch (error) {
+      console.error(error);
       res.status(500).json({ message: "Terjadi kesalahan server" });
     }
-  };
+};
 
   export const searchParents = async (req: Request, res: Response) => {
     const { q } = req.query;
@@ -730,5 +795,221 @@ export const removeFamilyRelation = async (req: Request, res: Response) => {
     } catch (error) {
         console.error("Remove Relation Error:", error);
         res.status(500).json({ message: "Gagal menghapus hubungan." });
+    }
+};
+
+export const promoteClass = async (req: Request, res: Response) => {
+    const { fromClassId, toClassId, isGraduation } = req.body;
+
+    // Validasi input
+    if (!fromClassId) {
+        return res.status(400).json({ message: "Kelas asal harus dipilih." });
+    }
+
+    const connection = await pool.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        if (isGraduation) {
+            // SKENARIO 1: LULUS (Kelas 9 -> Alumni)
+            // Ubah role jadi 'alumni' dan kosongkan class_id
+            await connection.query(
+                `UPDATE users 
+                 SET role = 'alumni', class_id = NULL 
+                 WHERE class_id = ? AND role = 'student'`,
+                [fromClassId]
+            );
+            
+            // Opsional: Nonaktifkan password agar tidak bisa login (jika diinginkan), 
+            // TAPI request client bilang "bisa hubungi admin", jadi lebih baik biarkan aktif tapi terbatas.
+            
+            await connection.commit();
+            res.json({ message: "Siswa berhasil diluluskan menjadi Alumni." });
+
+        } else {
+            // SKENARIO 2: NAIK KELAS (7A -> 8A)
+            if (!toClassId) {
+                throw new Error("Kelas tujuan harus dipilih untuk kenaikan kelas.");
+            }
+
+            // Pindahkan semua siswa ke kelas baru
+            await connection.query(
+                `UPDATE users SET class_id = ? WHERE class_id = ? AND role = 'student'`,
+                [toClassId, fromClassId]
+            );
+
+            await connection.commit();
+            res.json({ message: "Siswa berhasil dinaikkan ke kelas tujuan." });
+        }
+
+    } catch (error: any) {
+        await connection.rollback();
+        console.error("Promotion Error:", error);
+        res.status(500).json({ message: "Gagal memproses kenaikan kelas." });
+    } finally {
+        connection.release();
+    }
+};
+
+export const moveStudents = async (req: Request, res: Response) => {
+    const { studentIds, targetClassId, isAlumni } = req.body;
+    const currentYear = new Date().getFullYear();
+
+    if (!studentIds?.length) return res.status(400).json({ message: "Pilih siswa." });
+
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        const placeholders = studentIds.map(() => '?').join(',');
+
+        if (isAlumni) {
+            // Untuk alumni, kita perlu ambil nama kelas mereka saat ini satu per satu (agak berat)
+            // ATAU kita update menggunakan JOIN jika database support (MySQL support)
+            
+            // Query Update dengan JOIN untuk menyimpan nama kelas terakhir
+            await connection.query(`
+                UPDATE users u
+                LEFT JOIN classes c ON u.class_id = c.id
+                SET 
+                    u.role = 'alumni',
+                    u.last_class_name = c.name,
+                    u.graduation_year = ?,
+                    u.class_id = NULL
+                WHERE u.id IN (${placeholders})
+            `, [currentYear, ...studentIds]);
+
+        } else {
+            // Pindah Biasa
+            await connection.query(
+                `UPDATE users SET class_id = ?, role = 'student', last_class_name = NULL, graduation_year = NULL WHERE id IN (${placeholders})`,
+                [targetClassId, ...studentIds]
+            );
+        }
+        await connection.commit();
+        res.json({ message: "Data siswa berhasil diperbarui." });
+    } catch (error) {
+        await connection.rollback();
+        console.error(error);
+        res.status(500).json({ message: "Gagal memindahkan siswa." });
+    } finally {
+        connection.release();
+    }
+};
+
+export const resetAllStudentClasses = async (req: Request, res: Response) => {
+    try {
+        await pool.query("UPDATE users SET class_id = NULL WHERE role = 'student'");
+        res.json({ message: "Semua siswa telah dikeluarkan dari kelas (Kelas Kosong)." });
+    } catch (error) {
+        res.status(500).json({ message: "Gagal mereset kelas siswa." });
+    }
+};
+
+export const promoteMassBatch = async (req: Request, res: Response) => {
+    const { mappings } = req.body; 
+    
+    // Ambil tahun sekarang untuk graduation_year
+    const currentYear = new Date().getFullYear(); 
+
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        for (const map of mappings) {
+            if (map.fromClassId && map.toClassId) {
+                // Kenaikan Biasa (7A -> 8A)
+                await connection.query(
+                    "UPDATE users SET class_id = ? WHERE class_id = ? AND role = 'student'",
+                    [map.toClassId, map.fromClassId]
+                );
+            } else if (map.fromClassId && map.isAlumni) {
+                 // LULUS JADI ALUMNI (Simpan nama kelas dulu!)
+                 
+                 // Ambil nama kelas lama
+                 const [cls]: any = await connection.query("SELECT name FROM classes WHERE id = ?", [map.fromClassId]);
+                 const className = cls.length > 0 ? cls[0].name : '';
+
+                 // Update user: Set Alumni, Simpan Last Class, Set Tahun Lulus, Kosongkan Class ID
+                 await connection.query(
+                    `UPDATE users SET 
+                        role = 'alumni', 
+                        class_id = NULL, 
+                        last_class_name = ?, 
+                        graduation_year = ? 
+                    WHERE class_id = ? AND role = 'student'`,
+                    [className, currentYear, map.fromClassId]
+                );
+            }
+        }
+
+        await connection.commit();
+        res.json({ message: "Kenaikan kelas massal berhasil diproses." });
+    } catch (error) {
+        await connection.rollback();
+        res.status(500).json({ message: "Gagal memproses kenaikan kelas." });
+    } finally {
+        connection.release();
+    }
+};
+
+// [UPDATE] Update Tahun Ajaran & Semester Global
+export const updateGlobalAcademicYear = async (req: Request, res: Response) => {
+    const { newYear, newSemester, updateExistingClasses } = req.body; 
+
+    if (!newYear || !newSemester) {
+        return res.status(400).json({ message: "Tahun ajaran dan semester wajib diisi." });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // 1. Update Tahun Ajaran
+        await connection.query(
+            "INSERT INTO app_settings (setting_key, setting_value) VALUES ('current_academic_year', ?) ON DUPLICATE KEY UPDATE setting_value = ?", 
+            [newYear, newYear]
+        );
+
+        // 2. Update Semester
+        await connection.query(
+            "INSERT INTO app_settings (setting_key, setting_value) VALUES ('current_semester', ?) ON DUPLICATE KEY UPDATE setting_value = ?", 
+            [newSemester, newSemester]
+        );
+
+        // 3. (Opsional) Update label tahun pada kelas yang SUDAH ADA
+        if (updateExistingClasses) {
+            await connection.query("UPDATE classes SET academic_year = ?", [newYear]);
+        }
+
+        await connection.commit();
+        res.json({ message: `Sistem diperbarui ke T.A ${newYear} Semester ${newSemester}.` });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error(error);
+        res.status(500).json({ message: "Gagal mengupdate pengaturan." });
+    } finally {
+        connection.release();
+    }
+};
+
+export const getAppSettings = async (req: Request, res: Response) => {
+    try {
+        const [rows]: any = await pool.query("SELECT * FROM app_settings WHERE setting_key IN ('current_academic_year', 'current_semester')");
+        
+        // Convert array rows to object
+        const settings: any = {};
+        rows.forEach((row: any) => {
+            settings[row.setting_key] = row.setting_value;
+        });
+
+        res.json({ 
+            current_academic_year: settings.current_academic_year || '2025/2026',
+            current_semester: settings.current_semester || 'Ganjil' // Default Ganjil
+        });
+    } catch (error) {
+        console.error("Get Settings Error:", error);
+        res.status(500).json({ message: "Gagal mengambil pengaturan." });
     }
 };

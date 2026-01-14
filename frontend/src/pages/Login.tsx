@@ -25,19 +25,16 @@ const Login: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identifier || !password) {
-      // FIX: Gunakan ID agar tidak spam jika diklik berkali-kali
       toast.error("Mohon lengkapi data login.", { id: 'login-validation' });
       return;
     }
 
     setLoading(true);
-    // FIX: Simpan ID toast loading untuk di-update nanti
     const toastId = toast.loading('Memverifikasi akun...', { id: 'login-process' });
 
     try {
       const { user } = await login(identifier, password);
       
-      // FIX: Update toast loading menjadi success (bukan dismiss + new toast)
       toast.success(`Selamat datang, ${user.fullName.split(' ')[0]}!`, {
         id: toastId,
         icon: '👋',
@@ -47,18 +44,25 @@ const Login: React.FC = () => {
       // Redirect Logic
       setTimeout(() => {
         switch (user.role) {
-          case 'student': navigate('/student/beranda', { replace: true }); break;
+          // [MODIFIKASI] Gabungkan student dan alumni ke dashboard yang sama
+          case 'student':
+          case 'alumni': 
+            navigate('/student/beranda', { replace: true }); 
+            break;
+            
           case 'teacher': navigate('/teacher/dashboard', { replace: true }); break;
           case 'parent': navigate('/parent/dashboard', { replace: true }); break;
           case 'contributor': navigate('/contributor/dashboard', { replace: true }); break;
           case 'admin': navigate('/admin/dashboard', { replace: true }); break;
-          default: navigate('/login');
+          
+          default: 
+            toast.error("Role pengguna tidak dikenali.");
+            navigate('/login');
         }
       }, 800);
 
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Login gagal. Periksa kembali data Anda.';
-      // FIX: Update toast loading menjadi error
       toast.error(msg, { 
         id: toastId,
         style: { borderRadius: '20px', fontWeight: 'bold' } 
@@ -71,7 +75,7 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6 selection:bg-violet-100 selection:text-violet-900 font-sans relative overflow-hidden">
       
-      {/* Dekorasi Latar Belakang - Style Konsisten */}
+      {/* Dekorasi Latar Belakang */}
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-violet-200/40 rounded-full blur-[120px] pointer-events-none animate-pulse"></div>
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-fuchsia-200/40 rounded-full blur-[120px] pointer-events-none animate-pulse"></div>
 
@@ -88,7 +92,7 @@ const Login: React.FC = () => {
           <p className="text-slate-500 font-medium text-lg leading-relaxed">Selamat datang kembali di portal <span className="text-violet-600 font-black">Kokurikuler SMPN 6 PEKALONGAN</span>.</p>
         </div>
 
-        {/* GOOGLE LOGIN - Style Tombol Rounded Besar */}
+        {/* GOOGLE LOGIN */}
         <div className="mb-10">
           <a
             href={`${API_HOST}/api/auth/google`}
@@ -197,7 +201,7 @@ const Login: React.FC = () => {
           </p>
         </div>
 
-        {/* Security Badge - Style Minimalis */}
+        {/* Security Badge */}
         <div className="mt-16 flex justify-center opacity-40 hover:opacity-100 transition-opacity duration-500">
             <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
                 <ShieldCheck size={14} className="text-violet-400"/>

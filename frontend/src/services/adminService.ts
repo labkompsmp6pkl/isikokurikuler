@@ -8,7 +8,7 @@ const getAuthHeaders = () => {
   return { headers: { Authorization: `Bearer ${token}` } };
 };
 
-// Fungsi baru untuk dashboard
+// --- 1. Dashboard & Analisis ---
 const getDashboardStats = async () => {
     try {
         const response = await axios.get(`${API_URL}/dashboard-stats`, getAuthHeaders());
@@ -29,6 +29,7 @@ const generateAIAnalysis = async () => {
     }
 };
 
+// --- 2. User Management ---
 const getUserDetail = async (id: number) => {
     const response = await axios.get(`${API_URL}/users/${id}`, getAuthHeaders());
     return response.data;
@@ -62,14 +63,11 @@ const deleteUser = async (id: number) => {
     return response.data;
 };
 
-// --- PERBAIKAN DI SINI ---
-// Ubah API_URL2 menjadi API_URL dan endpoint menjadi '/classes'
-// Agar mendapatkan data lengkap (Wali Kelas & Total Siswa)
+// --- 3. Class Management (CRUD Kelas) ---
 const getClasses = async () => {
     const response = await axios.get(`${API_URL}/classes`, getAuthHeaders());
     return response.data;
 };
-// -------------------------
 
 const createClass = async (data: any) => {
     const response = await axios.post(`${API_URL}/classes`, data, getAuthHeaders());
@@ -106,6 +104,7 @@ const setupClassDatabase = async () => {
     return response.data;
 };
 
+// --- 4. Class Members (Manajemen Siswa dalam Kelas) ---
 const addStudentsToClass = async (classId: number, studentIds: number[]) => {
     const response = await axios.post(`${API_URL}/classes/${classId}/add-students`, { studentIds }, getAuthHeaders());
     return response.data;
@@ -116,6 +115,7 @@ const removeStudentsFromClass = async (classId: number, studentIds: number[]) =>
     return response.data;
 };
 
+// --- 5. Family Relations (Orang Tua - Siswa) ---
 const searchParents = async (query: string) => {
     const response = await axios.get(`${API_URL}/parents/search`, {
         ...getAuthHeaders(),
@@ -124,26 +124,89 @@ const searchParents = async (query: string) => {
     return response.data;
 };
 
-// [BARU] Link Orang Tua
 const linkParent = async (data: { studentId: number, parentId: number, relationship: string }) => {
     const response = await axios.post(`${API_URL}/family/link`, data, getAuthHeaders());
     return response.data;
 };
 
-// [BARU] Unlink Orang Tua
 const unlinkParent = async (data: { studentId: number, parentId: number }) => {
     const response = await axios.post(`${API_URL}/family/unlink`, data, getAuthHeaders());
     return response.data;
 };
 
+// --- 6. Promotion & Academic Year (Kenaikan Kelas & Tahun Ajaran) ---
+
+// Kenaikan Kelas per Kelas (Tombol di ClassManagement)
+const promoteClass = async (data: { fromClassId: number, toClassId?: number, isGraduation: boolean }) => {
+    const response = await axios.post(`${API_URL}/classes/promote`, data, getAuthHeaders());
+    return response.data;
+};
+
+// Reset Global (Kosongkan Semua Kelas)
+const resetAllClasses = async () => {
+    const response = await axios.post(`${API_URL}/classes/reset-all`, {}, getAuthHeaders());
+    return response.data;
+};
+
+// Kenaikan Massal (Mapping Banyak Kelas)
+const promoteBatch = async (mappings: any[]) => {
+    const response = await axios.post(`${API_URL}/classes/promote-batch`, { mappings }, getAuthHeaders());
+    return response.data;
+};
+
+// Pindah Siswa Manual (Pilih Siswa -> Pindah/Lulus)
+const moveStudents = async (data: { studentIds: number[], targetClassId: number | null, isAlumni: boolean }) => {
+    const response = await axios.post(`${API_URL}/classes/move-students`, data, getAuthHeaders());
+    return response.data;
+};
+
+// --- 7. Settings (Pengaturan Global) ---
+
+// Ambil Tahun Ajaran & Semester Aktif
+const getAppSettings = async () => {
+    const response = await axios.get(`${API_URL}/settings/academic-year`, getAuthHeaders());
+    return response.data; // { current_academic_year, current_semester }
+};
+
+// Alias untuk kompatibilitas kode lama (hanya ambil tahun)
+const getActiveAcademicYear = async () => {
+    const data = await getAppSettings();
+    return data.current_academic_year;
+};
+
+// Update Tahun Ajaran & Semester
+const updateGlobalSettings = async (newYear: string, newSemester: string, updateExistingClasses: boolean) => {
+    const response = await axios.post(`${API_URL}/classes/update-year`, { newYear, newSemester, updateExistingClasses }, getAuthHeaders());
+    return response.data;
+};
+
+// Alias untuk updateGlobalAcademicYear (Hanya tahun, semester default ganjil jika tidak dikirim, atau menyesuaikan backend)
+const updateGlobalAcademicYear = async (newYear: string, updateExistingClasses: boolean) => {
+    // Kita panggil updateGlobalSettings dengan asumsi semester tetap/default jika fungsi lama dipanggil
+    // Atau kirim null semester agar backend handle
+    const response = await axios.post(`${API_URL}/classes/update-year`, { newYear, updateExistingClasses }, getAuthHeaders());
+    return response.data;
+};
+
+// Reset Semua Siswa (Alias resetAllClasses untuk konsistensi penamaan)
+const resetAllStudents = async () => {
+    return await resetAllClasses();
+};
+
 const adminService = {
+    // Dashboard
     getDashboardStats,
     generateAIAnalysis,
+    
+    // User
     getUsers,
     getUserById,
+    getUserDetail,
     createUser,
     updateUser,
     deleteUser,
+    
+    // Class CRUD
     getClasses,
     createClass,
     generateClasses,
@@ -152,12 +215,28 @@ const adminService = {
     getClassDetail,
     setupClassDatabase,
     getTeachersList,
+    
+    // Class Members
     addStudentsToClass,
     removeStudentsFromClass,
-    getUserDetail,
+    
+    // Family
     searchParents,
     linkParent,
-    unlinkParent
+    unlinkParent,
+    
+    // Promotion
+    promoteClass,
+    resetAllClasses,
+    promoteBatch,
+    moveStudents,
+    
+    // Settings & Academic Year
+    getAppSettings,          // New: Ambil {tahun, semester}
+    getActiveAcademicYear,   // Legacy support
+    updateGlobalSettings,    // New: Update {tahun, semester}
+    updateGlobalAcademicYear,// Legacy support
+    resetAllStudents         // Alias
 };
 
 export default adminService;

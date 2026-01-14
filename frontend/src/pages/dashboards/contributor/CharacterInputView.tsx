@@ -108,6 +108,9 @@ const CharacterInputView: React.FC = () => {
                             <option>Guru Tamu / Motivator</option>
                             <option>Pelatih Ekskul / Coach</option>
                             <option>Tamu / Masyarakat</option>
+                            <option value="Dinas Pendidikan">Dinas Pendidikan</option>
+  <option value="KPAI">KPAI</option>
+  <option value="Komite Sekolah">Komite Sekolah</option>
                             <option>Lainnya</option>
                         </select>
                     </div>

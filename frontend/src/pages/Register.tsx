@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 
 // ==========================================
-// KOMPONEN UI PENDUKUNG
+// KOMPONEN UI PENDUKUNG (InputField, SelectField)
 // ==========================================
 
 type InputFieldProps = {
@@ -56,12 +56,12 @@ const InputField: React.FC<InputFieldProps> = ({
   </div>
 );
 
-// Tipe data untuk opsi select yang lebih fleksibel (bisa handle disabled per option)
 type SelectOption = {
     value: string | number;
     label: string;
     disabled?: boolean;
     className?: string;
+    subLabel?: string; // Tambahan untuk detail semester/kuota
 };
 
 type SelectFieldProps = {
@@ -98,7 +98,7 @@ const SelectField: React.FC<SelectFieldProps> = ({
             disabled={opt.disabled}
             className={opt.className || ''}
         >
-            {opt.label}
+            {opt.label} {opt.subLabel ? `(${opt.subLabel})` : ''}
         </option>
       ))}
     </select>
@@ -117,8 +117,6 @@ const Register: React.FC = () => {
   const navigate = useNavigate();
 
   const [selectedRole, setSelectedRole] = useState<'student' | 'teacher' | 'contributor' | 'parent'>('student');
-  
-  // State untuk menyimpan data kelas lengkap (id, name, kapasitas, terisi/student_count)
   const [classList, setClassList] = useState<any[]>([]);
   
   const roleOptions = [
@@ -146,8 +144,6 @@ const Register: React.FC = () => {
     const fetchClasses = async () => {
       setIsClassLoading(true);
       try {
-        // Menggunakan endpoint public atau admin yang mengembalikan data kuota
-        // Pastikan backend mengembalikan field 'kapasitas' dan 'student_count' (atau 'terisi')
         const response = await authApi.get('/auth/classes-list'); 
         const data = response.data.data || response.data;
         if (Array.isArray(data)) {
@@ -162,22 +158,45 @@ const Register: React.FC = () => {
     fetchClasses();
   }, []);
 
-  // --- MEMOIZE CLASS OPTIONS UNTUK SISWA ---
+  // --- OPSI KELAS UNTUK SISWA (TANPA FILTER TAHUN) ---
   const studentClassOptions = useMemo(() => {
-    return classList.map(c => {
-        // Hitung sisa kuota
-        // Menggunakan 'student_count' jika dari query count, atau 'terisi' jika kolom statis
+    // Urutkan kelas berdasarkan nama, lalu tahun (opsional)
+    const sortedClasses = [...classList].sort((a, b) => a.name.localeCompare(b.name));
+
+    return sortedClasses.map(c => {
         const currentFilled = c.student_count !== undefined ? c.student_count : (c.terisi || 0);
-        const capacity = c.kapasitas || 40; // Default 40 jika null
+        const capacity = c.kapasitas || 40; 
         const remaining = capacity - currentFilled;
         const isFull = remaining <= 0;
 
+        // Label Semester & Tahun (Misal: "Ganjil 2025/2026")
+        // Asumsi data 'academic_year' format "2025/2026" dan mungkin ada field 'semester'
+        // Jika tidak ada semester di data, default tampilkan tahun saja
+        const periodLabel = `${c.semester || 'Ganjil'} ${c.academic_year || ''}`;
+
         return {
             value: c.id,
-            // Label menampilkan Sisa Kuota atau Penuh
-            label: `Kelas ${c.name} ${isFull ? '(Penuh)' : `(Sisa ${remaining})`}`,
-            disabled: isFull, // Disable jika penuh
-            className: isFull ? 'text-red-400 bg-red-50 italic' : 'text-slate-700 font-bold'
+            label: `Kelas ${c.name}`,
+            subLabel: isFull ? `Penuh • ${periodLabel}` : `Sisa ${remaining} • ${periodLabel}`,
+            disabled: isFull, 
+            // Style: Penuh -> Abu-abu pudar + Coretan
+            // Tersedia -> Hitam/Slate normal
+            className: isFull 
+                ? 'text-slate-400 bg-slate-100 line-through italic' 
+                : 'text-slate-800 font-bold bg-white'
+        };
+    });
+  }, [classList]); 
+
+  // --- OPSI KELAS UNTUK GURU ---
+  const teacherClassOptions = useMemo(() => {
+    return classList.map(c => {
+        const isTaken = c.teacher_id && c.teacher_id !== 0;
+        return {
+            value: c.id,
+            label: `Kelas ${c.name} (${c.academic_year})` + (isTaken ? ` - Sudah ada Guru` : ''),
+            disabled: isTaken,
+            className: isTaken ? 'text-slate-400 bg-slate-100 italic' : ''
         };
     });
   }, [classList]);
@@ -192,15 +211,12 @@ const Register: React.FC = () => {
     setLoading(true);
     setError('');
 
-    // --- LOGIKA VALIDASI PASSWORD BARU ---
-    // Password hanya dicek jika role BUKAN siswa
     if (selectedRole !== 'student') {
         if (formData.password.length < 6) {
             setError('Password minimal 6 karakter.');
             setLoading(false);
             return;
         }
-
         if (formData.password !== formData.confirmPassword) {
             setError('Konfirmasi password tidak cocok.');
             setLoading(false);
@@ -219,7 +235,6 @@ const Register: React.FC = () => {
         role: selectedRole,
         fullName: formData.fullName.trim(),
         email: generatedEmail,
-        // Jika siswa, kirim password kosong/null (backend handle ini)
         password: selectedRole === 'student' ? '' : formData.password,
         nisn: selectedRole === 'student' ? formData.nisn : undefined,
         nip: (selectedRole === 'teacher' || selectedRole === 'contributor') ? formData.nip : undefined,
@@ -232,7 +247,6 @@ const Register: React.FC = () => {
       toast.dismiss(loadingToast);
       
       if (selectedRole === 'student') {
-        // Pesan khusus untuk siswa
         toast.success('Pendaftaran Berhasil! Minta Orang Tua untuk aktivasi akun.', { duration: 5000, icon: '🎓' });
         navigate('/login', { state: { message: 'Akun berhasil dibuat. Silakan minta Orang Tua untuk menautkan akun dan mengatur password agar Anda bisa login.' } });
       } else {
@@ -274,12 +288,13 @@ const Register: React.FC = () => {
               onChange={handleFormChange}
               icon={<ShieldCheck size={22}/>}
             />
-            {/* DROPDOWN KELAS DENGAN SISA KUOTA */}
+            
+            {/* Dropdown Kelas Langsung (Tanpa Tahun) */}
             <SelectField 
               name="classId" 
               value={formData.classId} 
               options={studentClassOptions} 
-              placeholder={isClassLoading ? "Memuat data kelas..." : (studentClassOptions.length > 0 ? "Pilih Kelas" : "Semua kelas penuh")}
+              placeholder={isClassLoading ? "Memuat data kelas..." : (studentClassOptions.length > 0 ? "Pilih Kelas & Semester" : "Tidak ada kelas tersedia")}
               onChange={handleFormChange}
               icon={<GraduationCap size={22}/>}
               disabled={isClassLoading || studentClassOptions.length === 0}
@@ -296,22 +311,16 @@ const Register: React.FC = () => {
               onChange={handleFormChange}
               icon={<ShieldCheck size={22}/>}
             />
+
             <SelectField 
               name="classId" 
               value={formData.classId} 
-              options={classList.map(c => {
-                  const isTaken = c.teacher_id && c.teacher_id !== 0;
-                  return {
-                      value: c.id,
-                      label: `Kelas ${c.name}` + (isTaken ? ` (Sudah ada: ${c.teacher_name || 'Guru Lain'})` : ''),
-                      disabled: isTaken,
-                      className: isTaken ? 'text-slate-400 bg-slate-100 italic' : ''
-                  };
-              })}
+              options={teacherClassOptions}
               placeholder="Wali Kelas (Opsional)" 
               required={false}
               onChange={handleFormChange}
               icon={<GraduationCap size={22}/>}
+              disabled={teacherClassOptions.length === 0}
             />
           </>
         )}
@@ -355,7 +364,7 @@ const Register: React.FC = () => {
           <p className="text-slate-500 font-bold">Bergabung bersama komunitas belajar <span className="text-violet-600">SMPN 6 Pekalongan</span>.</p>
         </div>
 
-        {/* --- GOOGLE LOGIN TETAP ADA --- */}
+        {/* --- GOOGLE LOGIN --- */}
         <div className="mb-12">
           <a 
             href={`${API_HOST}/api/auth/google`} 
@@ -413,40 +422,37 @@ const Register: React.FC = () => {
             
             <div className="h-px bg-slate-100 w-full my-4"></div>
 
-            {/* --- LOGIKA TAMPILAN PASSWORD --- */}
             {selectedRole === 'student' ? (
-                // JIKA SISWA: Tampilkan info, sembunyikan input password
-                <div className="bg-blue-50 border border-blue-100 p-5 rounded-[2rem] flex items-start gap-4">
-                    <div className="bg-blue-100 text-blue-600 p-2 rounded-full shrink-0">
-                        <Info size={20} />
-                    </div>
-                    <div>
-                        <h4 className="font-black text-blue-800 text-sm mb-1">Tidak Perlu Password</h4>
-                        <p className="text-xs text-blue-600 font-medium leading-relaxed">
-                            Khusus akun Siswa, password akan diatur oleh <strong>Orang Tua</strong> Anda melalui fitur "Hubungkan Siswa". Cukup isi data diri di atas.
-                        </p>
-                    </div>
+              <div className="bg-blue-50 border border-blue-100 p-5 rounded-[2rem] flex items-start gap-4">
+                <div className="bg-blue-100 text-blue-600 p-2 rounded-full shrink-0">
+                  <Info size={20} />
                 </div>
+                <div>
+                  <h4 className="font-black text-blue-800 text-sm mb-1">Tidak Perlu Password</h4>
+                  <p className="text-xs text-blue-600 font-medium leading-relaxed">
+                    Khusus akun Siswa, password akan diatur oleh <strong>Orang Tua</strong> Anda melalui fitur "Hubungkan Siswa". Cukup isi data diri di atas.
+                  </p>
+                </div>
+              </div>
             ) : (
-                // JIKA BUKAN SISWA: Tampilkan input password seperti biasa
-                <>
-                    <InputField 
-                        name="password" 
-                        placeholder="Buat Password" 
-                        type="password" 
-                        value={formData.password} 
-                        onChange={handleFormChange}
-                        icon={<Lock size={22}/>}
-                    />
-                    <InputField 
-                        name="confirmPassword" 
-                        placeholder="Konfirmasi Password" 
-                        type="password" 
-                        value={formData.confirmPassword} 
-                        onChange={handleFormChange}
-                        icon={<CheckCircle2 size={22}/>}
-                    />
-                </>
+              <>
+                <InputField 
+                  name="password" 
+                  placeholder="Buat Password" 
+                  type="password" 
+                  value={formData.password} 
+                  onChange={handleFormChange}
+                  icon={<Lock size={22}/>}
+                />
+                <InputField 
+                  name="confirmPassword" 
+                  placeholder="Konfirmasi Password" 
+                  type="password" 
+                  value={formData.confirmPassword} 
+                  onChange={handleFormChange}
+                  icon={<CheckCircle2 size={22}/>}
+                />
+              </>
             )}
           </div>
 
@@ -471,7 +477,7 @@ const Register: React.FC = () => {
               <>
                 <span>DAFTAR SEKARANG</span>
                 <div className="bg-white/20 p-1.5 rounded-full group-hover:bg-white/30 transition-colors">
-                    <ArrowRight size={20} className="group-hover:translate-x-0.5 transition-transform"/>
+                  <div className="group-hover:translate-x-0.5 transition-transform"><ArrowRight size={20}/></div>
                 </div>
               </>
             )}

@@ -16,17 +16,24 @@ import {
   Coffee,
   Moon,
   Sun,
-  Users
+  Users,
+  ArrowUpCircle,
+  Search,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 import teacherService from '../../services/teacherService';
 import { useAuth } from '../../services/authService';
 import Spinner from './student/components/Spinner';
 
-// Sub-Components
+// Sub-Components Views
 import ValidationView from './teacher/ValidationView';
 import HistoryView from './teacher/HistoryView';
 import AIReportView from './teacher/AIReportView';
+
+// Komponen Modal
+import PromoteModal from '../../components/PromoteModal'; 
 
 // --- DATA INDIKATOR ---
 const teacherHabits = [
@@ -47,8 +54,18 @@ const TeacherDashboard: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [data, setData] = useState<any>(null);
     const [logs, setLogs] = useState<any[]>([]);
-    const [activeTab, setActiveTab] = useState<'beranda' | 'validasi' | 'riwayat' | 'analisis'>('beranda');
+    
+    const [activeTab, setActiveTab] = useState<'beranda' | 'validasi' | 'riwayat' | 'analisis' | 'promosi'>('beranda');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+    // State Kenaikan Kelas
+    const [selectedStudents, setSelectedStudents] = useState<number[]>([]);
+    const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false);
+    
+    // State Pencarian & Pagination (Tab Promosi)
+    const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
 
     // --- FETCH DATA ---
     const fetchDashboard = async () => {
@@ -79,14 +96,54 @@ const TeacherDashboard: React.FC = () => {
         }, 800);
     };
 
+    // --- LOGIC SEARCH & PAGINATION (TAB PROMOSI) ---
+    const getFilteredStudents = () => {
+        if (!data?.students) return [];
+        return data.students.filter((s: any) => 
+            s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+            (s.nisn && s.nisn.includes(searchTerm))
+        );
+    };
+
+    const filteredStudents = getFilteredStudents();
+    const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
+    const currentStudents = filteredStudents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+    // Reset pagination saat search berubah
+    useEffect(() => { setCurrentPage(1); }, [searchTerm]);
+
+    // --- SELECTION LOGIC ---
+    const toggleSelectStudent = (id: number) => {
+        setSelectedStudents(prev => 
+            prev.includes(id) ? prev.filter(sId => sId !== id) : [...prev, id]
+        );
+    };
+
+    const handleSelectAllCurrentPage = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.checked) {
+            // Select semua di halaman ini
+            const newIds = currentStudents.map((s: any) => s.id);
+            // Gabungkan dengan yang sudah dipilih (hindari duplikat)
+            setSelectedStudents(prev => [...new Set([...prev, ...newIds])]);
+        } else {
+            // Unselect semua di halaman ini
+            const currentPageIds = currentStudents.map((s: any) => s.id);
+            setSelectedStudents(prev => prev.filter(id => !currentPageIds.includes(id)));
+        }
+    };
+
+    // Helper: Cek apakah semua siswa di halaman ini terpilih
+    const isAllSelected = currentStudents.length > 0 && currentStudents.every((s: any) => selectedStudents.includes(s.id));
+
     // --- NAV ITEMS ---
-    const pendingCount = logs.filter((l: any) => l.status === 'Disetujui').length; 
+    const pendingCount = logs.filter((l: any) => l.status === 'Menunggu Validasi').length;
 
     const navItems = [
         { id: 'beranda', label: 'Beranda Guru', icon: <LayoutDashboard size={20} /> },
         { id: 'validasi', label: 'Validasi Jurnal', icon: <CheckSquare size={20} />, badge: pendingCount },
         { id: 'riwayat', label: 'Riwayat Kelas', icon: <CalendarDays size={20} /> },
         { id: 'analisis', label: 'Rapor AI', icon: <BarChart3 size={20} /> },
+        { id: 'promosi', label: 'Kenaikan Kelas', icon: <ArrowUpCircle size={20} /> },
     ];
 
     if (isLoading) return <div className="h-screen flex items-center justify-center bg-slate-50"><Spinner /></div>;
@@ -98,7 +155,7 @@ const TeacherDashboard: React.FC = () => {
                 <div className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsSidebarOpen(false)} />
             )}
 
-            {/* SIDEBAR (Desktop Sticky, Mobile Drawer) */}
+            {/* SIDEBAR */}
             <aside className={`fixed md:sticky top-0 h-screen w-64 bg-white border-r border-gray-200 z-50 transition-transform duration-300 ease-in-out flex flex-col ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
                 <div className="p-6 flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -125,7 +182,6 @@ const TeacherDashboard: React.FC = () => {
                     ))}
                 </nav>
 
-                {/* PROFILE SIDEBAR BOTTOM */}
                 <div className="p-4 border-t border-gray-100 bg-gray-50">
                     <div className="flex items-center gap-3 mb-4 px-2">
                         <div className="w-10 h-10 shrink-0 rounded-full bg-violet-600 text-white flex items-center justify-center font-bold shadow-md uppercase">
@@ -146,10 +202,9 @@ const TeacherDashboard: React.FC = () => {
             </aside>
 
             {/* MAIN CONTENT WRAPPER */}
-            {/* Menggunakan min-w-0 agar scroll body bekerja */}
             <div className="flex-1 flex flex-col min-w-0">
                 
-                {/* HEADER MOBILE (STICKY) */}
+                {/* HEADER MOBILE */}
                 <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-gray-200 p-4 shadow-sm transition-all">
                     <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
@@ -174,7 +229,6 @@ const TeacherDashboard: React.FC = () => {
                 </header>
 
                 {/* CONTENT AREA */}
-                {/* Menghapus overflow-auto dan h-screen agar scroll di body */}
                 <main className="p-4 md:p-8 max-w-5xl mx-auto w-full pb-20">
                     <div className="mb-6">
                         <h2 className="text-2xl font-black text-gray-800 tracking-tight">
@@ -182,6 +236,7 @@ const TeacherDashboard: React.FC = () => {
                             {activeTab === 'validasi' && 'Validasi Jurnal'}
                             {activeTab === 'riwayat' && 'Riwayat Kelas'}
                             {activeTab === 'analisis' && 'Rapor Karakter AI'}
+                            {activeTab === 'promosi' && 'Manajemen Kenaikan Kelas'}
                         </h2>
                         <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-[0.2em]">Wali Kelas {data?.teacherClass}</p>
                     </div>
@@ -247,6 +302,128 @@ const TeacherDashboard: React.FC = () => {
                             teacherClass={data?.teacherClass}
                             teacherName={user.fullName}
                             teacherNip={user.nip}
+                        />
+                    )}
+
+                    {/* [BARU] TAMPILAN TAB PROMOSI */}
+                    {activeTab === 'promosi' && (
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in flex flex-col h-[calc(100vh-200px)]">
+                            
+                            {/* Toolbar (Header + Search + Action) */}
+                            <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50/50">
+                                <div className="flex-1 w-full md:w-auto">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                        <input 
+                                            type="text" 
+                                            placeholder="Cari siswa (nama / NISN)..." 
+                                            className="w-full md:w-64 pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none shadow-sm transition-all"
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => setIsPromoteModalOpen(true)}
+                                    disabled={selectedStudents.length === 0}
+                                    className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-md shadow-blue-200"
+                                >
+                                    <ArrowUpCircle size={18} />
+                                    Proses Kenaikan ({selectedStudents.length})
+                                </button>
+                            </div>
+                            
+                            {/* Table Content */}
+                            <div className="flex-1 overflow-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                                        <tr className="text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
+                                            <th className="p-4 w-12 text-center">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                    onChange={handleSelectAllCurrentPage}
+                                                    checked={isAllSelected}
+                                                />
+                                            </th>
+                                            <th className="p-4">Nama Siswa</th>
+                                            <th className="p-4">NISN</th>
+                                            <th className="p-4">Status Akun</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="text-sm text-slate-700 divide-y divide-slate-100">
+                                        {currentStudents.map((student: any) => (
+                                            <tr 
+                                                key={student.id} 
+                                                className={`hover:bg-violet-50/50 transition-colors ${selectedStudents.includes(student.id) ? 'bg-violet-50' : ''}`}
+                                            >
+                                                <td className="p-4 text-center">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                        checked={selectedStudents.includes(student.id)}
+                                                        onChange={() => toggleSelectStudent(student.id)}
+                                                    />
+                                                </td>
+                                                <td className="p-4 font-bold text-slate-800">{student.full_name}</td>
+                                                <td className="p-4 text-slate-500 font-mono">{student.nisn || '-'}</td>
+                                                <td className="p-4">
+                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide border ${student.is_active ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                                                        {student.is_active ? 'Aktif' : 'Belum Aktivasi'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {currentStudents.length === 0 && (
+                                            <tr>
+                                                <td colSpan={4} className="p-12 text-center text-slate-400 italic">
+                                                    {searchTerm ? 'Siswa tidak ditemukan.' : 'Tidak ada data siswa.'}
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Pagination Footer */}
+                            {totalPages > 1 && (
+                                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center text-sm">
+                                    <span className="text-slate-500 font-medium">
+                                        Menampilkan <strong>{currentStudents.length}</strong> dari <strong>{filteredStudents.length}</strong> siswa
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            disabled={currentPage === 1} 
+                                            onClick={() => setCurrentPage(p => p - 1)} 
+                                            className="p-2 rounded-lg border bg-white hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            <ChevronLeft size={16}/>
+                                        </button>
+                                        <span className="px-3 font-bold text-slate-700">Halaman {currentPage} / {totalPages}</span>
+                                        <button 
+                                            disabled={currentPage === totalPages} 
+                                            onClick={() => setCurrentPage(p => p + 1)} 
+                                            className="p-2 rounded-lg border bg-white hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            <ChevronRight size={16}/>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* [BARU] MODAL PROMOSI */}
+                    {isPromoteModalOpen && (
+                        <PromoteModal 
+                            isOpen={isPromoteModalOpen}
+                            onClose={() => setIsPromoteModalOpen(false)}
+                            selectedStudents={selectedStudents}
+                            userRole="teacher"
+                            onSuccess={() => {
+                                fetchDashboard();
+                                setSelectedStudents([]); // Reset pilihan setelah sukses
+                            }}
                         />
                     )}
 

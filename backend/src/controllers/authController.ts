@@ -4,28 +4,24 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { UserPayload } from '../middleware/authMiddleware';
 
-// ================================================
-// Fungsi Baru: Mengambil Daftar Kelas dengan Info Wali Kelas
-// ================================================
 export const getClasses: RequestHandler = async (req, res) => {
   try {
-    // KITA GANTI QUERYNYA DI SINI
-    // Menggunakan subquery (SELECT COUNT...) untuk menghitung jumlah siswa 'student' di setiap kelas secara langsung
+    // [FIX] Tambahkan c.academic_year dan fix nama kolom capacity
     const query = `
       SELECT 
         c.id, 
         c.name, 
-        c.kapasitas, 
+        c.capacity as kapasitas, -- Alias agar sesuai dengan frontend
+        c.academic_year,         -- Tambahan kolom Tahun Ajaran
         (SELECT COUNT(*) FROM users u WHERE u.class_id = c.id AND u.role = 'student') as student_count,
         c.teacher_id, 
         u.full_name as teacher_name 
       FROM classes c 
       LEFT JOIN users u ON c.teacher_id = u.id 
-      ORDER BY c.name ASC
+      ORDER BY c.academic_year DESC, c.name ASC
     `;
     const [rows] = await pool.query(query);
     
-    // Kembalikan dalam format { data: [...] }
     res.json({ data: rows });
   } catch (error) {
     console.error("Gagal mengambil data kelas:", error);

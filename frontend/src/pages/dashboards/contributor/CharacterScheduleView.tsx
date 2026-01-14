@@ -113,7 +113,9 @@ const CharacterScheduleView: React.FC = () => {
                     <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Briefcase size={14}/> Identitas Penilai</label>
                     <div className="relative">
                         <select value={contributorRole} onChange={(e) => setContributorRole(e.target.value)} className="w-full bg-rose-50/50 border-2 border-rose-100 px-5 py-4 rounded-2xl font-bold text-gray-700 outline-none focus:border-rose-500 cursor-pointer">
-                            <option>Guru Mata Pelajaran</option><option>Guru Tamu / Motivator</option><option>Pelatih Ekskul / Coach</option><option>Tamu / Masyarakat</option><option>Lainnya</option>
+                            <option>Guru Mata Pelajaran</option><option>Guru Tamu / Motivator</option><option>Pelatih Ekskul / Coach</option><option>Tamu / Masyarakat</option><option value="Dinas Pendidikan">Dinas Pendidikan</option>
+  <option value="KPAI">KPAI</option>
+  <option value="Komite Sekolah">Komite Sekolah</option><option>Lainnya</option>
                         </select>
                         <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-rose-400 pointer-events-none" size={20} />
                     </div>

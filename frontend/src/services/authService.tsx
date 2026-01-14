@@ -7,7 +7,7 @@ import axios from 'axios';
 export interface User {
   id: number;
   name: string;
-  role: 'student' | 'teacher' | 'contributor' | 'parent' | 'new_user';
+  role: 'student' | 'teacher' | 'parent' | 'contributor' | 'admin' | 'alumni' | string;
   classId?: string | number; // Bisa string atau number dari database
 }
 

@@ -45,6 +45,8 @@ const UserManagement: React.FC = () => {
     const [foundParents, setFoundParents] = useState<any[]>([]);
     const [selectedParentId, setSelectedParentId] = useState<number | null>(null);
     const [selectedRelationship, setSelectedRelationship] = useState('Wali');
+    
+    // [FIX 1] Perbaiki deklarasi state loadingSearch
     const [, setLoadingSearch] = useState(false);
 
     const initialForm: UserFormState = { 
@@ -55,7 +57,6 @@ const UserManagement: React.FC = () => {
     const [formData, setFormData] = useState<UserFormState>(initialForm);
     const [filters, setFilters] = useState({ role: 'all', class_id: 'all', status: 'all', search: '', limit: 6 });
 
-    // [PERBAIKAN 1] Hapus 'Administrator' dari Opsi Role
     const roles = [
         { value: 'student', label: 'Siswa' },
         { value: 'teacher', label: 'Guru' },
@@ -64,7 +65,6 @@ const UserManagement: React.FC = () => {
         { value: 'alumni', label: 'Alumni' }
     ];
 
-    // Opsi Kontributor
     const contributorOptions = [
         'Guru', 'Dinas Pendidikan', 'Komite Sekolah', 'KPAI', 'Lainnya'
     ];
@@ -130,21 +130,29 @@ const UserManagement: React.FC = () => {
         setViewMode('form');
     };
 
+    // [FIX 2] PERBAIKAN UTAMA PADA FUNGSI EDIT
     const handleEdit = (user: any) => {
+        // Set ID user yang diedit
+        setSelectedUserId(user.id);
+        setIsEditMode(true);
+        
+        // Logika Pre-fill Kelas
+        const targetClassId = user.active_class_id ? user.active_class_id.toString() : (user.class_id ? user.class_id.toString() : '');
+
         setFormData({
-            full_name: user.full_name || '',
-            email: user.email || '', 
-            role: user.role || 'student',
-            class_id: user.real_class_id || user.class_id || '',
+            full_name: user.full_name,
+            email: user.email,
+            password: '', // Password kosongkan saat edit
+            role: user.role,
             nisn: user.nisn || '',
             nip: user.nip || '',
-            whatsapp_number: user.whatsapp_number || '', // Pastikan WA terambil
-            password: '',
+            class_id: targetClassId, 
+            whatsapp_number: user.whatsapp_number || '',
             contributor_type: user.contributor_type || '',
             agency_name: user.agency_name || ''
         });
-        setIsEditMode(true);
-        setSelectedUserId(user.id);
+
+        // Ganti view mode ke form (Bukan setIsModalOpen)
         setViewMode('form');
     };
 
@@ -207,7 +215,6 @@ const UserManagement: React.FC = () => {
                     emailToSave = `${formData.whatsapp_number}@parent.isokul`;
                 } 
                 else if (formData.role === 'contributor') {
-                    // Kontributor pakai NIP untuk email login, TAPI WA WAJIB UNTUK AKSES
                     if (!formData.nip) return toast.error("NIP/ID Wajib diisi");
                     emailToSave = `${formData.nip}@contributor.isokul`;
                 }
@@ -629,21 +636,21 @@ const UserManagement: React.FC = () => {
                                 {/* FIELD KHUSUS SISWA & ALUMNI */}
                                 {(formData.role === 'student' || formData.role === 'alumni') && (
                                     <>
-                                        <div><label className="block text-xs font-bold text-indigo-600 uppercase mb-2">NISN</label><input type="text" name="nisn" value={formData.nisn || ''} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500"/></div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">{formData.role === 'alumni' ? 'Kelas (Tidak Aktif)' : 'Penempatan Kelas (Wajib)'}</label>
-                                            <select 
-                                                name="class_id" 
-                                                value={formData.class_id} 
-                                                onChange={handleChange} 
-                                                disabled={formData.role === 'alumni'} 
-                                                className={`w-full p-3 border rounded-xl outline-none ${formData.role === 'alumni' ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-white border-slate-200 focus:ring-2 focus:ring-indigo-500'}`}
-                                            >
-                                                <option value="">{formData.role === 'alumni' ? '-- Status Alumni --' : '-- Pilih Kelas --'}</option>
-                                                {availableClasses.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                            </select>
-                                            {formData.role === 'alumni' && <p className="text-[10px] text-slate-500 mt-1">*Ubah role ke "Siswa" untuk memilih kelas kembali.</p>}
-                                        </div>
+                                            <div><label className="block text-xs font-bold text-indigo-600 uppercase mb-2">NISN</label><input type="text" name="nisn" value={formData.nisn || ''} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500"/></div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">{formData.role === 'alumni' ? 'Kelas (Tidak Aktif)' : 'Penempatan Kelas (Wajib)'}</label>
+                                                <select 
+                                                    name="class_id" 
+                                                    value={formData.class_id} 
+                                                    onChange={handleChange} 
+                                                    disabled={formData.role === 'alumni'} 
+                                                    className={`w-full p-3 border rounded-xl outline-none ${formData.role === 'alumni' ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-white border-slate-200 focus:ring-2 focus:ring-indigo-500'}`}
+                                                >
+                                                    <option value="">{formData.role === 'alumni' ? '-- Status Alumni --' : '-- Pilih Kelas --'}</option>
+                                                    {availableClasses.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                </select>
+                                                {formData.role === 'alumni' && <p className="text-[10px] text-slate-500 mt-1">*Ubah role ke "Siswa" untuk memilih kelas kembali.</p>}
+                                            </div>
                                     </>
                                 )}
                                 

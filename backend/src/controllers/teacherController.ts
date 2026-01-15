@@ -4,29 +4,35 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // --- 1. DASHBOARD & VALIDASI ---
 
-// [UPDATE] Dashboard Guru
 export const getTeacherDashboard = async (req: Request, res: Response) => {
     // Ambil ID dari token (via middleware auth)
     const teacherId = (req as any).user?.id;
 
     try {
-        // 1. Ambil Data Guru & Kelasnya
-        // Gunakan LEFT JOIN ke tabel classes untuk mendapatkan nama kelas
+        // [BARU] 1. Ambil Tahun Ajaran Aktif dari Settings
+        // Ini wajib dilakukan agar guru tidak melihat kelas tahun lalu (History)
+        const [settings]: any = await pool.query(
+            "SELECT setting_value FROM app_settings WHERE setting_key = 'current_academic_year'"
+        );
+        const activeYear = settings[0]?.setting_value || '2025/2026'; // Fallback default
+
+        // 2. Ambil Data Dasar Guru
         const [teacherRows]: any[] = await pool.query(
-            `SELECT u.full_name, u.class_id, c.name as class_name 
-             FROM users u 
-             LEFT JOIN classes c ON u.class_id = c.id 
-             WHERE u.id = ? AND u.role = 'teacher'`,
+            `SELECT full_name FROM users WHERE id = ? AND role = 'teacher'`,
             [teacherId]
         );
 
         if (teacherRows.length === 0) {
             return res.status(404).json({ message: 'Akun guru tidak ditemukan.' });
         }
+        const teacherName = teacherRows[0].full_name;
 
-        const teacherData = teacherRows[0];
-        // Logika kelas guru lebih baik ambil dari tabel classes langsung
-        const [actualClass]: any = await pool.query("SELECT id, name FROM classes WHERE teacher_id = ?", [teacherId]);
+        // [UPDATED] 3. Cari Kelas Guru berdasarkan Tahun Ajaran Aktif
+        // Filter ditambah: AND academic_year = ?
+        const [actualClass]: any = await pool.query(
+            "SELECT id, name FROM classes WHERE teacher_id = ? AND academic_year = ? LIMIT 1", 
+            [teacherId, activeYear]
+        );
         
         let teacherClassId = null;
         let teacherClassName = null;
@@ -36,17 +42,14 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
              teacherClassName = actualClass[0].name;
         }
 
-        const teacherName = teacherData.full_name;
-
-        // Cek apakah guru sudah punya kelas
+        // Cek apakah guru sudah punya kelas TAHUN INI
         if (!teacherClassId) {
             return res.status(400).json({ 
-                message: 'Anda belum terdaftar sebagai wali kelas. Silakan hubungi Administrator.' 
+                message: `Anda belum terdaftar sebagai wali kelas untuk Tahun Ajaran ${activeYear}. Silakan hubungi Administrator.` 
             });
         }
 
-        // 2. Ambil semua siswa di kelas ini
-        // Menggunakan logika is_active yang sudah diperbaiki
+        // 4. Ambil semua siswa di kelas ini
         const [students]: any[] = await pool.query(
             `SELECT 
                 s.id, 
@@ -69,8 +72,7 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
             [teacherClassId]
         );
 
-        // 3. Ambil logs yang butuh perhatian (Status Tersimpan atau Disetujui)
-        // Hanya ambil logs dari siswa di kelas guru ini
+        // 5. Ambil logs (Tersimpan/Disetujui) khusus untuk kelas ini
         const [logs]: any[] = await pool.query(
             `SELECT cl.*, u.full_name as student_name 
              FROM character_logs cl
@@ -84,6 +86,7 @@ export const getTeacherDashboard = async (req: Request, res: Response) => {
             teacherClass: teacherClassName, 
             teacherClassId, 
             teacherName, 
+            activeYear, // Opsional: kirim info tahun ke frontend
             students, 
             logs 
         });

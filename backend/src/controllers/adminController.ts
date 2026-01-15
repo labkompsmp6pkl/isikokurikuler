@@ -7,28 +7,37 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export const getUsers = async (req: Request, res: Response) => {
     try {
-        const { page = 1, limit = 6, role, class_id, search, status } = req.query;
+        const { page = 1, limit = 10, role, class_id, search, status } = req.query;
         const offset = (Number(page) - 1) * Number(limit);
+
+        // Ambil tahun ajaran aktif
+        const [settings]: any = await pool.query("SELECT setting_value FROM app_settings WHERE setting_key = 'current_academic_year'");
+        const activeYear = settings[0]?.setting_value || '2025/2026';
 
         let query = `
             SELECT u.*, 
+            
+            -- [FIX] LOGIC NAMA KELAS
             CASE 
-                WHEN u.role = 'teacher' THEN c_teach.name 
+                WHEN u.role = 'teacher' THEN (
+                    SELECT c.name FROM classes c WHERE c.teacher_id = u.id AND c.academic_year = '${activeYear}' LIMIT 1
+                )
                 ELSE c.name 
             END as class_name,
             
+            -- [BARU] LOGIC ID KELAS AKTIF (Untuk Pre-fill Form Edit)
             CASE 
-                WHEN u.role = 'teacher' THEN c_teach.id 
-                ELSE c.id 
-            END as real_class_id,
+                WHEN u.role = 'teacher' THEN (
+                    SELECT c.id FROM classes c WHERE c.teacher_id = u.id AND c.academic_year = '${activeYear}' LIMIT 1
+                )
+                ELSE u.class_id -- Jika siswa, ambil langsung dari kolom class_id
+            END as active_class_id,
 
             (SELECT GROUP_CONCAT(s.full_name SEPARATOR ', ') FROM users s WHERE s.parent_id = u.id) as children_names,
-            
             (u.password IS NOT NULL AND u.password != '') as is_active
             
             FROM users u 
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN classes c_teach ON c_teach.teacher_id = u.id
             WHERE 1=1
         `;
         
@@ -41,23 +50,26 @@ export const getUsers = async (req: Request, res: Response) => {
 
         if (class_id && class_id !== 'all') {
             if (class_id === 'none') {
-                query += ` AND (u.class_id IS NULL OR u.class_id = 0)`;
+                query += ` 
+                    AND (u.class_id IS NULL OR u.class_id = 0)
+                    AND (u.role != 'teacher' OR NOT EXISTS (SELECT 1 FROM classes cl WHERE cl.teacher_id = u.id))
+                `;
             } else {
-                query += ` AND u.class_id = ?`;
-                params.push(class_id);
+                query += ` 
+                    AND (
+                        u.class_id = ? 
+                        OR 
+                        (u.role = 'teacher' AND EXISTS (SELECT 1 FROM classes cl WHERE cl.id = ? AND cl.teacher_id = u.id))
+                    )
+                `;
+                params.push(class_id, class_id);
             }
         }
 
-        // [MODIFIKASI] Filter Status (HANYA BERLAKU UNTUK SISWA)
         if (status && status !== 'all') {
-            // Otomatis tambahkan filter role='student' agar lingkupnya terjaga
             query += ` AND u.role = 'student'`;
-            
-            if (status === 'active') {
-                query += ` AND (u.password IS NOT NULL AND u.password != '')`;
-            } else if (status === 'inactive') {
-                query += ` AND (u.password IS NULL OR u.password = '')`;
-            }
+            if (status === 'active') query += ` AND (u.password IS NOT NULL AND u.password != '')`;
+            else if (status === 'inactive') query += ` AND (u.password IS NULL OR u.password = '')`;
         }
 
         if (search) {
@@ -71,36 +83,24 @@ export const getUsers = async (req: Request, res: Response) => {
 
         const [users]: any = await pool.query(query, params);
 
-        // --- Query Total Data (Count) ---
-        let countQuery = `
-            SELECT COUNT(*) as total 
-            FROM users u 
-            LEFT JOIN classes c_teach ON c_teach.teacher_id = u.id
-            WHERE 1=1
-        `;
+        // --- COUNT QUERY (Juga harus diperbaiki logic filternya) ---
+        let countQuery = `SELECT COUNT(*) as total FROM users u WHERE 1=1`;
         const countParams: any[] = [];
         
         if (role && role !== 'all') { countQuery += ` AND u.role = ?`; countParams.push(role); }
-        
         if (class_id && class_id !== 'all') { 
             if (class_id === 'none') {
-                countQuery += ` AND (u.class_id IS NULL OR u.class_id = 0)`;
+                countQuery += ` AND (u.class_id IS NULL OR u.class_id = 0) AND (u.role != 'teacher' OR NOT EXISTS (SELECT 1 FROM classes cl WHERE cl.teacher_id = u.id))`;
             } else {
-                countQuery += ` AND (u.class_id = ? OR c_teach.id = ?)`; 
+                countQuery += ` AND (u.class_id = ? OR (u.role = 'teacher' AND EXISTS (SELECT 1 FROM classes cl WHERE cl.id = ? AND cl.teacher_id = u.id)))`; 
                 countParams.push(class_id, class_id); 
             }
         }
-
-        // [MODIFIKASI] Filter Status di Count (SAMA SEPERTI DIATAS)
         if (status && status !== 'all') {
             countQuery += ` AND u.role = 'student'`;
-            if (status === 'active') {
-                countQuery += ` AND (u.password IS NOT NULL AND u.password != '')`;
-            } else if (status === 'inactive') {
-                countQuery += ` AND (u.password IS NULL OR u.password = '')`;
-            }
+            if (status === 'active') countQuery += ` AND (u.password IS NOT NULL AND u.password != '')`;
+            else if (status === 'inactive') countQuery += ` AND (u.password IS NULL OR u.password = '')`;
         }
-        
         if (search) { 
             countQuery += ` AND (u.full_name LIKE ? OR u.email LIKE ? OR u.nisn LIKE ? OR u.nip LIKE ?)`;
             const searchParam = `%${search}%`;
@@ -112,11 +112,7 @@ export const getUsers = async (req: Request, res: Response) => {
 
         res.json({
             data: users,
-            meta: {
-                total,
-                page: Number(page),
-                totalPages: Math.ceil(total / Number(limit))
-            }
+            meta: { total, page: Number(page), totalPages: Math.ceil(total / Number(limit)) }
         });
 
     } catch (error) {
@@ -137,39 +133,31 @@ export const getUserById = async (req: Request, res: Response) => {
 };
 
 export const createUser = async (req: Request, res: Response) => {
-    // Tambahkan field baru: contributor_type, agency_name
     const { 
         full_name, email, password, role, nisn, nip, 
         class_id, whatsapp_number,
         contributor_type, agency_name 
     } = req.body;
 
+    const connection = await pool.getConnection(); // Pakai Transaction agar aman
     try {
+        await connection.beginTransaction();
+
         const hashedPassword = await bcrypt.hash(password, 10);
-        
-        // Logika Data Tambahan
-        // Jika role bukan contributor, set null
-        // Jika role contributor, pastikan agency_name terisi (fallback ke type jika kosong & bukan 'Lainnya')
         let finalAgencyName = agency_name;
         if (role === 'contributor' && !finalAgencyName && contributor_type !== 'Lainnya') {
             finalAgencyName = contributor_type;
         }
 
-        // 1. Insert User Baru
-        const [result]: any = await pool.query(
+        // 1. Insert User
+        const [result]: any = await connection.query(
             `INSERT INTO users (
                 full_name, email, password, role, nisn, nip, 
                 class_id, whatsapp_number, contributor_type, agency_name
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-                full_name, 
-                email, 
-                hashedPassword, 
-                role, 
-                nisn || null, 
-                nip || null, 
-                class_id || null, 
-                whatsapp_number || null,
+                full_name, email, hashedPassword, role, 
+                nisn || null, nip || null, class_id || null, whatsapp_number || null,
                 role === 'contributor' ? (contributor_type || null) : null,
                 role === 'contributor' ? (finalAgencyName || null) : null
             ]
@@ -177,25 +165,30 @@ export const createUser = async (req: Request, res: Response) => {
 
         const newUserId = result.insertId;
 
-        // 2. AUTO SYNC: Jika Guru dipilih jadi Wali Kelas
+        // 2. [SYNC WAJIB] Jika Role Teacher & Punya Kelas
         if (role === 'teacher' && class_id) {
-            // A. Copot jabatan guru lain yang mungkin memegang kelas ini sebelumnya
-            await pool.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND role = 'teacher' AND id != ?", [class_id, newUserId]);
+            // A. Copot guru lama dari kelas tersebut (agar tidak ada 2 guru di 1 kelas)
+            await connection.query("UPDATE classes SET teacher_id = NULL WHERE id = ?", [class_id]);
             
-            // B. Update tabel classes agar menunjuk ke guru baru ini
-            await pool.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [newUserId, class_id]);
+            // B. Masukkan guru baru ke kelas tersebut
+            await connection.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [newUserId, class_id]);
+
+            // C. Pastikan users.class_id sudah terset (sudah di insert query diatas)
         }
 
+        await connection.commit();
         res.status(201).json({ message: "User berhasil dibuat" });
     } catch (error) {
+        await connection.rollback();
         console.error("Create User Error:", error);
         res.status(500).json({ message: "Gagal membuat user" });
+    } finally {
+        connection.release();
     }
 };
 
 export const updateUser = async (req: Request, res: Response) => {
     const { id } = req.params;
-    // Tambahkan field baru
     const { 
         full_name, email, role, nisn, nip, 
         class_id, whatsapp_number, password,
@@ -206,7 +199,7 @@ export const updateUser = async (req: Request, res: Response) => {
     try {
         await connection.beginTransaction();
 
-        // 1. Ambil data user lama untuk cek perubahan
+        // 1. Ambil data lama
         const [oldUserRows]: any = await connection.query("SELECT * FROM users WHERE id = ?", [id]);
         if (oldUserRows.length === 0) {
             connection.release();
@@ -214,38 +207,28 @@ export const updateUser = async (req: Request, res: Response) => {
         }
         const oldUser = oldUserRows[0];
 
-        // 2. Logika Khusus: Transisi ALUMNI
+        // 2. Logika Alumni (Copy logic existing)
         let lastClassName = oldUser.last_class_name;
         let gradYear = oldUser.graduation_year;
         let finalClassId = class_id;
 
         if (role === 'alumni' && oldUser.role !== 'alumni') {
-            // Jika sebelumnya punya kelas, simpan namanya ke history
             if (oldUser.class_id) {
                 const [cls]: any = await connection.query("SELECT name FROM classes WHERE id = ?", [oldUser.class_id]);
-                if (cls.length > 0) {
-                    lastClassName = cls[0].name;
-                }
+                if (cls.length > 0) lastClassName = cls[0].name;
             }
-            // Set tahun lulus otomatis tahun ini
             gradYear = new Date().getFullYear().toString();
-            // Pastikan class_id NULL untuk alumni
             finalClassId = null; 
-        } 
-        // Jika berubah DARI Alumni KE Siswa (Rollback status)
-        else if (role === 'student' && oldUser.role === 'alumni') {
+        } else if (role === 'student' && oldUser.role === 'alumni') {
             lastClassName = null;
             gradYear = null;
-            // finalClassId akan mengikuti input dari frontend
         }
 
-        // 3. Logika Khusus: KONTRIBUTOR
+        // 3. Logika Contributor (Copy logic existing)
         let finalContribType = null;
         let finalAgencyName = null;
-
         if (role === 'contributor') {
             finalContribType = contributor_type || null;
-            // Jika agency_name kosong, pakai tipe sebagai default (kecuali 'Lainnya')
             if (!agency_name && contributor_type !== 'Lainnya') {
                 finalAgencyName = contributor_type;
             } else {
@@ -253,7 +236,7 @@ export const updateUser = async (req: Request, res: Response) => {
             }
         }
 
-        // 4. Query Update Utama
+        // 4. Update Tabel Users Utama
         let query = `
             UPDATE users 
             SET full_name=?, email=?, role=?, nisn=?, nip=?, 
@@ -270,23 +253,37 @@ export const updateUser = async (req: Request, res: Response) => {
             query += `, password=?`;
             params.push(await bcrypt.hash(password, 10));
         }
-        
         query += ` WHERE id=?`;
         params.push(id);
         
         await connection.query(query, params);
-        
-        // 5. Update relasi guru (jika role teacher)
+
+        // 5. [SYNC WAJIB] PENGELOLAAN WALI KELAS (TEACHER)
         if (role === 'teacher') {
-            if (class_id) {
-                // Copot wali kelas lain di kelas yang sama
-                await connection.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND role = 'teacher' AND id != ?", [class_id, id]);
-                // Set kelas ini ke guru yang sedang diedit
-                await connection.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [id, class_id]);
-            } else {
-                // Jika class_id dikosongkan, hapus relasi di tabel classes
+            // Skenario A: Guru dipindah/diassign ke kelas baru (class_id ada isinya)
+            if (finalClassId) {
+                // 1. Bersihkan kelas LAMA guru ini (jika dulu dia mengajar kelas lain)
+                // Hapus teacher_id di tabel classes dimanapun guru ini tercatat
+                await connection.query("UPDATE classes SET teacher_id = NULL WHERE teacher_id = ?", [id]);
+
+                // 2. Bersihkan kelas BARU dari guru lama (jika kelas target punya guru lain sebelumnya)
+                await connection.query("UPDATE classes SET teacher_id = NULL WHERE id = ?", [finalClassId]);
+                // Dan update user guru lama tersebut agar class_id nya jadi NULL (opsional, tapi bagus utk konsistensi)
+                await connection.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND role = 'teacher' AND id != ?", [finalClassId, id]);
+
+                // 3. Assign Guru Ini ke Kelas Baru
+                await connection.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [id, finalClassId]);
+            } 
+            // Skenario B: Guru dicopot jabatannya (class_id dikirim null/kosong)
+            else {
+                // Hapus nama dia dari tabel classes manapun
                 await connection.query("UPDATE classes SET teacher_id = NULL WHERE teacher_id = ?", [id]);
             }
+        }
+
+        // 6. [SYNC TAMBAHAN] Jika User BUKAN Teacher (misal jadi Admin/Siswa), pastikan dia tidak nyangkut di tabel classes
+        if (role !== 'teacher') {
+            await connection.query("UPDATE classes SET teacher_id = NULL WHERE teacher_id = ?", [id]);
         }
 
         await connection.commit();
@@ -315,23 +312,23 @@ export const deleteUser = async (req: Request, res: Response) => {
 
 export const getClasses = async (req: Request, res: Response) => {
     try {
-        // [FIX] Mengambil kolom 'capacity' dan 'academic_year'
         const query = `
             SELECT 
                 c.id, 
                 c.name, 
                 c.teacher_id, 
-                c.capacity as kapasitas,   -- Mapping ke frontend (capacity -> kapasitas)
-                c.academic_year,           -- Tahun Ajaran
+                c.capacity as kapasitas,
+                c.academic_year,
                 u.full_name as teacher_name,
                 (SELECT COUNT(*) FROM users s WHERE s.class_id = c.id AND s.role = 'student') as student_count
             FROM classes c
             LEFT JOIN users u ON c.teacher_id = u.id
+            -- [FIX] Urutkan berdasarkan Tahun Ajaran TERBARU, lalu Nama
             ORDER BY c.academic_year DESC, c.name ASC
         `;
         
         const [rows] = await pool.query(query);
-        res.json({ data: rows }); // Format response { data: [] } agar konsisten dengan frontend
+        res.json({ data: rows }); 
     } catch (error) {
         console.error("Get Classes Error:", error);
         res.status(500).json({ message: 'Gagal mengambil data kelas.' });
@@ -383,7 +380,7 @@ export const setupClassDatabase = async (req: Request, res: Response) => {
             UPDATE users u
             JOIN classes c ON c.teacher_id = u.id
             SET u.class_id = c.id
-            WHERE u.role = 'teacher' AND (u.class_id IS NULL OR u.class_id = 0)
+            WHERE u.role = 'teacher'
         `);
 
         res.json({ message: "Database berhasil diperbaiki & disinkronkan!" });
@@ -394,21 +391,21 @@ export const setupClassDatabase = async (req: Request, res: Response) => {
 };
 
 export const createClass = async (req: Request, res: Response) => {
-    // Frontend mengirim: kapasitas, academic_year
     const { name, teacher_id, kapasitas, academic_year } = req.body;
 
     try {
         const limit = kapasitas ? parseInt(kapasitas) : 40;
         const year = academic_year || '2025/2026';
 
-        // [FIX] Insert ke kolom 'capacity' dan 'academic_year'
         const [result]: any = await pool.query(
             "INSERT INTO classes (name, teacher_id, capacity, academic_year) VALUES (?, ?, ?, ?)", 
             [name, teacher_id || null, limit, year]
         );
         
+        // [SYNC] Jika saat buat kelas langsung pilih guru
         if (teacher_id) {
             const newClassId = result.insertId;
+            // Update User Guru agar class_id nya menunjuk ke kelas baru ini
             await pool.query("UPDATE users SET class_id = ? WHERE id = ?", [newClassId, teacher_id]);
         }
 
@@ -467,18 +464,44 @@ export const updateClass = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, teacher_id, kapasitas, academic_year } = req.body;
 
+    const connection = await pool.getConnection();
     try {
-        const limit = kapasitas ? parseInt(kapasitas) : 40;
+        await connection.beginTransaction();
         
-        // [FIX] Update kolom 'capacity' dan 'academic_year'
-        await pool.query(
+        const limit = kapasitas ? parseInt(kapasitas) : 40;
+
+        // 1. Update Tabel Classes
+        await connection.query(
             'UPDATE classes SET name = ?, teacher_id = ?, capacity = ?, academic_year = ? WHERE id = ?',
             [name, teacher_id || null, limit, academic_year, id]
         );
+
+        // 2. [SYNC] Jika Guru Diubah
+        if (teacher_id) {
+            // A. Copot guru ini dari kelas lamanya (jika ada)
+            await connection.query("UPDATE users SET class_id = NULL WHERE id = ?", [teacher_id]); 
+            // (Note: Sebenarnya update users saja cukup, tapi karena ini updateClass, kita fokus set user ke kelas ini)
+            
+            // B. Set guru ini ke kelas ini
+            await connection.query("UPDATE users SET class_id = ? WHERE id = ?", [id, teacher_id]);
+
+            // C. Jika kelas ini sebelumnya punya guru lain (misal Pak Budi diganti Pak Joko)
+            // Pak Budi harus dicopot class_id nya
+            await connection.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND id != ? AND role = 'teacher'", [id, teacher_id]);
+        } else {
+            // Jika teacher_id diset NULL (Dikosongkan)
+            // Maka semua guru yang terhubung ke kelas ini harus dicopot
+            await connection.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND role = 'teacher'", [id]);
+        }
+
+        await connection.commit();
         res.json({ message: 'Kelas berhasil diperbarui' });
     } catch (error) {
+        await connection.rollback();
         console.error("Update Error:", error);
         res.status(500).json({ message: 'Gagal update kelas' });
+    } finally {
+        connection.release();
     }
 };
 
@@ -1003,9 +1026,8 @@ export const promoteMassBatch = async (req: Request, res: Response) => {
     }
 };
 
-// [UPDATE] Update Tahun Ajaran & Semester Global
 export const updateGlobalAcademicYear = async (req: Request, res: Response) => {
-    const { newYear, newSemester, updateExistingClasses } = req.body; 
+    const { newYear, newSemester } = req.body; 
 
     if (!newYear || !newSemester) {
         return res.status(400).json({ message: "Tahun ajaran dan semester wajib diisi." });
@@ -1015,30 +1037,71 @@ export const updateGlobalAcademicYear = async (req: Request, res: Response) => {
     try {
         await connection.beginTransaction();
 
-        // 1. Update Tahun Ajaran
+        // 1. Ambil Tahun Ajaran LAMA (yang sedang aktif sekarang sebelum diganti)
+        const [currentSettings]: any = await connection.query(
+            "SELECT setting_value FROM app_settings WHERE setting_key = 'current_academic_year'"
+        );
+        const oldYear = currentSettings.length > 0 ? currentSettings[0].setting_value : '2025/2026';
+
+        // 2. Cek apakah kelas untuk Tahun Ajaran BARU sudah ada?
+        // (Untuk mencegah duplikasi jika admin menekan tombol simpan 2x)
+        const [existingClasses]: any = await connection.query(
+            "SELECT COUNT(*) as count FROM classes WHERE academic_year = ?",
+            [newYear]
+        );
+
+        let createdCount = 0;
+
+        // Jika belum ada kelas di tahun baru, kita generate dari tahun lama
+        if (existingClasses[0].count === 0) {
+            
+            // Ambil daftar kelas dari tahun ajaran LAMA
+            const [oldClasses]: any = await connection.query(
+                "SELECT name, capacity FROM classes WHERE academic_year = ?",
+                [oldYear]
+            );
+
+            if (oldClasses.length > 0) {
+                // Siapkan query insert massal
+                // Format: INSERT INTO classes (name, capacity, academic_year, teacher_id)
+                // teacher_id diset NULL sesuai diagram
+                const insertQuery = "INSERT INTO classes (name, capacity, academic_year, teacher_id) VALUES ?";
+                const insertValues = oldClasses.map((cls: any) => [
+                    cls.name, 
+                    cls.capacity, 
+                    newYear, 
+                    null // Reset Wali Kelas jadi NULL
+                ]);
+
+                await connection.query(insertQuery, [insertValues]);
+                createdCount = insertValues.length;
+            }
+        }
+
+        // 3. Update Global Settings (Tahun & Semester Aktif)
         await connection.query(
             "INSERT INTO app_settings (setting_key, setting_value) VALUES ('current_academic_year', ?) ON DUPLICATE KEY UPDATE setting_value = ?", 
             [newYear, newYear]
         );
 
-        // 2. Update Semester
         await connection.query(
             "INSERT INTO app_settings (setting_key, setting_value) VALUES ('current_semester', ?) ON DUPLICATE KEY UPDATE setting_value = ?", 
             [newSemester, newSemester]
         );
 
-        // 3. (Opsional) Update label tahun pada kelas yang SUDAH ADA
-        if (updateExistingClasses) {
-            await connection.query("UPDATE classes SET academic_year = ?", [newYear]);
-        }
-
         await connection.commit();
-        res.json({ message: `Sistem diperbarui ke T.A ${newYear} Semester ${newSemester}.` });
+
+        res.json({ 
+            message: `Berhasil pindah ke T.A ${newYear}.`,
+            details: createdCount > 0 
+                ? `${createdCount} kelas baru telah dibuat (Kosong & Tanpa Wali Kelas).` 
+                : `Tahun ajaran diperbarui (Kelas untuk tahun ini sudah ada sebelumnya).`
+        });
 
     } catch (error) {
         await connection.rollback();
-        console.error(error);
-        res.status(500).json({ message: "Gagal mengupdate pengaturan." });
+        console.error("Update Academic Year Error:", error);
+        res.status(500).json({ message: "Gagal memproses pergantian tahun ajaran." });
     } finally {
         connection.release();
     }

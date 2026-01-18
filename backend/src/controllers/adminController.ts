@@ -21,33 +21,37 @@ export const getUsers = async (req: Request, res: Response) => {
                 (SELECT COUNT(*) FROM family_relations fr WHERE fr.parent_id = u.id) as children_count
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            WHERE u.deleted_at IS NULL  -- FILTER PENTING: Hanya ambil yang belum dihapus
+            WHERE u.deleted_at IS NULL
         `;
         
         const params: any[] = [];
 
-        // ... (Kode Filter Role, Class, Year, Status, Search SAMA SEPERTI SEBELUMNYA) ...
         // Filter Role
         if (role !== 'all') { query += ` AND u.role = ?`; params.push(role); }
+        
         // Filter Kelas
         if (class_id !== 'all') {
             if (class_id === 'none') { query += ` AND u.class_id IS NULL`; } 
             else { query += ` AND u.class_id = ?`; params.push(class_id); }
         }
-        // Filter Tahun
+
+        // [PERBAIKAN UTAMA DI SINI] Filter Tahun
         if (academic_year !== 'all') {
             if (academic_year === 'active') {
-                query += ` AND (c.academic_year = (SELECT setting_value FROM app_settings WHERE setting_key = 'current_academic_year') OR u.class_id IS NULL)`;
+                // Tambahkan 'COLLATE utf8mb4_unicode_ci' untuk memaksa penyamaan collation
+                query += ` AND (c.academic_year COLLATE utf8mb4_unicode_ci = (SELECT setting_value COLLATE utf8mb4_unicode_ci FROM app_settings WHERE setting_key = 'current_academic_year') OR u.class_id IS NULL)`;
             } else {
                 query += ` AND c.academic_year = ?`;
                 params.push(academic_year);
             }
         }
+
         // Filter Status
         if (status !== 'all') {
             if (status === 'active') query += ` AND u.password IS NOT NULL AND u.password != ''`;
             else query += ` AND (u.password IS NULL OR u.password = '')`;
         }
+        
         // Search
         if (search) {
             query += ` AND (u.full_name LIKE ? OR u.email LIKE ? OR u.nisn LIKE ? OR u.nip LIKE ?)`;
@@ -60,13 +64,41 @@ export const getUsers = async (req: Request, res: Response) => {
 
         const [rows]: any = await pool.query(query, params);
 
-        // Count Query (Sama logikanya, tambahkan WHERE u.deleted_at IS NULL)
-        let countQuery = `SELECT COUNT(*) as total FROM users u LEFT JOIN classes c ON u.class_id = c.id WHERE u.deleted_at IS NULL`;
-        const countParams = [...params]; 
-        countParams.splice(countParams.length - 2, 2); // Buang limit & offset untuk count
-        
-        const [totalRows]: any = await pool.query("SELECT COUNT(*) as total FROM users WHERE deleted_at IS NULL");
-        const total = totalRows[0].total; // Idealnya pakai filter yang sama
+        // [PERBAIKAN JUGA UNTUK COUNT QUERY]
+        let countQuery = `
+            SELECT COUNT(*) as total 
+            FROM users u 
+            LEFT JOIN classes c ON u.class_id = c.id 
+            WHERE u.deleted_at IS NULL
+        `;
+        const countParams: any[] = [];
+
+        if (role !== 'all') { countQuery += ` AND u.role = ?`; countParams.push(role); }
+        if (class_id !== 'all') {
+            if (class_id === 'none') countQuery += ` AND u.class_id IS NULL`;
+            else { countQuery += ` AND u.class_id = ?`; countParams.push(class_id); }
+        }
+        if (academic_year !== 'all') {
+            if (academic_year === 'active') {
+                // Tambahkan COLLATE juga di sini
+                countQuery += ` AND (c.academic_year COLLATE utf8mb4_unicode_ci = (SELECT setting_value COLLATE utf8mb4_unicode_ci FROM app_settings WHERE setting_key = 'current_academic_year') OR u.class_id IS NULL)`;
+            } else {
+                countQuery += ` AND c.academic_year = ?`;
+                countParams.push(academic_year);
+            }
+        }
+        if (status !== 'all') {
+             if (status === 'active') countQuery += ` AND u.password IS NOT NULL AND u.password != ''`;
+             else countQuery += ` AND (u.password IS NULL OR u.password = '')`;
+        }
+        if (search) {
+            countQuery += ` AND (u.full_name LIKE ? OR u.email LIKE ? OR u.nisn LIKE ? OR u.nip LIKE ?)`;
+            const s = `%${search}%`;
+            countParams.push(s, s, s, s);
+        }
+
+        const [countResult]: any = await pool.query(countQuery, countParams);
+        const total = countResult[0].total;
 
         res.json({
             data: rows,

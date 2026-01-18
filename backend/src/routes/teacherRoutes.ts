@@ -24,6 +24,6 @@ router.get('/history', getClassHistory as RequestHandler);
 router.post('/generate-report', generateStudentReport as RequestHandler);
 
 router.get('/students/:studentId/parents', getStudentParents as RequestHandler);
-router.post('/promote-students', promoteStudents);
+router.post('/promote-students', promoteStudents as RequestHandler);
 
 export default router;

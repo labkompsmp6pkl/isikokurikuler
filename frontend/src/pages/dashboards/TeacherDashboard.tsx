@@ -96,10 +96,16 @@ const TeacherDashboard: React.FC = () => {
         }, 800);
     };
 
+    // --- LOGIC DATA SISWA ---
+    // [FIX] Ambil daftar siswa dari data dashboard, default ke array kosong jika null
+    const students = data?.students || [];
+
+    // [FIX] Filter object siswa lengkap berdasarkan ID yang dicentang (untuk dikirim ke Modal)
+    const selectedStudentData = students.filter((s: any) => selectedStudents.includes(s.id));
+
     // --- LOGIC SEARCH & PAGINATION (TAB PROMOSI) ---
     const getFilteredStudents = () => {
-        if (!data?.students) return [];
-        return data.students.filter((s: any) => 
+        return students.filter((s: any) => 
             s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
             (s.nisn && s.nisn.includes(searchTerm))
         );
@@ -251,7 +257,7 @@ const TeacherDashboard: React.FC = () => {
                                     </div>
                                     <h1 className="text-3xl font-black mb-4 leading-tight tracking-tighter">Selamat Bertugas, <br/><span className="text-yellow-300 italic">{user.fullName}</span></h1>
                                     <p className="text-violet-100 text-lg font-medium max-w-2xl opacity-90">
-                                        Anda mengampu <strong>{data?.students?.length || 0} Siswa</strong> di kelas ini. Pastikan untuk selalu memantau perkembangan karakter mereka.
+                                        Anda mengampu <strong>{students.length} Siswa</strong> di kelas ini. Pastikan untuk selalu memantau perkembangan karakter mereka.
                                     </p>
                                 </div>
                                 <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-10 -translate-y-10">
@@ -291,21 +297,21 @@ const TeacherDashboard: React.FC = () => {
 
                     {activeTab === 'riwayat' && (
                         <HistoryView 
-                            students={data?.students || []} 
+                            students={students} 
                             teacherClass={data?.teacherClass}
                         />
                     )}
 
                     {activeTab === 'analisis' && (
                         <AIReportView 
-                            students={data?.students || []} 
+                            students={students} 
                             teacherClass={data?.teacherClass}
                             teacherName={user.fullName}
                             teacherNip={user.nip}
                         />
                     )}
 
-                    {/* [BARU] TAMPILAN TAB PROMOSI */}
+                    {/* TAMPILAN TAB PROMOSI */}
                     {activeTab === 'promosi' && (
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in flex flex-col h-[calc(100vh-200px)]">
                             
@@ -413,13 +419,17 @@ const TeacherDashboard: React.FC = () => {
                         </div>
                     )}
 
-                    {/* [BARU] MODAL PROMOSI */}
+                    {/* MODAL PROMOSI (FIXED: Passing array of objects) */}
                     {isPromoteModalOpen && (
                         <PromoteModal 
                             isOpen={isPromoteModalOpen}
                             onClose={() => setIsPromoteModalOpen(false)}
-                            selectedStudents={selectedStudents}
+                            selectedStudents={selectedStudentData}
                             userRole="teacher"
+                            // Guru hanya bisa melakukan kenaikan kelas (promote), tidak pindah paralel
+                            mode="promote" 
+                            // ID Kelas asal (untuk filter) diambil dari data dashboard guru
+                            sourceClassId={data?.teacherClassId} 
                             onSuccess={() => {
                                 fetchDashboard();
                                 setSelectedStudents([]); // Reset pilihan setelah sukses

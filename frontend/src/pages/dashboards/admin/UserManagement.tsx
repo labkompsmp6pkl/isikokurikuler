@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     Search, Plus, Trash2, ChevronLeft, ChevronRight, 
     GraduationCap, Briefcase, 
-    Mail, Hash, Phone, BookOpen, Edit, Sparkles, Save, ArrowLeft, User, Filter, Shield, Eye, Heart, Users, Lock, Link as LinkIcon, X, UserPlus, AlertCircle, History, CheckCircle2, School
+    Mail, Hash, Phone, BookOpen, Edit, Sparkles, Save, ArrowLeft, User, Filter, Shield, Eye, Heart, Users, Lock, Link as LinkIcon, X, UserPlus, AlertCircle, History, CheckCircle2, School, Calendar, Loader2
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import adminService from '../../../services/adminService';
@@ -35,6 +35,13 @@ const UserManagement: React.FC = () => {
     const [availableClasses, setAvailableClasses] = useState<any[]>([]);
     const [meta, setMeta] = useState({ page: 1, totalPages: 1, total: 0 });
 
+    // State Tahun Ajaran Aktif & List Tahun
+    const [activeYear, setActiveYear] = useState('');
+    const [availableYears, setAvailableYears] = useState<string[]>([]);
+    
+    // State Filter Tahun Khusus Form (Create/Edit)
+    const [formYearFilter, setFormYearFilter] = useState('');
+
     // --- STATE DETAIL DATA ---
     const [selectedUserDetail, setSelectedUserDetail] = useState<any>(null);
     const [loadingDetail, setLoadingDetail] = useState(false);
@@ -45,9 +52,7 @@ const UserManagement: React.FC = () => {
     const [foundParents, setFoundParents] = useState<any[]>([]);
     const [selectedParentId, setSelectedParentId] = useState<number | null>(null);
     const [selectedRelationship, setSelectedRelationship] = useState('Wali');
-    
-    // [FIX 1] Perbaiki deklarasi state loadingSearch
-    const [, setLoadingSearch] = useState(false);
+    const [loadingSearch, setLoadingSearch] = useState(false);
 
     const initialForm: UserFormState = { 
         full_name: '', email: '', role: 'student', class_id: '', 
@@ -55,7 +60,15 @@ const UserManagement: React.FC = () => {
         contributor_type: '', agency_name: ''
     };
     const [formData, setFormData] = useState<UserFormState>(initialForm);
-    const [filters, setFilters] = useState({ role: 'all', class_id: 'all', status: 'all', search: '', limit: 6 });
+    
+    const [filters, setFilters] = useState({ 
+        role: 'all', 
+        class_id: 'all', 
+        status: 'all', 
+        search: '', 
+        limit: 9,
+        academic_year: 'active' 
+    });
 
     const roles = [
         { value: 'student', label: 'Siswa' },
@@ -65,17 +78,25 @@ const UserManagement: React.FC = () => {
         { value: 'alumni', label: 'Alumni' }
     ];
 
-    const contributorOptions = [
-        'Guru', 'Dinas Pendidikan', 'Komite Sekolah', 'KPAI', 'Lainnya'
-    ];
+    const contributorOptions = ['Guru', 'Dinas Pendidikan', 'Komite Sekolah', 'KPAI', 'Lainnya'];
 
+    // --- INITIAL LOAD ---
     useEffect(() => {
         const initData = async () => {
             try {
-                const response = await adminService.getClasses();
+                // 1. Ambil Settings (Tahun Aktif)
+                const settings = await adminService.getAppSettings();
+                const currentYear = settings.current_academic_year || '2025/2026';
+                setActiveYear(currentYear);
+
+                // 2. Ambil Semua Kelas (Untuk Form & Filter)
+                const response = await adminService.getClasses({ academic_year: 'all' });
                 let classesData = Array.isArray(response) ? response : (response?.data || []);
                 setAvailableClasses(classesData);
-                fetchUsers(1);
+
+                // Extract unik tahun
+                const years = Array.from(new Set(classesData.map((c: any) => c.academic_year))).sort().reverse();
+                setAvailableYears(years as string[]);
             } catch (error) { 
                 console.error("Init Error:", error);
                 setAvailableClasses([]); 
@@ -84,21 +105,41 @@ const UserManagement: React.FC = () => {
         initData();
     }, []);
 
+    // --- FETCH USERS ---
     useEffect(() => {
+        // Jangan fetch jika activeYear belum terload
+        if (filters.academic_year === 'active' && !activeYear) return;
+
         const timer = setTimeout(() => fetchUsers(1), 300);
         return () => clearTimeout(timer);
-    }, [filters.search, filters.role, filters.class_id, filters.status]);
+    }, [filters.search, filters.role, filters.class_id, filters.status, filters.academic_year, activeYear]);
 
     const fetchUsers = async (page = 1) => {
         setLoading(true);
         try {
-            const res = await adminService.getUsers({ ...filters, page });
+            const queryFilters = { ...filters, page };
+
+            // [LOGIKA FILTER]
+            // Cek apakah role yang dipilih relevan dengan Tahun Ajaran (Student/Teacher/All)
+            const isYearSensitive = ['all', 'student', 'teacher'].includes(filters.role);
+
+            if (!isYearSensitive) {
+                // Jika role Orang Tua, Kontributor, Alumni -> Paksa ambil SEMUA tahun
+                queryFilters.academic_year = 'all';
+            } else {
+                // Jika relevan, gunakan filter yang dipilih (convert 'active' ke tahun string)
+                if (queryFilters.academic_year === 'active') {
+                    queryFilters.academic_year = activeYear;
+                }
+            }
+            
+            const res = await adminService.getUsers(queryFilters);
             setUsers(res.data);
             setMeta(res.meta);
         } catch (error) { console.error(error); } finally { setLoading(false); }
     };
 
-    // --- HANDLERS ---
+    // --- HANDLERS UTAMA ---
 
     const handleViewDetail = async (userId: number) => {
         setLoadingDetail(true);
@@ -127,22 +168,25 @@ const UserManagement: React.FC = () => {
         setFormData(initialForm);
         setIsEditMode(false);
         setSelectedUserId(null);
+        // Set default filter form ke tahun aktif
+        setFormYearFilter(activeYear);
         setViewMode('form');
     };
 
-    // [FIX 2] PERBAIKAN UTAMA PADA FUNGSI EDIT
     const handleEdit = (user: any) => {
-        // Set ID user yang diedit
         setSelectedUserId(user.id);
         setIsEditMode(true);
-        
-        // Logika Pre-fill Kelas
         const targetClassId = user.active_class_id ? user.active_class_id.toString() : (user.class_id ? user.class_id.toString() : '');
+
+        // Deteksi tahun ajaran user tersebut untuk set filter form
+        const userClass = availableClasses.find(c => c.id.toString() === targetClassId);
+        const userYear = userClass ? userClass.academic_year : activeYear;
+        setFormYearFilter(userYear);
 
         setFormData({
             full_name: user.full_name,
             email: user.email,
-            password: '', // Password kosongkan saat edit
+            password: '', 
             role: user.role,
             nisn: user.nisn || '',
             nip: user.nip || '',
@@ -151,8 +195,6 @@ const UserManagement: React.FC = () => {
             contributor_type: user.contributor_type || '',
             agency_name: user.agency_name || ''
         });
-
-        // Ganti view mode ke form (Bukan setIsModalOpen)
         setViewMode('form');
     };
 
@@ -172,13 +214,15 @@ const UserManagement: React.FC = () => {
     const handleClassChangeForTeacher = async (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newClassId = e.target.value;
         if (!newClassId) { setFormData({ ...formData, class_id: '' }); return; }
+        
         const selectedClass = availableClasses.find(c => String(c.id) === newClassId);
         const isTaken = selectedClass?.teacher_id && selectedClass?.teacher_id !== 0;
+        
         if (isEditMode && isTaken) {
             if (String(selectedClass.teacher_id) !== String(selectedUserId)) {
                 const result = await Swal.fire({
                     title: 'Wali Kelas Sudah Ada!',
-                    text: `Kelas ${selectedClass.name} sudah dipegang oleh ${selectedClass.teacher_name}. Timpa?`,
+                    text: `Kelas ${selectedClass.name} (${selectedClass.academic_year}) sudah dipegang oleh ${selectedClass.teacher_name}. Timpa?`,
                     icon: 'warning',
                     showCancelButton: true, confirmButtonText: 'Ya, Ganti', cancelButtonText: 'Batal'
                 });
@@ -188,7 +232,6 @@ const UserManagement: React.FC = () => {
         setFormData({ ...formData, class_id: newClassId });
     };
 
-    // --- LOGIKA SIMPAN ---
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         
@@ -199,8 +242,6 @@ const UserManagement: React.FC = () => {
 
         try {
             let emailToSave = formData.email;
-            
-            // Generate email fake jika bukan admin dan email kosong
             if (formData.role !== 'admin' && !emailToSave) {
                 if (formData.role === 'student' || formData.role === 'alumni') {
                     if (!formData.nisn) return toast.error("NISN Wajib diisi");
@@ -314,6 +355,31 @@ const UserManagement: React.FC = () => {
         return <span className={`${base} bg-gray-50 text-gray-600 border-gray-100`}>{role}</span>;
     };
 
+    // Helper: Tampilkan kelas di form, urutkan berdasarkan tahun aktif
+    const getClassesForFormFiltered = () => {
+        if (!formYearFilter) return [];
+        return availableClasses
+            .filter(c => c.academic_year === formYearFilter)
+            .sort((a, b) => a.name.localeCompare(b.name));
+    };
+
+    // Helper: Generate Display Class Name
+    const getDisplayClassName = (user: any) => {
+        if (user.class_name) {
+            const year = user.class_academic_year || user.active_academic_year || '-';
+            return `${user.class_name} (${year})`;
+        }
+        if (user.class_id) {
+            const foundClass = availableClasses.find(c => String(c.id) === String(user.class_id));
+            if (foundClass) return `${foundClass.name} (${foundClass.academic_year})`;
+            return `Kelas ID: ${user.class_id} (Data Arsip)`;
+        }
+        return '-';
+    };
+
+    // [LOGIKA FILTER TAHUN]
+    const isYearSensitiveRole = ['all', 'student', 'teacher'].includes(filters.role);
+
     // ==========================================
     // RENDER: VIEW DETAIL (PAGE STYLE)
     // ==========================================
@@ -360,42 +426,20 @@ const UserManagement: React.FC = () => {
                                                 <Shield size={10} /> 
                                                 {selectedUserDetail.role === 'contributor' ? (selectedUserDetail.agency_name || 'Kontributor') : selectedUserDetail.role}
                                             </span>
-                                            {selectedUserDetail.role !== 'alumni' && selectedUserDetail.class_name && (
+                                            {selectedUserDetail.role !== 'alumni' && (selectedUserDetail.class_id || selectedUserDetail.class_name) && (
                                                 <span className="bg-emerald-500/80 text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-sm shadow-sm">
-                                                    <GraduationCap size={10} /> {selectedUserDetail.role === 'teacher' ? 'Wali' : 'Kelas'} {selectedUserDetail.class_name}
+                                                    <GraduationCap size={10} /> 
+                                                    {selectedUserDetail.role === 'teacher' ? 'Wali' : 'Kelas'} {getDisplayClassName(selectedUserDetail).split('(')[0]}
                                                 </span>
                                             )}
                                         </div>
                                     </div>
                                 </div>
                                 <div className="p-6 space-y-4">
-                                    <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                                        <div className="p-2 bg-white rounded-lg text-violet-500 shadow-sm"><Mail size={18}/></div>
-                                        <div className="overflow-hidden"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email</p><p className="font-bold text-slate-700 text-sm truncate">{selectedUserDetail.email}</p></div>
-                                    </div>
-                                    {(selectedUserDetail.nisn || selectedUserDetail.nip) && (
-                                        <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                                            <div className="p-2 bg-white rounded-lg text-blue-500 shadow-sm"><Hash size={18}/></div>
-                                            <div>
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                                    {selectedUserDetail.role === 'student' || selectedUserDetail.role === 'alumni' ? 'NISN' : 'NIP / ID'}
-                                                </p>
-                                                <p className="font-mono font-bold text-slate-700 text-sm">{selectedUserDetail.nisn || selectedUserDetail.nip}</p>
-                                            </div>
-                                        </div>
-                                    )}
-                                    {selectedUserDetail.whatsapp_number && (
-                                        <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                                            <div className="p-2 bg-white rounded-lg text-green-500 shadow-sm"><Phone size={18}/></div>
-                                            <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">WhatsApp</p><p className="font-bold text-slate-700 text-sm">{selectedUserDetail.whatsapp_number}</p></div>
-                                        </div>
-                                    )}
-                                    {selectedUserDetail.role === 'contributor' && selectedUserDetail.agency_name && (
-                                         <div className="flex items-center gap-4 p-3 rounded-xl bg-green-50 border border-green-100">
-                                            <div className="p-2 bg-white rounded-lg text-green-600 shadow-sm"><School size={18}/></div>
-                                            <div><p className="text-[10px] font-bold text-green-700 uppercase tracking-wider">Instansi</p><p className="font-bold text-slate-700 text-sm">{selectedUserDetail.agency_name}</p></div>
-                                        </div>
-                                    )}
+                                    <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100"><div className="p-2 bg-white rounded-lg text-violet-500 shadow-sm"><Mail size={18}/></div><div className="overflow-hidden"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email</p><p className="font-bold text-slate-700 text-sm truncate">{selectedUserDetail.email}</p></div></div>
+                                    {(selectedUserDetail.nisn || selectedUserDetail.nip) && (<div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100"><div className="p-2 bg-white rounded-lg text-blue-500 shadow-sm"><Hash size={18}/></div><div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{selectedUserDetail.role === 'student' || selectedUserDetail.role === 'alumni' ? 'NISN' : 'NIP / ID'}</p><p className="font-mono font-bold text-slate-700 text-sm">{selectedUserDetail.nisn || selectedUserDetail.nip}</p></div></div>)}
+                                    {selectedUserDetail.whatsapp_number && (<div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100"><div className="p-2 bg-white rounded-lg text-green-500 shadow-sm"><Phone size={18}/></div><div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">WhatsApp</p><p className="font-bold text-slate-700 text-sm">{selectedUserDetail.whatsapp_number}</p></div></div>)}
+                                    {selectedUserDetail.role === 'contributor' && selectedUserDetail.agency_name && (<div className="flex items-center gap-4 p-3 rounded-xl bg-green-50 border border-green-100"><div className="p-2 bg-white rounded-lg text-green-600 shadow-sm"><School size={18}/></div><div><p className="text-[10px] font-bold text-green-700 uppercase tracking-wider">Instansi</p><p className="font-bold text-slate-700 text-sm">{selectedUserDetail.agency_name}</p></div></div>)}
                                 </div>
                             </div>
                         </div>
@@ -408,7 +452,7 @@ const UserManagement: React.FC = () => {
                                         <div className="p-3 bg-rose-50 text-rose-500 rounded-xl"><Heart size={24} /></div>
                                         <div>
                                             <h3 className="font-black text-xl text-slate-800">Orang Tua / Wali</h3>
-                                            <p className="text-sm text-slate-500 font-medium">Data keluarga yang terhubung (Siswa & Alumni).</p>
+                                            <p className="text-sm text-slate-500 font-medium">Data keluarga yang terhubung.</p>
                                         </div>
                                         {!isLinking && (
                                             <button onClick={() => setIsLinking(true)} className="ml-auto flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-100 transition-colors shadow-sm">
@@ -428,7 +472,9 @@ const UserManagement: React.FC = () => {
                                                 </div>
                                                 {parentSearch.length > 2 && (
                                                     <div className="bg-white border border-slate-200 rounded-xl max-h-40 overflow-y-auto p-2">
-                                                        {foundParents.length === 0 ? <p className="text-center py-2 text-xs text-slate-400">Tidak ditemukan.</p> : 
+                                                        {loadingSearch ? (
+                                                            <div className="flex justify-center p-4 text-indigo-500"><Loader2 className="animate-spin" size={24} /></div>
+                                                        ) : foundParents.length === 0 ? <p className="text-center py-2 text-xs text-slate-400">Tidak ditemukan.</p> : 
                                                             foundParents.map(p => (
                                                                 <div key={p.id} onClick={() => setSelectedParentId(p.id)} className={`p-3 rounded-lg border cursor-pointer flex justify-between ${selectedParentId === p.id ? 'bg-indigo-50 border-indigo-500' : 'hover:bg-slate-50 border-slate-100'}`}>
                                                                     <div><p className="font-bold text-sm text-slate-800">{p.full_name}</p><p className="text-xs text-slate-500">{p.email || p.whatsapp_number}</p></div>
@@ -469,9 +515,9 @@ const UserManagement: React.FC = () => {
                                 </div>
                             )}
 
+                            {/* DETAIL ALUMNI */}
                             {selectedUserDetail.role === 'alumni' && (
                                 <div className="bg-slate-800 text-white rounded-[2rem] p-8 shadow-xl border border-slate-700 relative overflow-hidden">
-                                    {/* ... (Konten Alumni sama) ... */}
                                     <div className="absolute top-0 right-0 p-6 opacity-10"><History size={100} /></div>
                                     <div className="relative z-10">
                                         <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-600">
@@ -499,6 +545,7 @@ const UserManagement: React.FC = () => {
                                 </div>
                             )}
 
+                            {/* DETAIL ORANG TUA */}
                             {selectedUserDetail.role === 'parent' && (
                                 <div className="bg-white rounded-[2rem] p-8 shadow-xl shadow-slate-200/50 border border-white h-full">
                                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
@@ -552,112 +599,96 @@ const UserManagement: React.FC = () => {
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 md:p-8 max-w-4xl">
                     <form onSubmit={handleSave} className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            
-                            {/* Role Selection */}
                             <div className="md:col-span-2">
                                 <label className="block text-xs font-bold text-slate-600 mb-2">Role Pengguna</label>
                                 <select name="role" value={formData.role} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl outline-none bg-white font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500">
-                                    {roles.map(r => (
-                                         <option key={r.value} value={r.value}>{r.label}</option>
-                                    ))}
+                                    {roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                                 </select>
                             </div>
 
-                            {/* LOGIKA KONTRIBUTOR KHUSUS */}
+                            {/* Bagian Kontributor */}
                             {formData.role === 'contributor' && (
                                 <div className="md:col-span-2 bg-green-50 p-6 rounded-2xl border border-green-100 animate-slide-up">
                                     <h4 className="font-bold text-green-800 mb-4 flex items-center gap-2"><School size={18}/> Detail Kontributor</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-xs font-bold text-green-700 mb-2">Pilih Identitas</label>
-                                            <select 
-                                                name="contributor_type"
-                                                value={formData.contributor_type}
-                                                onChange={handleContributorTypeChange}
-                                                className="w-full p-3 border border-green-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-green-500"
-                                            >
+                                            <select name="contributor_type" value={formData.contributor_type} onChange={handleContributorTypeChange} className="w-full p-3 border border-green-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-green-500">
                                                 <option value="">-- Pilih Instansi/Peran --</option>
                                                 {contributorOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                             </select>
                                         </div>
-                                        {/* Input Manual jika Lainnya */}
                                         {(formData.contributor_type === 'Lainnya' || (formData.contributor_type && !contributorOptions.includes(formData.contributor_type))) && (
-                                            <div className="animate-fade-in">
-                                                <label className="block text-xs font-bold text-green-700 mb-2">Nama Instansi / Detail</label>
-                                                <input 
-                                                    type="text" 
-                                                    name="agency_name" 
-                                                    placeholder="Tuliskan nama instansi..." 
-                                                    value={formData.agency_name} 
-                                                    onChange={handleChange} 
-                                                    className="w-full p-3 border border-green-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-green-500"
-                                                />
-                                            </div>
+                                            <div className="animate-fade-in"><label className="block text-xs font-bold text-green-700 mb-2">Nama Instansi / Detail</label><input type="text" name="agency_name" placeholder="Tuliskan nama instansi..." value={formData.agency_name} onChange={handleChange} className="w-full p-3 border border-green-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-green-500"/></div>
                                         )}
-                                        {/* Input NIP untuk Kontributor */}
-                                        <div className="animate-fade-in">
-                                            <label className="block text-xs font-bold text-green-700 mb-2">NIP / Nomor Kepegawaian</label>
-                                            <input 
-                                                type="text" 
-                                                name="nip" 
-                                                placeholder="NIP / No. Pegawai" 
-                                                value={formData.nip || ''} 
-                                                onChange={handleChange} 
-                                                className="w-full p-3 border border-green-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-green-500"
-                                            />
-                                        </div>
-                                        
-                                        {/* [PERBAIKAN 2] Input WhatsApp untuk Kontributor (WAJIB UTK UNLOCK) */}
-                                        <div className="animate-fade-in">
-                                            <label className="block text-xs font-bold text-green-700 mb-2">WhatsApp (Wajib Aktif)</label>
-                                            <input 
-                                                type="text" 
-                                                name="whatsapp_number" 
-                                                placeholder="08xxxxxxxxxx" 
-                                                value={formData.whatsapp_number || ''} 
-                                                onChange={handleChange} 
-                                                className="w-full p-3 border border-green-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-green-500"
-                                            />
-                                        </div>
+                                        <div className="animate-fade-in"><label className="block text-xs font-bold text-green-700 mb-2">NIP / Nomor Kepegawaian</label><input type="text" name="nip" placeholder="NIP / No. Pegawai" value={formData.nip || ''} onChange={handleChange} className="w-full p-3 border border-green-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-green-500"/></div>
+                                        <div className="animate-fade-in"><label className="block text-xs font-bold text-green-700 mb-2">WhatsApp (Wajib Aktif)</label><input type="text" name="whatsapp_number" placeholder="08xxxxxxxxxx" value={formData.whatsapp_number || ''} onChange={handleChange} className="w-full p-3 border border-green-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-green-500"/></div>
                                     </div>
                                 </div>
                             )}
 
                             <div><label className="block text-xs font-bold text-slate-600 mb-2">Nama Lengkap</label><input required type="text" name="full_name" value={formData.full_name} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"/></div>
-                            
-                            {/* EMAIL: HANYA ADMIN YANG BISA ISI MANUAL */}
-                            {formData.role === 'admin' && (
-                                <div><label className="block text-xs font-bold text-slate-600 mb-2">Email (Wajib untuk Admin)</label><input required type="email" name="email" value={formData.email} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"/></div>
-                            )}
-
+                            {formData.role === 'admin' && (<div><label className="block text-xs font-bold text-slate-600 mb-2">Email (Wajib untuk Admin)</label><input required type="email" name="email" value={formData.email} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"/></div>)}
                             <div><label className="block text-xs font-bold text-slate-600 mb-2">Password {!isEditMode ? '(Wajib)' : '(Kosongkan jika tidak ubah)'}</label><input type="password" name="password" value={formData.password} onChange={handleChange} required={!isEditMode} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"/></div>
                             
                             <div className="md:col-span-2 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100/50 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* FIELD KHUSUS SISWA & ALUMNI */}
-                                {(formData.role === 'student' || formData.role === 'alumni') && (
+                                {(formData.role === 'student' || formData.role === 'alumni' || formData.role === 'teacher') && (
                                     <>
-                                            <div><label className="block text-xs font-bold text-indigo-600 uppercase mb-2">NISN</label><input type="text" name="nisn" value={formData.nisn || ''} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500"/></div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">{formData.role === 'alumni' ? 'Kelas (Tidak Aktif)' : 'Penempatan Kelas (Wajib)'}</label>
-                                                <select 
-                                                    name="class_id" 
-                                                    value={formData.class_id} 
-                                                    onChange={handleChange} 
-                                                    disabled={formData.role === 'alumni'} 
-                                                    className={`w-full p-3 border rounded-xl outline-none ${formData.role === 'alumni' ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-white border-slate-200 focus:ring-2 focus:ring-indigo-500'}`}
-                                                >
-                                                    <option value="">{formData.role === 'alumni' ? '-- Status Alumni --' : '-- Pilih Kelas --'}</option>
-                                                    {availableClasses.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                                </select>
-                                                {formData.role === 'alumni' && <p className="text-[10px] text-slate-500 mt-1">*Ubah role ke "Siswa" untuk memilih kelas kembali.</p>}
-                                            </div>
+                                        {/* FILTER TAHUN UNTUK FORM */}
+                                        <div className="md:col-span-2">
+                                            <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Filter Tahun Ajaran Kelas</label>
+                                            <select 
+                                                className="w-full p-3 border border-slate-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                                                value={formYearFilter}
+                                                onChange={(e) => setFormYearFilter(e.target.value)}
+                                            >
+                                                {availableYears.map(y => (
+                                                    <option key={y} value={y}>{y} {y === activeYear ? '(Aktif)' : ''}</option>
+                                                ))}
+                                            </select>
+                                            <p className="text-[10px] text-slate-500 mt-1">*Pilih tahun ajaran untuk menampilkan daftar kelas yang sesuai.</p>
+                                        </div>
+
+                                        {(formData.role === 'student' || formData.role === 'alumni') && (
+                                            <>
+                                                <div><label className="block text-xs font-bold text-indigo-600 uppercase mb-2">NISN</label><input type="text" name="nisn" value={formData.nisn || ''} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500"/></div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">{formData.role === 'alumni' ? 'Kelas (Tidak Aktif)' : 'Penempatan Kelas (Wajib)'}</label>
+                                                    <select 
+                                                        name="class_id" 
+                                                        value={formData.class_id} 
+                                                        onChange={handleChange} 
+                                                        disabled={formData.role === 'alumni'} 
+                                                        className={`w-full p-3 border rounded-xl outline-none ${formData.role === 'alumni' ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-white border-slate-200 focus:ring-2 focus:ring-indigo-500'}`}
+                                                    >
+                                                        <option value="">{formData.role === 'alumni' ? '-- Status Alumni --' : '-- Pilih Kelas --'}</option>
+                                                        {getClassesForFormFiltered().map((c: any) => (
+                                                            <option key={c.id} value={c.id}>
+                                                                {c.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {formData.role === 'teacher' && (
+                                            <>
+                                                <div><label className="block text-xs font-bold text-indigo-600 uppercase mb-2">NIP</label><input required type="text" name="nip" className="w-full p-3 border border-slate-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-indigo-500" value={formData.nip || ''} onChange={handleChange} /></div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Wali Kelas (Opsional)</label>
+                                                    <select className="w-full p-3 border border-slate-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-indigo-500" value={formData.class_id} onChange={handleClassChangeForTeacher}>
+                                                        <option value="">-- Bukan Wali Kelas --</option>
+                                                        {getClassesForFormFiltered().map(c => (
+                                                            <option key={c.id} value={c.id}>{c.name} {c.teacher_id ? '(Ada Guru)' : ''}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </>
+                                        )}
                                     </>
                                 )}
                                 
-                                {/* FIELD KHUSUS GURU */}
-                                {formData.role === 'teacher' && (<><div><label className="block text-xs font-bold text-indigo-600 uppercase mb-2">NIP</label><input required type="text" name="nip" className="w-full p-3 border border-slate-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-indigo-500" value={formData.nip || ''} onChange={handleChange} /></div><div><label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Wali Kelas (Opsional)</label><select className="w-full p-3 border border-slate-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-indigo-500" value={formData.class_id} onChange={handleClassChangeForTeacher}><option value="">-- Bukan Wali Kelas --</option>{availableClasses.map(c => <option key={c.id} value={c.id}>{c.name} {c.teacher_id ? '(Ada Guru)' : ''}</option>)}</select></div></>)}
-                                
-                                {/* FIELD KHUSUS ORTU */}
                                 {formData.role === 'parent' && (<div className="md:col-span-2"><label className="block text-xs font-bold text-indigo-600 uppercase mb-2">WhatsApp</label><input required type="text" name="whatsapp_number" className="w-full p-3 border border-slate-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-indigo-500" value={formData.whatsapp_number || ''} onChange={handleChange} /></div>)}
                             </div>
                         </div>
@@ -681,10 +712,49 @@ const UserManagement: React.FC = () => {
                         <Search className="absolute left-3 top-3 text-slate-400" size={20}/>
                         <input type="text" placeholder="Cari user (nama, nisn, email)..." className="w-full pl-10 pr-4 py-2.5 bg-transparent outline-none font-medium text-slate-700" value={filters.search} onChange={(e) => setFilters({...filters, search: e.target.value})}/>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+                        {/* FILTER UTAMA TAHUN AJARAN */}
+                        <div className="relative flex items-center">
+                            <Calendar size={16} className={`absolute left-3 z-10 ${isYearSensitiveRole ? 'text-slate-400' : 'text-slate-300'}`}/>
+                            <select 
+                                disabled={!isYearSensitiveRole}
+                                className={`border pl-9 pr-3 py-2.5 rounded-lg text-xs font-bold outline-none cursor-pointer transition-colors ${isYearSensitiveRole ? 'bg-slate-50 border-slate-100 text-slate-600' : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'}`}
+                                value={filters.academic_year} 
+                                onChange={(e) => setFilters({...filters, academic_year: e.target.value, class_id: 'all'})}
+                            >
+                                <option value="active">Tahun Aktif ({activeYear})</option>
+                                <option value="all">Semua Tahun</option>
+                                <optgroup label="Arsip Tahun">
+                                    {availableYears.filter(y => y !== activeYear).map(y => (
+                                        <option key={y} value={y}>{y}</option>
+                                    ))}
+                                </optgroup>
+                            </select>
+                        </div>
+
                         <div className="relative flex items-center"><Shield size={16} className="absolute left-3 text-slate-400 z-10"/><select className="bg-slate-50 border border-slate-100 pl-9 pr-3 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer" value={filters.role} onChange={(e) => setFilters({...filters, role: e.target.value, class_id: 'all', status: 'all'})}><option value="all">Semua Role</option>{roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}</select></div>
                         {filters.role === 'student' && (<div className="relative flex items-center animate-in slide-in-from-left-2 fade-in duration-300"><Lock size={16} className="absolute left-3 text-slate-400 z-10"/><select className="bg-slate-50 border border-slate-100 pl-9 pr-3 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer" value={filters.status} onChange={(e) => setFilters({...filters, status: e.target.value})}><option value="all">Semua Status</option><option value="active">Sudah Aktivasi</option><option value="inactive">Belum Aktivasi</option></select></div>)}
-                        {(filters.role === 'all' || filters.role === 'student' || filters.role === 'teacher') && (<div className="relative flex items-center"><Filter size={16} className="absolute left-3 text-slate-400 z-10"/><select className="bg-slate-50 border border-slate-100 pl-9 pr-8 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer" value={filters.class_id} onChange={(e) => setFilters({...filters, class_id: e.target.value})}><option value="all">Semua Kelas</option><option value="none">Belum Ada Kelas</option>{availableClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>)}
+                        
+                        {/* FILTER KELAS */}
+                        {(filters.role === 'all' || filters.role === 'student' || filters.role === 'teacher') && (
+                            <div className="relative flex items-center">
+                                <Filter size={16} className="absolute left-3 text-slate-400 z-10"/>
+                                <select className="bg-slate-50 border border-slate-100 pl-9 pr-8 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer" value={filters.class_id} onChange={(e) => setFilters({...filters, class_id: e.target.value})}>
+                                    <option value="all">Semua Kelas</option>
+                                    <option value="none">Belum Ada Kelas</option>
+                                    {/* HANYA TAMPILKAN KELAS YANG SESUAI DENGAN TAHUN YANG DIPILIH */}
+                                    {availableClasses
+                                        .filter(c => {
+                                            if (filters.academic_year === 'all') return true;
+                                            if (filters.academic_year === 'active') return c.academic_year === activeYear;
+                                            return c.academic_year === filters.academic_year;
+                                        })
+                                        .map(c => (
+                                            <option key={c.id} value={c.id}>{c.name} ({c.academic_year})</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <button onClick={handleAddNew} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-200 transition-all"><Plus size={20}/> <span className="hidden sm:inline">Tambah User</span></button>
@@ -712,7 +782,13 @@ const UserManagement: React.FC = () => {
                                 {u.role === 'student' && !u.is_active && (<div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-200 text-amber-600"><Lock size={12} /> <span className="text-[10px] font-bold uppercase">Belum Aktivasi</span></div>)}
                                 {(u.role === 'student' || u.role === 'teacher') && (
                                     <>
-                                        <div className="flex justify-between items-center text-[11px]"><span className="text-slate-400 font-bold uppercase flex items-center gap-1.5"><BookOpen size={12}/> {u.role === 'teacher' ? 'Wali Kelas' : 'Kelas'}</span> <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-100">{u.class_name || (u.class_id ? `ID: ${u.class_id}` : '-')}</span></div>
+                                        <div className="flex justify-between items-center text-[11px]">
+                                            <span className="text-slate-400 font-bold uppercase flex items-center gap-1.5"><BookOpen size={12}/> {u.role === 'teacher' ? 'Wali Kelas' : 'Kelas'}</span> 
+                                            {/* TAMPILKAN KELAS & TAHUN AJARAN */}
+                                            <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-100">
+                                                {getDisplayClassName(u)}
+                                            </span>
+                                        </div>
                                         <div className="flex justify-between items-center text-[11px]"><span className="text-slate-400 font-bold uppercase flex items-center gap-1.5"><Hash size={12}/> {u.role === 'student' ? 'NISN' : 'NIP'}</span> <span className="font-bold text-slate-700 font-mono">{u.nisn || u.nip || '-'}</span></div>
                                     </>
                                 )}

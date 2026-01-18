@@ -6,7 +6,8 @@ import {
     completeGoogleRegistration,
     getStudentsList,
     getClasses, // <<< PERBAIKAN: Impor dari authController
-    getMe
+    getMe,
+    getPublicSettings
 } from '../controllers/authController';
 import passport from 'passport';
 import { authMiddleware } from '../middleware/authMiddleware'; 
@@ -16,6 +17,7 @@ const router = Router();
 // Auth Manual
 router.post('/login', login as RequestHandler);
 router.post('/register', register as RequestHandler);
+router.get('/settings', getPublicSettings as RequestHandler);
 
 // Mengambil daftar kelas untuk pendaftaran
 router.get('/classes-list', getClasses as RequestHandler); // <<< PERBAIKAN: Sekarang menggunakan fungsi yang benar

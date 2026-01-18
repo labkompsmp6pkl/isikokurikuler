@@ -13,7 +13,8 @@ import {
     resetAllStudentClasses,
     promoteMassBatch,
     updateGlobalAcademicYear,
-    getAppSettings
+    getAppSettings,
+    deleteClassesByYear
 } from '../controllers/adminController';
 
 const router = Router();
@@ -61,7 +62,7 @@ router.post('/classes/promote', promoteClass as RequestHandler);
 // --- Bulk Student Management (Tambah/Hapus Siswa Massal) ---
 router.post('/classes/:classId/add-students', addStudentsToClass as RequestHandler);
 router.post('/classes/:classId/remove-students', removeStudentsFromClass as RequestHandler);
-
+router.post('/classes/delete-batch', deleteClassesByYear as RequestHandler);
 // --- Family Management ---
 router.get('/parents/search', searchParents as RequestHandler);
 router.post('/family/link', addFamilyRelation as RequestHandler);

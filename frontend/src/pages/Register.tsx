@@ -21,6 +21,7 @@ import {
   Trophy,
   CheckCircle2,
   Info,
+  Calendar,
   School
 } from 'lucide-react';
 
@@ -120,6 +121,11 @@ const Register: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<'student' | 'teacher' | 'contributor' | 'parent'>('student');
   const [classList, setClassList] = useState<any[]>([]);
   
+  // State untuk Filter Tahun Ajaran
+  const [selectedYear, setSelectedYear] = useState<string>('');
+  const [availableYears, setAvailableYears] = useState<string[]>([]);
+  const [activeYear, setActiveYear] = useState<string>(''); // Tahun yang aktif di sistem (Database)
+
   const roleOptions = [
     { id: 'student', label: 'Siswa', icon: <GraduationCap size={24}/> },
     { id: 'teacher', label: 'Guru', icon: <ShieldCheck size={24}/> },
@@ -127,7 +133,7 @@ const Register: React.FC = () => {
     { id: 'contributor', label: 'Kontributor', icon: <Trophy size={24}/> }
   ] as const;
 
-  // State Form (Ditambah field kontributor)
+  // State Form
   const [formData, setFormData] = useState({
     fullName: '',
     nisn: '',
@@ -136,15 +142,14 @@ const Register: React.FC = () => {
     classId: '', 
     password: '',
     confirmPassword: '',
-    contributor_type: '', // Baru
-    agency_name: ''       // Baru
+    contributor_type: '',
+    agency_name: ''
   });
 
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [isClassLoading, setIsClassLoading] = useState<boolean>(true);
 
-  // Opsi Dropdown Kontributor
   const contributorTypeOptions = [
     { value: 'Guru', label: 'Guru' },
     { value: 'Dinas Pendidikan', label: 'Dinas Pendidikan' },
@@ -153,69 +158,123 @@ const Register: React.FC = () => {
     { value: 'Lainnya', label: 'Lainnya (Umum)' }
   ];
 
+  // --- FETCH DATA ---
   useEffect(() => {
-    const fetchClasses = async () => {
+    const initData = async () => {
       setIsClassLoading(true);
       try {
-        const response = await authApi.get('/auth/classes-list'); 
-        const data = response.data.data || response.data;
-        if (Array.isArray(data)) {
-          setClassList(data);
+        // 1. Fetch Data Kelas & Settings secara paralel
+        const [classesRes, settingsRes] = await Promise.allSettled([
+            authApi.get('/auth/classes-list'),
+            authApi.get('/auth/settings') // Pastikan endpoint ini dibuat di backend
+        ]);
+
+        // Process Settings (Tahun Aktif)
+        let systemActiveYear = '';
+        if (settingsRes.status === 'fulfilled') {
+            systemActiveYear = settingsRes.value.data?.current_academic_year || '';
+            setActiveYear(systemActiveYear);
+        }
+
+        // Process Classes
+        if (classesRes.status === 'fulfilled') {
+            const data = classesRes.value.data.data || classesRes.value.data;
+            if (Array.isArray(data)) {
+                setClassList(data);
+
+                // Extract unik tahun ajaran dari daftar kelas
+                const years = Array.from(new Set(data.map((c: any) => c.academic_year))).sort().reverse();
+                setAvailableYears(years as string[]);
+
+                // Set default selected year:
+                // Prioritas 1: Tahun Aktif dari Sistem
+                // Prioritas 2: Tahun Paling Baru di daftar kelas
+                if (systemActiveYear && years.includes(systemActiveYear)) {
+                    setSelectedYear(systemActiveYear);
+                } else if (years.length > 0) {
+                    setSelectedYear(years[0] as string);
+                }
+            }
         }
       } catch (err) {
-        console.error("Gagal memuat daftar kelas:", err);
+        console.error("Gagal memuat data awal:", err);
+        toast.error("Gagal memuat data kelas.");
       } finally {
         setIsClassLoading(false);
       }
     };
-    fetchClasses();
+    initData();
   }, []);
 
-  // --- OPSI KELAS SISWA ---
+  // --- OPSI KELAS SISWA (DIFILTER TAHUN) ---
   const studentClassOptions = useMemo(() => {
-    const sortedClasses = [...classList].sort((a, b) => a.name.localeCompare(b.name));
+    // 1. Filter berdasarkan Tahun Ajaran yang dipilih
+    let filtered = classList;
+    if (selectedYear) {
+        filtered = classList.filter(c => c.academic_year === selectedYear);
+    }
+
+    // 2. Sort Nama Kelas
+    const sortedClasses = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+
     return sortedClasses.map(c => {
         const currentFilled = c.student_count !== undefined ? c.student_count : (c.terisi || 0);
         const capacity = c.kapasitas || 40; 
         const remaining = capacity - currentFilled;
         const isFull = remaining <= 0;
-        const periodLabel = `${c.semester || 'Ganjil'} ${c.academic_year || ''}`;
+        
+        // Label Sisa Bangku
+        const subLabel = isFull ? `Penuh` : `Sisa ${remaining} Bangku`;
 
         return {
             value: c.id,
             label: `Kelas ${c.name}`,
-            subLabel: isFull ? `Penuh • ${periodLabel}` : `Sisa ${remaining} • ${periodLabel}`,
+            subLabel: subLabel,
             disabled: isFull, 
             className: isFull ? 'text-slate-400 bg-slate-100 line-through italic' : 'text-slate-800 font-bold bg-white'
         };
     });
-  }, [classList]); 
+  }, [classList, selectedYear]); 
 
-  // --- OPSI KELAS GURU ---
+  // --- OPSI KELAS GURU (DIFILTER TAHUN) ---
   const teacherClassOptions = useMemo(() => {
-    return classList.map(c => {
+    // 1. Filter Tahun
+    let filtered = classList;
+    if (selectedYear) {
+        filtered = classList.filter(c => c.academic_year === selectedYear);
+    }
+    
+    // 2. Sort Nama Kelas
+    const sortedClasses = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+
+    return sortedClasses.map(c => {
         const isTaken = c.teacher_id && c.teacher_id !== 0;
         return {
             value: c.id,
-            label: `Kelas ${c.name} (${c.academic_year})` + (isTaken ? ` - Sudah ada Guru` : ''),
+            label: `Kelas ${c.name}`,
+            subLabel: isTaken ? 'Sudah Ada Wali' : 'Belum Ada Wali',
             disabled: isTaken,
-            className: isTaken ? 'text-slate-400 bg-slate-100 italic' : ''
+            className: isTaken ? 'text-slate-400 bg-slate-100 italic' : 'text-slate-800 font-bold'
         };
     });
-  }, [classList]);
+  }, [classList, selectedYear]);
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Handler Khusus Tipe Kontributor
+  const handleYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      setSelectedYear(e.target.value);
+      // Reset pilihan kelas jika tahun berubah agar tidak invalid
+      setFormData(prev => ({ ...prev, classId: '' }));
+  };
+
   const handleContributorTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setFormData(prev => ({
         ...prev,
         contributor_type: val,
-        // Jika bukan "Lainnya", agency_name otomatis terisi sesuai tipe
         agency_name: val === 'Lainnya' ? '' : val
     }));
   };
@@ -255,7 +314,6 @@ const Register: React.FC = () => {
         whatsappNumber: selectedRole === 'parent' ? formData.whatsappNumber : undefined,
         classId: (selectedRole === 'student' || selectedRole === 'teacher') ? (formData.classId || undefined) : undefined,
         
-        // Data Baru Kontributor
         contributor_type: selectedRole === 'contributor' ? formData.contributor_type : undefined,
         agency_name: selectedRole === 'contributor' ? (formData.agency_name || formData.contributor_type) : undefined,
       };
@@ -306,15 +364,38 @@ const Register: React.FC = () => {
               onChange={handleFormChange}
               icon={<ShieldCheck size={22}/>}
             />
-            <SelectField 
-              name="classId" 
-              value={formData.classId} 
-              options={studentClassOptions} 
-              placeholder={isClassLoading ? "Memuat data kelas..." : (studentClassOptions.length > 0 ? "Pilih Kelas & Semester" : "Tidak ada kelas tersedia")}
-              onChange={handleFormChange}
-              icon={<GraduationCap size={22}/>}
-              disabled={isClassLoading || studentClassOptions.length === 0}
-            />
+            
+            {/* FILTER TAHUN AJARAN UNTUK SISWA */}
+            <div className="bg-indigo-50 p-4 rounded-[1.5rem] border border-indigo-100">
+                <label className="text-[10px] font-bold text-indigo-500 uppercase mb-2 block ml-2">Tahun Ajaran</label>
+                <div className="relative group mb-3">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-indigo-400">
+                        <Calendar size={20}/>
+                    </div>
+                    <select 
+                        value={selectedYear} 
+                        onChange={handleYearChange}
+                        className="appearance-none block w-full pl-12 pr-10 py-3 border-2 border-indigo-200 bg-white rounded-xl focus:outline-none focus:border-indigo-500 text-indigo-900 font-bold text-sm cursor-pointer"
+                    >
+                        {availableYears.map(y => (
+                            <option key={y} value={y}>{y} {y === activeYear ? '(Aktif)' : ''}</option>
+                        ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-indigo-400">
+                        <ChevronDown size={18} />
+                    </div>
+                </div>
+
+                <SelectField 
+                    name="classId" 
+                    value={formData.classId} 
+                    options={studentClassOptions} 
+                    placeholder={isClassLoading ? "Memuat data kelas..." : (studentClassOptions.length > 0 ? "Pilih Kelas" : "Tidak ada kelas tersedia untuk tahun ini")}
+                    onChange={handleFormChange}
+                    icon={<GraduationCap size={22}/>}
+                    disabled={isClassLoading || studentClassOptions.length === 0}
+                />
+            </div>
           </>
         )}
 
@@ -327,16 +408,39 @@ const Register: React.FC = () => {
               onChange={handleFormChange}
               icon={<ShieldCheck size={22}/>}
             />
-            <SelectField 
-              name="classId" 
-              value={formData.classId} 
-              options={teacherClassOptions}
-              placeholder="Wali Kelas (Opsional)" 
-              required={false}
-              onChange={handleFormChange}
-              icon={<GraduationCap size={22}/>}
-              disabled={teacherClassOptions.length === 0}
-            />
+            
+            {/* FILTER TAHUN AJARAN UNTUK GURU */}
+            <div className="bg-indigo-50 p-4 rounded-[1.5rem] border border-indigo-100">
+                <label className="text-[10px] font-bold text-indigo-500 uppercase mb-2 block ml-2">Tahun Ajaran Kelas Wali</label>
+                <div className="relative group mb-3">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-indigo-400">
+                        <Calendar size={20}/>
+                    </div>
+                    <select 
+                        value={selectedYear} 
+                        onChange={handleYearChange}
+                        className="appearance-none block w-full pl-12 pr-10 py-3 border-2 border-indigo-200 bg-white rounded-xl focus:outline-none focus:border-indigo-500 text-indigo-900 font-bold text-sm cursor-pointer"
+                    >
+                        {availableYears.map(y => (
+                            <option key={y} value={y}>{y} {y === activeYear ? '(Aktif)' : ''}</option>
+                        ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-indigo-400">
+                        <ChevronDown size={18} />
+                    </div>
+                </div>
+
+                <SelectField 
+                    name="classId" 
+                    value={formData.classId} 
+                    options={teacherClassOptions}
+                    placeholder="Pilih Kelas (Opsional)" 
+                    required={false}
+                    onChange={handleFormChange}
+                    icon={<GraduationCap size={22}/>}
+                    disabled={teacherClassOptions.length === 0}
+                />
+            </div>
           </>
         )}
 
@@ -346,13 +450,12 @@ const Register: React.FC = () => {
             <SelectField 
                 name="contributor_type"
                 value={formData.contributor_type}
-                options={contributorTypeOptions}
+                options={contributorTypeOptions.map(o => ({ value: o.value, label: o.label }))}
                 placeholder="Pilih Identitas / Instansi"
                 onChange={handleContributorTypeChange}
                 icon={<School size={22}/>}
             />
 
-            {/* Munculkan input manual jika "Lainnya" dipilih */}
             {(formData.contributor_type === 'Lainnya' || (formData.contributor_type && !contributorTypeOptions.some(o => o.value === formData.contributor_type))) && (
                 <div className="animate-in fade-in slide-in-from-top-2">
                     <InputField 
@@ -551,5 +654,5 @@ const Register: React.FC = () => {
     </div>
   );
 };
-
+ 
 export default Register;

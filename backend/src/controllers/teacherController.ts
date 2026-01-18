@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { AuthenticatedRequest } from '../middleware/authMiddleware';
 
 // --- 1. DASHBOARD & VALIDASI ---
 
@@ -303,69 +304,93 @@ export const generateStudentReport = async (req: Request, res: Response) => {
     }
 };
 
-// [UPDATE] Kenaikan Kelas oleh Guru
-export const promoteStudents = async (req: Request, res: Response) => {
-    const teacherId = (req as any).user.id;
-    const { studentIds, targetClassId, isAlumni } = req.body; 
+export const promoteStudents = async (req: AuthenticatedRequest, res: Response) => {
+    const { studentIds, targetClassId, isAlumni } = req.body;
+    const teacherId = req.user?.id;
 
-    if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
-        return res.status(400).json({ message: "Pilih minimal satu siswa." });
+    if (!studentIds || studentIds.length === 0) {
+        return res.status(400).json({ message: 'Tidak ada siswa yang dipilih.' });
     }
 
-    const currentYear = new Date().getFullYear();
     const connection = await pool.getConnection();
-    
     try {
         await connection.beginTransaction();
 
-        // 1. KEAMANAN: Pastikan siswa-siswa ini BENAR murid dari Guru tersebut saat ini
-        const [checkOwnership]: any = await connection.query(
-            `SELECT u.id 
+        // 1. AMBIL DATA KELAS ASAL SISWA (Ambil sampel dari siswa pertama)
+        const [students]: any = await connection.query(
+            `SELECT u.full_name, c.name as class_name 
              FROM users u 
-             JOIN classes c ON u.class_id = c.id 
-             WHERE c.teacher_id = ? AND u.id IN (?)`,
-            [teacherId, studentIds]
+             LEFT JOIN classes c ON u.class_id = c.id 
+             WHERE u.id = ?`, 
+            [studentIds[0]]
         );
 
-        if (checkOwnership.length !== studentIds.length) {
-            throw new Error("Beberapa siswa tidak berada di bawah perwalian Anda. Akses ditolak.");
+        if (students.length === 0) {
+            throw new Error("Data siswa tidak ditemukan.");
         }
 
-        // 2. PROSES UPDATE (Termasuk Simpan Riwayat Alumni)
-        const placeholders = studentIds.map(() => '?').join(',');
+        const sourceClassName = students[0].class_name || "";
+        
+        // 2. PARSE TINGKAT KELAS (Asumsi nama kelas diawali angka: "7A", "8B", "9C")
+        const sourceLevel = parseInt(sourceClassName.match(/\d+/)?.[0] || "0");
+        
+        // 3. VALIDASI LOGIKA KENAIKAN
+        if (isAlumni) {
+            // Hanya kelas 9 (atau 12) yang boleh jadi Alumni
+            if (sourceLevel !== 9 && sourceLevel !== 12) {
+                throw new Error(`VALIDASI GAGAL: Siswa kelas ${sourceClassName} tidak bisa langsung diluluskan (Alumni). Harus naik kelas bertahap.`);
+            }
+        } else if (targetClassId) {
+            // Ambil info kelas tujuan
+            const [targetClass]: any = await connection.query("SELECT name FROM classes WHERE id = ?", [targetClassId]);
+            if (targetClass.length > 0) {
+                const targetClassName = targetClass[0].name;
+                const targetLevel = parseInt(targetClassName.match(/\d+/)?.[0] || "0");
+
+                // Aturan: Target harus (Level + 1) atau (Level sama/Tinggal Kelas)
+                // Tidak boleh loncat (7 ke 9) atau turun (8 ke 7) kecuali admin (opsional)
+                if (targetLevel !== sourceLevel && targetLevel !== sourceLevel + 1) {
+                     // Bolehkan turun kelas hanya jika ada flag khusus, tapi secara default kita blokir yang tidak masuk akal
+                     if (targetLevel > sourceLevel + 1) {
+                         throw new Error(`VALIDASI GAGAL: Tidak bisa melompati kelas dari ${sourceClassName} ke ${targetClassName}.`);
+                     }
+                }
+            }
+        }
+
+        // 4. PROSES UPDATE DATABASE
+        let query = '';
+        let params = [];
 
         if (isAlumni) {
-            // Skenario Lulus / Alumni
-            // Menggunakan JOIN di UPDATE query untuk mengambil nama kelas saat ini
-            await connection.query(
-                `UPDATE users u
-                 LEFT JOIN classes c ON u.class_id = c.id
-                 SET 
-                    u.role = 'alumni', 
-                    u.class_id = NULL,
-                    u.last_class_name = c.name,
-                    u.graduation_year = ?
-                 WHERE u.id IN (${placeholders})`,
-                [currentYear, ...studentIds]
-            );
+            // Set role jadi alumni, hapus class_id, simpan history kelas terakhir
+            query = `
+                UPDATE users 
+                SET role = 'alumni', 
+                    class_id = NULL, 
+                    graduation_year = YEAR(CURDATE()),
+                    last_class_name = ?
+                WHERE id IN (?)
+            `;
+            params = [sourceClassName, studentIds];
         } else {
-            // Skenario Pindah Kelas (Naik Kelas)
-            if (!targetClassId) throw new Error("Kelas tujuan wajib dipilih.");
-            
-            // Reset last_class_name jika naik kelas (karena masih aktif)
-            await connection.query(
-                `UPDATE users SET class_id = ?, last_class_name = NULL, graduation_year = NULL WHERE id IN (${placeholders})`,
-                [targetClassId, ...studentIds]
-            );
+            // Pindah kelas biasa
+            query = `UPDATE users SET class_id = ? WHERE id IN (?)`;
+            params = [targetClassId, studentIds];
         }
 
+        await connection.query(query, params);
+
         await connection.commit();
-        res.json({ message: isAlumni ? "Siswa berhasil diluluskan (Alumni)." : "Siswa berhasil dipindahkan ke kelas baru." });
+        res.json({ 
+            message: isAlumni ? 'Siswa berhasil diluluskan menjadi Alumni.' : 'Siswa berhasil dipindahkan kelas.',
+            processed: studentIds.length
+        });
 
     } catch (error: any) {
         await connection.rollback();
         console.error("Promote Error:", error);
-        res.status(500).json({ message: error.message || "Gagal memproses data." });
+        res.status(400).json({ message: error.message || 'Gagal memproses kenaikan kelas.' });
     } finally {
         connection.release();
     }

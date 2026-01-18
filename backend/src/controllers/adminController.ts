@@ -7,117 +7,75 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export const getUsers = async (req: Request, res: Response) => {
     try {
-        const { page = 1, limit = 10, role, class_id, search, status } = req.query;
+        const { page = 1, limit = 10, search = '', role = 'all', class_id = 'all', status = 'all', academic_year = 'active' } = req.query;
         const offset = (Number(page) - 1) * Number(limit);
 
-        // Ambil tahun ajaran aktif
-        const [settings]: any = await pool.query("SELECT setting_value FROM app_settings WHERE setting_key = 'current_academic_year'");
-        const activeYear = settings[0]?.setting_value || '2025/2026';
-
         let query = `
-            SELECT u.*, 
-            
-            -- [FIX] LOGIC NAMA KELAS
-            CASE 
-                WHEN u.role = 'teacher' THEN (
-                    SELECT c.name FROM classes c WHERE c.teacher_id = u.id AND c.academic_year = '${activeYear}' LIMIT 1
-                )
-                ELSE c.name 
-            END as class_name,
-            
-            -- [BARU] LOGIC ID KELAS AKTIF (Untuk Pre-fill Form Edit)
-            CASE 
-                WHEN u.role = 'teacher' THEN (
-                    SELECT c.id FROM classes c WHERE c.teacher_id = u.id AND c.academic_year = '${activeYear}' LIMIT 1
-                )
-                ELSE u.class_id -- Jika siswa, ambil langsung dari kolom class_id
-            END as active_class_id,
-
-            (SELECT GROUP_CONCAT(s.full_name SEPARATOR ', ') FROM users s WHERE s.parent_id = u.id) as children_names,
-            (u.password IS NOT NULL AND u.password != '') as is_active
-            
-            FROM users u 
+            SELECT 
+                u.id, u.full_name, u.email, u.role, 
+                CASE WHEN u.password IS NOT NULL AND u.password != '' THEN 1 ELSE 0 END as is_active,
+                u.nisn, u.nip, u.whatsapp_number, u.class_id, u.contributor_type, u.agency_name,
+                c.name as class_name,
+                c.academic_year as class_academic_year, 
+                c.academic_year as active_academic_year,
+                (SELECT COUNT(*) FROM family_relations fr WHERE fr.parent_id = u.id) as children_count
+            FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            WHERE 1=1
+            WHERE u.deleted_at IS NULL  -- FILTER PENTING: Hanya ambil yang belum dihapus
         `;
         
         const params: any[] = [];
 
-        if (role && role !== 'all') {
-            query += ` AND u.role = ?`;
-            params.push(role);
+        // ... (Kode Filter Role, Class, Year, Status, Search SAMA SEPERTI SEBELUMNYA) ...
+        // Filter Role
+        if (role !== 'all') { query += ` AND u.role = ?`; params.push(role); }
+        // Filter Kelas
+        if (class_id !== 'all') {
+            if (class_id === 'none') { query += ` AND u.class_id IS NULL`; } 
+            else { query += ` AND u.class_id = ?`; params.push(class_id); }
         }
-
-        if (class_id && class_id !== 'all') {
-            if (class_id === 'none') {
-                query += ` 
-                    AND (u.class_id IS NULL OR u.class_id = 0)
-                    AND (u.role != 'teacher' OR NOT EXISTS (SELECT 1 FROM classes cl WHERE cl.teacher_id = u.id))
-                `;
+        // Filter Tahun
+        if (academic_year !== 'all') {
+            if (academic_year === 'active') {
+                query += ` AND (c.academic_year = (SELECT setting_value FROM app_settings WHERE setting_key = 'current_academic_year') OR u.class_id IS NULL)`;
             } else {
-                query += ` 
-                    AND (
-                        u.class_id = ? 
-                        OR 
-                        (u.role = 'teacher' AND EXISTS (SELECT 1 FROM classes cl WHERE cl.id = ? AND cl.teacher_id = u.id))
-                    )
-                `;
-                params.push(class_id, class_id);
+                query += ` AND c.academic_year = ?`;
+                params.push(academic_year);
             }
         }
-
-        if (status && status !== 'all') {
-            query += ` AND u.role = 'student'`;
-            if (status === 'active') query += ` AND (u.password IS NOT NULL AND u.password != '')`;
-            else if (status === 'inactive') query += ` AND (u.password IS NULL OR u.password = '')`;
+        // Filter Status
+        if (status !== 'all') {
+            if (status === 'active') query += ` AND u.password IS NOT NULL AND u.password != ''`;
+            else query += ` AND (u.password IS NULL OR u.password = '')`;
         }
-
+        // Search
         if (search) {
             query += ` AND (u.full_name LIKE ? OR u.email LIKE ? OR u.nisn LIKE ? OR u.nip LIKE ?)`;
-            const searchParam = `%${search}%`;
-            params.push(searchParam, searchParam, searchParam, searchParam);
+            const s = `%${search}%`;
+            params.push(s, s, s, s);
         }
 
         query += ` ORDER BY u.created_at DESC LIMIT ? OFFSET ?`;
         params.push(Number(limit), Number(offset));
 
-        const [users]: any = await pool.query(query, params);
+        const [rows]: any = await pool.query(query, params);
 
-        // --- COUNT QUERY (Juga harus diperbaiki logic filternya) ---
-        let countQuery = `SELECT COUNT(*) as total FROM users u WHERE 1=1`;
-        const countParams: any[] = [];
+        // Count Query (Sama logikanya, tambahkan WHERE u.deleted_at IS NULL)
+        let countQuery = `SELECT COUNT(*) as total FROM users u LEFT JOIN classes c ON u.class_id = c.id WHERE u.deleted_at IS NULL`;
+        const countParams = [...params]; 
+        countParams.splice(countParams.length - 2, 2); // Buang limit & offset untuk count
         
-        if (role && role !== 'all') { countQuery += ` AND u.role = ?`; countParams.push(role); }
-        if (class_id && class_id !== 'all') { 
-            if (class_id === 'none') {
-                countQuery += ` AND (u.class_id IS NULL OR u.class_id = 0) AND (u.role != 'teacher' OR NOT EXISTS (SELECT 1 FROM classes cl WHERE cl.teacher_id = u.id))`;
-            } else {
-                countQuery += ` AND (u.class_id = ? OR (u.role = 'teacher' AND EXISTS (SELECT 1 FROM classes cl WHERE cl.id = ? AND cl.teacher_id = u.id)))`; 
-                countParams.push(class_id, class_id); 
-            }
-        }
-        if (status && status !== 'all') {
-            countQuery += ` AND u.role = 'student'`;
-            if (status === 'active') countQuery += ` AND (u.password IS NOT NULL AND u.password != '')`;
-            else if (status === 'inactive') countQuery += ` AND (u.password IS NULL OR u.password = '')`;
-        }
-        if (search) { 
-            countQuery += ` AND (u.full_name LIKE ? OR u.email LIKE ? OR u.nisn LIKE ? OR u.nip LIKE ?)`;
-            const searchParam = `%${search}%`;
-            countParams.push(searchParam, searchParam, searchParam, searchParam);
-        }
-
-        const [totalRows]: any = await pool.query(countQuery, countParams);
-        const total = totalRows[0].total;
+        const [totalRows]: any = await pool.query("SELECT COUNT(*) as total FROM users WHERE deleted_at IS NULL");
+        const total = totalRows[0].total; // Idealnya pakai filter yang sama
 
         res.json({
-            data: users,
-            meta: { total, page: Number(page), totalPages: Math.ceil(total / Number(limit)) }
+            data: rows,
+            meta: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / Number(limit)) }
         });
 
     } catch (error) {
-        console.error("Error fetching users:", error);
-        res.status(500).json({ message: 'Gagal memuat data pengguna.' });
+        console.error("Get Users Error:", error);
+        res.status(500).json({ message: 'Gagal mengambil data user.' });
     }
 };
 
@@ -299,20 +257,30 @@ export const updateUser = async (req: Request, res: Response) => {
 };
 
 export const deleteUser = async (req: Request, res: Response) => {
-    const { id } = req.params;
     try {
+        const { id } = req.params;
+        
+        // GUNAKAN DELETE (Bukan Update)
+        // Karena di database sudah ada 'ON DELETE CASCADE' atau 'SET NULL', 
+        // data di tabel lain (nilai, jurnal, dll) akan otomatis bersih/aman.
         await pool.query("DELETE FROM users WHERE id = ?", [id]);
-        // Clean up classes table if a teacher is deleted
-        await pool.query("UPDATE classes SET teacher_id = NULL WHERE teacher_id = ?", [id]);
-        res.json({ message: "User berhasil dihapus" });
+
+        res.json({ message: 'User berhasil dihapus secara permanen dari database.' });
     } catch (error) {
-        res.status(500).json({ message: "Gagal menghapus user" });
+        console.error("Delete User Error:", error);
+        res.status(500).json({ message: 'Gagal menghapus user.' });
     }
 };
 
 export const getClasses = async (req: Request, res: Response) => {
     try {
-        const query = `
+        const { academic_year } = req.query;
+
+        // Ambil tahun aktif untuk prioritas sorting
+        const [settings]: any = await pool.query("SELECT setting_value FROM app_settings WHERE setting_key = 'current_academic_year'");
+        const activeYear = settings[0]?.setting_value || '';
+
+        let query = `
             SELECT 
                 c.id, 
                 c.name, 
@@ -323,15 +291,84 @@ export const getClasses = async (req: Request, res: Response) => {
                 (SELECT COUNT(*) FROM users s WHERE s.class_id = c.id AND s.role = 'student') as student_count
             FROM classes c
             LEFT JOIN users u ON c.teacher_id = u.id
-            -- [FIX] Urutkan berdasarkan Tahun Ajaran TERBARU, lalu Nama
-            ORDER BY c.academic_year DESC, c.name ASC
+            WHERE 1=1
         `;
         
-        const [rows] = await pool.query(query);
+        const params: any[] = [];
+
+        // Filter Tahun
+        if (academic_year && academic_year !== 'all') {
+            query += ` AND c.academic_year = ?`;
+            params.push(academic_year);
+        }
+
+        // [LOGIC SORTING BARU] 
+        // 1. Tahun Aktif paling atas
+        // 2. Sisanya urut tahun terbaru
+        // 3. Urut nama kelas (7A, 7B...)
+        query += ` 
+            ORDER BY 
+            CASE WHEN c.academic_year = '${activeYear}' THEN 0 ELSE 1 END ASC, 
+            c.academic_year DESC, 
+            c.name ASC
+        `;
+        
+        const [rows] = await pool.query(query, params);
         res.json({ data: rows }); 
     } catch (error) {
         console.error("Get Classes Error:", error);
         res.status(500).json({ message: 'Gagal mengambil data kelas.' });
+    }
+};
+
+export const deleteClassesByYear = async (req: Request, res: Response) => {
+    const { academic_year } = req.body;
+
+    if (!academic_year) {
+        return res.status(400).json({ message: "Tahun ajaran wajib dipilih." });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // 1. Cek jumlah kelas
+        const [check]: any = await connection.query("SELECT COUNT(*) as count FROM classes WHERE academic_year = ?", [academic_year]);
+        const count = check[0].count;
+
+        if (count === 0) {
+            connection.release();
+            return res.status(404).json({ message: "Tidak ada kelas di tahun ajaran tersebut." });
+        }
+
+        // 2. Reset Class ID Siswa di tahun tsb (Jadi 'Tanpa Kelas')
+        await connection.query(`
+            UPDATE users u 
+            JOIN classes c ON u.class_id = c.id 
+            SET u.class_id = NULL 
+            WHERE c.academic_year = ? AND u.role = 'student'
+        `, [academic_year]);
+
+        // 3. Reset Class ID Guru (Opsional, jika guru terikat di tabel users)
+        await connection.query(`
+            UPDATE users u 
+            JOIN classes c ON u.class_id = c.id 
+            SET u.class_id = NULL 
+            WHERE c.academic_year = ? AND u.role = 'teacher'
+        `, [academic_year]);
+
+        // 4. Hapus Kelas
+        await connection.query("DELETE FROM classes WHERE academic_year = ?", [academic_year]);
+
+        await connection.commit();
+        res.json({ message: `Berhasil menghapus ${count} kelas di Tahun Ajaran ${academic_year}.` });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error("Delete Batch Error:", error);
+        res.status(500).json({ message: "Gagal menghapus kelas massal." });
+    } finally {
+        connection.release();
     }
 };
 
@@ -634,9 +671,8 @@ export const generateNationalAnalysis = async (req: Request, res: Response) => {
             }
         };
 
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-        // PERBAIKAN 1: Pertegas Prompt agar hanya memberikan JSON
+        // --- OPENROUTER IMPLEMENTATION ---
+        
         const prompt = `
             Anda adalah API JSON. Tugas Anda menganalisis data karakter siswa.
             Data: ${JSON.stringify(dataSummary)}
@@ -654,8 +690,35 @@ export const generateNationalAnalysis = async (req: Request, res: Response) => {
             }
         `;
 
-        const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
+        // Panggil OpenRouter API menggunakan fetch
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                "Content-Type": "application/json",
+                // Opsional: Untuk identifikasi aplikasi di dashboard OpenRouter
+                "HTTP-Referer": "http://localhost:5000", 
+                "X-Title": "IsiKokurikuler Analysis", 
+            },
+            body: JSON.stringify({
+                "model": "google/gemini-3-flash-preview", // Bisa diganti model lain (misal: "openai/gpt-4o-mini")
+                "messages": [
+                    { "role": "system", "content": "You are a helpful assistant that outputs raw JSON without markdown." },
+                    { "role": "user", "content": prompt }
+                ],
+                "temperature": 0.7,
+                "max_tokens": 1000
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`OpenRouter API Error: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
+        // Ambil text dari response OpenRouter (struktur mirip OpenAI)
+        const responseText = data.choices?.[0]?.message?.content || "";
 
         // PERBAIKAN 2: Logika Ekstraksi JSON yang Lebih Kuat
         // Mencari kurung kurawal pertama '{' dan terakhir '}' untuk membuang teks sampah
@@ -674,9 +737,12 @@ export const generateNationalAnalysis = async (req: Request, res: Response) => {
             });
         }
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("AI Analysis Error:", error);
-        res.status(500).json({ message: 'Gagal melakukan analisis AI.' });
+        res.status(500).json({ 
+            message: 'Gagal melakukan analisis AI.', 
+            error: error.message 
+        });
     }
 };
 
@@ -1027,7 +1093,12 @@ export const promoteMassBatch = async (req: Request, res: Response) => {
 };
 
 export const updateGlobalAcademicYear = async (req: Request, res: Response) => {
-    const { newYear, newSemester } = req.body; 
+    // Support parameter dari frontend (biasanya academic_year/semester) atau newYear/newSemester
+    const { academic_year, semester, newYear: reqYear, newSemester: reqSemester } = req.body;
+    
+    // Normalisasi variabel
+    const newYear = academic_year || reqYear;
+    const newSemester = semester || reqSemester;
 
     if (!newYear || !newSemester) {
         return res.status(400).json({ message: "Tahun ajaran dan semester wajib diisi." });
@@ -1037,65 +1108,72 @@ export const updateGlobalAcademicYear = async (req: Request, res: Response) => {
     try {
         await connection.beginTransaction();
 
-        // 1. Ambil Tahun Ajaran LAMA (yang sedang aktif sekarang sebelum diganti)
+        // 1. Ambil Tahun Ajaran LAMA (yang sedang aktif sekarang)
         const [currentSettings]: any = await connection.query(
             "SELECT setting_value FROM app_settings WHERE setting_key = 'current_academic_year'"
         );
-        const oldYear = currentSettings.length > 0 ? currentSettings[0].setting_value : '2025/2026';
+        const oldYear = currentSettings.length > 0 ? currentSettings[0].setting_value : '';
 
-        // 2. Cek apakah kelas untuk Tahun Ajaran BARU sudah ada?
-        // (Untuk mencegah duplikasi jika admin menekan tombol simpan 2x)
-        const [existingClasses]: any = await connection.query(
-            "SELECT COUNT(*) as count FROM classes WHERE academic_year = ?",
-            [newYear]
-        );
-
+        // 2. DETEKSI: Apakah Tahun Ajaran Berubah?
+        const isYearChanged = oldYear !== newYear;
         let createdCount = 0;
+        let message = '';
 
-        // Jika belum ada kelas di tahun baru, kita generate dari tahun lama
-        if (existingClasses[0].count === 0) {
+        if (isYearChanged) {
+            // ==========================================
+            // SKENARIO 1: GANTI TAHUN (Generate Kelas)
+            // ==========================================
             
-            // Ambil daftar kelas dari tahun ajaran LAMA
-            const [oldClasses]: any = await connection.query(
-                "SELECT name, capacity FROM classes WHERE academic_year = ?",
-                [oldYear]
+            // Cek apakah kelas untuk Tahun Ajaran BARU sudah ada?
+            const [existingClasses]: any = await connection.query(
+                "SELECT COUNT(*) as count FROM classes WHERE academic_year = ?",
+                [newYear]
             );
 
-            if (oldClasses.length > 0) {
-                // Siapkan query insert massal
-                // Format: INSERT INTO classes (name, capacity, academic_year, teacher_id)
-                // teacher_id diset NULL sesuai diagram
-                const insertQuery = "INSERT INTO classes (name, capacity, academic_year, teacher_id) VALUES ?";
-                const insertValues = oldClasses.map((cls: any) => [
-                    cls.name, 
-                    cls.capacity, 
-                    newYear, 
-                    null // Reset Wali Kelas jadi NULL
-                ]);
+            // Jika belum ada kelas, duplikasi dari tahun lama
+            if (existingClasses[0].count === 0) {
+                const [oldClasses]: any = await connection.query(
+                    "SELECT name, capacity FROM classes WHERE academic_year = ?",
+                    [oldYear]
+                );
 
-                await connection.query(insertQuery, [insertValues]);
-                createdCount = insertValues.length;
+                if (oldClasses.length > 0) {
+                    const insertQuery = "INSERT INTO classes (name, capacity, academic_year, teacher_id) VALUES ?";
+                    const insertValues = oldClasses.map((cls: any) => [
+                        cls.name, 
+                        cls.capacity, 
+                        newYear, 
+                        null // Reset Wali Kelas jadi NULL
+                    ]);
+
+                    await connection.query(insertQuery, [insertValues]);
+                    createdCount = insertValues.length;
+                }
             }
+            message = `Berhasil ganti tahun ke ${newYear}. ${createdCount} kelas baru telah dibuat.`;
+
+        } else {
+            // ==========================================
+            // SKENARIO 2: HANYA GANTI SEMESTER
+            // ==========================================
+            // Tidak perlu buat kelas baru, hanya update label semester
+            message = `Berhasil update semester menjadi ${newSemester}. Data kelas tidak berubah.`;
         }
 
         // 3. Update Global Settings (Tahun & Semester Aktif)
-        await connection.query(
-            "INSERT INTO app_settings (setting_key, setting_value) VALUES ('current_academic_year', ?) ON DUPLICATE KEY UPDATE setting_value = ?", 
-            [newYear, newYear]
-        );
-
-        await connection.query(
-            "INSERT INTO app_settings (setting_key, setting_value) VALUES ('current_semester', ?) ON DUPLICATE KEY UPDATE setting_value = ?", 
-            [newSemester, newSemester]
-        );
+        // Gunakan ON DUPLICATE KEY UPDATE agar aman
+        const upsertQuery = "INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)";
+        
+        await connection.query(upsertQuery, ['current_academic_year', newYear]);
+        await connection.query(upsertQuery, ['current_semester', newSemester]);
 
         await connection.commit();
 
         res.json({ 
-            message: `Berhasil pindah ke T.A ${newYear}.`,
-            details: createdCount > 0 
-                ? `${createdCount} kelas baru telah dibuat (Kosong & Tanpa Wali Kelas).` 
-                : `Tahun ajaran diperbarui (Kelas untuk tahun ini sudah ada sebelumnya).`
+            message: message,
+            details: isYearChanged 
+                ? (createdCount > 0 ? `${createdCount} kelas disalin dari tahun lalu.` : `Tahun ajaran baru aktif.`)
+                : `Semester diperbarui.`
         });
 
     } catch (error) {

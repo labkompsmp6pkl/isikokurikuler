@@ -63,9 +63,11 @@ const deleteUser = async (id: number) => {
     return response.data;
 };
 
-// --- 3. Class Management (CRUD Kelas) ---
-const getClasses = async () => {
-    const response = await axios.get(`${API_URL}/classes`, getAuthHeaders());
+const getClasses = async (params?: any) => {
+    const response = await axios.get(`${API_URL}/classes`, { 
+        ...getAuthHeaders(),
+        params // Kirim params (academic_year) ke backend
+    });
     return response.data;
 };
 
@@ -96,6 +98,11 @@ const getClassDetail = async (id: number) => {
 
 const getTeachersList = async () => {
     const response = await axios.get(`${API_URL}/teachers-list`, getAuthHeaders());
+    return response.data;
+};
+
+const deleteClassesBatch = async (academicYear: string) => {
+    const response = await axios.post(`${API_URL}/classes/delete-batch`, { academic_year: academicYear }, getAuthHeaders());
     return response.data;
 };
 
@@ -230,6 +237,7 @@ const adminService = {
     resetAllClasses,
     promoteBatch,
     moveStudents,
+    deleteClassesBatch,
     
     // Settings & Academic Year
     getAppSettings,          // New: Ambil {tahun, semester}

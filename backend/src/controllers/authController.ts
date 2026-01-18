@@ -124,95 +124,91 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
-// --- 2. REGISTRASI MANUAL ---
 export const register = async (req: Request, res: Response) => {
-  const { role, fullName, email, password, nisn, classId, nip, whatsappNumber } = req.body;
-  const connection = await pool.getConnection();
+  const { role, fullName, email, password, nisn, nip, whatsappNumber, classId, contributor_type, agency_name } = req.body;
 
   try {
-    await connection.beginTransaction();
+      // 1. Cek apakah user sudah ada (termasuk yang sudah dihapus/soft-deleted)
+      const [existingUsers]: any = await pool.query(
+          `SELECT * FROM users WHERE email = ? OR (nisn IS NOT NULL AND nisn = ?) OR (nip IS NOT NULL AND nip = ?)`,
+          [email, nisn || '', nip || '']
+      );
 
-    // Validasi Field Wajib Dasar
-    if (!email || !fullName || !role) {
-      throw new Error("Data pendaftaran tidak lengkap (Nama, Email, Role).");
-    }
+      if (existingUsers.length > 0) {
+          const existing = existingUsers[0];
+          
+          // SKENARIO A: User masih aktif (belum dihapus)
+          if (!existing.deleted_at) {
+              return res.status(400).json({ message: 'Email, NISN, atau NIP sudah terdaftar dan aktif.' });
+          }
 
-    // --- VALIDASI PASSWORD KHUSUS ---
-    // Password WAJIB jika role BUKAN student
-    if (role !== 'student') {
-        if (!password || password.length < 6) {
-            throw new Error("Password wajib diisi minimal 6 karakter.");
-        }
-    }
-    // Jika role student, password boleh kosong (nanti jadi NULL)
-
-    const [existing]: any = await connection.query('SELECT id FROM users WHERE email = ?', [email]);
-    if (existing.length > 0) throw new Error("Email sudah digunakan.");
-
-    // Hash Password (Hanya jika ada password)
-    let hashedPassword = null;
-    if (password) {
-        hashedPassword = await bcrypt.hash(password, 10);
-    }
-
-    // Insert ke Database
-    const [result]: any = await connection.query(
-      `INSERT INTO users (full_name, email, password, role) VALUES (?, ?, ?, ?)`,
-      [fullName.trim(), email, hashedPassword, role]
-    );
-    const newUserId = result.insertId;
-
-    // --- ROLE SPECIFIC UPDATES ---
-    if (role === 'student') {
-      if (!nisn || !classId) throw new Error("NISN dan Kelas wajib diisi.");
-      
-      const [checkNisn]: any = await connection.query('SELECT id FROM users WHERE nisn = ?', [nisn]);
-      if (checkNisn.length > 0) throw new Error("NISN sudah terdaftar.");
-      
-      await connection.query('UPDATE users SET nisn = ?, class_id = ? WHERE id = ?', [nisn, classId, newUserId]);
-
-    } else if (role === 'teacher') {
-      if (!nip) throw new Error("NIP wajib diisi.");
-      
-      await connection.query('UPDATE users SET nip = ?, class_id = ? WHERE id = ?', [nip, classId || null, newUserId]);
-
-      if (classId) {
-         // Logic replace wali kelas
-         await connection.query("UPDATE users SET class_id = NULL WHERE class_id = ? AND role = 'teacher' AND id != ?", [classId, newUserId]);
-         await connection.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [newUserId, classId]);
+          // SKENARIO B: User sudah dihapus (ada di sampah/soft-deleted)
+          // Kita HAPUS PERMANEN data lama agar data baru bisa masuk tanpa error duplikat
+          await pool.query("DELETE FROM users WHERE id = ?", [existing.id]);
       }
 
-    } else if (role === 'parent') {
-      if (!whatsappNumber) throw new Error("Nomor WhatsApp wajib diisi.");
-      await connection.query('UPDATE users SET whatsapp_number = ? WHERE id = ?', [whatsappNumber, newUserId]);
+      // 2. Hash Password (jika ada)
+      let hashedPassword = null;
+      if (password) {
+          const salt = await bcrypt.genSalt(10);
+          hashedPassword = await bcrypt.hash(password, salt);
+      }
 
-    } else if (role === 'contributor') {
-      if (!nip) throw new Error("NIP/Identitas wajib diisi.");
-      await connection.query('UPDATE users SET nip = ? WHERE id = ?', [nip, newUserId]);
-    }
+      // 3. Insert User Baru
+      const [result]: any = await pool.query(
+          `INSERT INTO users (
+              full_name, email, password, role, 
+              nisn, nip, whatsapp_number, class_id, 
+              contributor_type, agency_name
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+              fullName, email, hashedPassword, role, 
+              nisn || null, nip || null, whatsappNumber || null, classId || null,
+              contributor_type || null, agency_name || null
+          ]
+      );
 
-    await connection.commit();
+      const newUserId = result.insertId;
 
-    // Buat token login otomatis (Kecuali siswa tanpa password, mungkin tidak perlu auto-login atau login terbatas)
-    // Untuk simplifikasi, kita tetap berikan token agar bisa redirect ke halaman "Menunggu Aktivasi" di frontend jika perlu
-    const token = jwt.sign(
-      { id: newUserId, role, name: fullName },
-      process.env.JWT_SECRET as string,
-      { expiresIn: '1d' }
-    );
+      // 4. Logika Khusus Role (Wali Kelas)
+      if (role === 'teacher' && classId) {
+          // Cek apakah kelas sudah punya wali
+          const [classCheck]: any = await pool.query("SELECT teacher_id FROM classes WHERE id = ?", [classId]);
+          if (classCheck.length > 0 && !classCheck[0].teacher_id) {
+              await pool.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [newUserId, classId]);
+          }
+      }
 
-    res.status(201).json({
-      message: "Registrasi berhasil",
-      token,
-      user: { id: newUserId, role, fullName, email }
-    });
+      // 5. Response
+      const [newUser]: any = await pool.query("SELECT id, full_name, email, role FROM users WHERE id = ?", [newUserId]);
+
+      res.status(201).json({
+          message: 'Registrasi berhasil',
+          user: newUser[0]
+      });
 
   } catch (error: any) {
-    await connection.rollback();
-    console.error("Manual Register Error:", error);
-    res.status(400).json({ message: error.message });
-  } finally {
-    connection.release();
+      console.error("Register Error:", error);
+      res.status(500).json({ message: 'Terjadi kesalahan server saat registrasi.' });
+  }
+};
+
+export const getPublicSettings = async (req: Request, res: Response) => {
+  try {
+      const [rows]: any = await pool.query("SELECT setting_value FROM app_settings WHERE setting_key = 'current_academic_year'");
+      const currentYear = rows.length > 0 ? rows[0].setting_value : '2025/2026';
+      
+      // Ambil semester juga jika perlu
+      const [semRows]: any = await pool.query("SELECT setting_value FROM app_settings WHERE setting_key = 'current_semester'");
+      const currentSemester = semRows.length > 0 ? semRows[0].setting_value : 'Ganjil';
+
+      res.json({ 
+          current_academic_year: currentYear,
+          current_semester: currentSemester
+      });
+  } catch (error) {
+      console.error("Public Settings Error:", error);
+      res.status(500).json({ message: 'Gagal mengambil pengaturan publik.' });
   }
 };
 

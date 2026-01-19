@@ -27,7 +27,7 @@ router.post('/', upsertCharacterLog as RequestHandler);
 // ^ Controller upsertCharacterLog akan cek: Jika Alumni -> Return 403 (Data Terkunci)
 
 // Fitur Dashboard & Misi
-router.get('/dashboard', getStudentDashboardData as RequestHandler);
+router.get('/dashboard', getStudentDashboardData as unknown as RequestHandler);
 router.get('/missions', getStudentMissions as RequestHandler);
 router.post('/missions/complete', completeMission as RequestHandler);
 // ^ Controller completeMission akan cek: Jika Alumni -> Return 403 (Tidak bisa selesaikan misi)

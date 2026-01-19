@@ -1,27 +1,29 @@
-import React, { useState, useRef, useEffect } from 'react';
-import toast from 'react-hot-toast';
+import React, { useState, useEffect } from 'react';
 import { 
+    Save, 
     Sparkles, 
     FileText, 
-    Printer, 
-    RefreshCw, 
-    User, 
-    ChevronRight, 
-    CalendarRange, 
-    Ban,
-    Users,
-    Loader2,
-    Download
+    Download, 
+    Users, 
+    Loader2, 
+    Plus, 
+    Trash2, 
+    AlertCircle,
+    Info
 } from 'lucide-react';
-import jsPDF from 'jspdf';
 import teacherService from '../../../services/teacherService';
-import StudentSelectorView from './StudentSelectorView';
+import toast from 'react-hot-toast';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable'; // [FIX] Import default function
 
-interface AIReportViewProps {
+// --- TIPE DATA & INTERFACE ---
+
+interface Props {
     students: any[];
-    teacherClass?: string;
+    teacherClass: string;
     teacherName: string;
     teacherNip: string;
+    classId: number;
 }
 
 interface ParentOption {
@@ -30,592 +32,681 @@ interface ParentOption {
     relationship: string;
 }
 
-const AIReportView: React.FC<AIReportViewProps> = ({ students, teacherClass, teacherName, teacherNip }) => {
-    const printRef = useRef<HTMLDivElement>(null);
-    const [config, setConfig] = useState({ studentId: '', startDate: '', endDate: '' });
-    const [result, setResult] = useState<any>(null);
-    const [isGenerating, setIsGenerating] = useState(false);
-    
-    // State untuk kontrol tampilan Selector & Range Data
-    const [isSelectorOpen, setIsSelectorOpen] = useState(false);
-    const [dataRange, setDataRange] = useState<{ start: string, end: string, count: number } | null>(null);
-    const [isCheckingData, setIsCheckingData] = useState(false);
+interface ExtracurricularData {
+    name: string;
+    predikat: string;
+}
 
-    // State untuk Penanda Tangan Orang Tua
+interface AttendanceData {
+    sakit: number;
+    izin: number;
+    alpha: number;
+}
+
+interface AIResultData {
+    kokurikuler_report: string;       
+    teacher_notes_suggestion: string; 
+}
+
+const AIReportView: React.FC<Props> = ({ 
+    students, 
+    teacherClass, 
+    teacherName, 
+    teacherNip, 
+    classId 
+}) => {
+    // --- STATE UTAMA ---
+    const [selectedStudent, setSelectedStudent] = useState<any>(null);
+    const [comparisonMode, setComparisonMode] = useState('last_semester');
+    
+    // State Loading & Proses
+    const [loadingAI, setLoadingAI] = useState(false);
+    const [loadingData, setLoadingData] = useState(false);
+    const [loadingParents, setLoadingParents] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // --- STATE DATA FORM RAPOR ---
+    const [attendance, setAttendance] = useState<AttendanceData>({ 
+        sakit: 0, 
+        izin: 0, 
+        alpha: 0 
+    });
+    
+    const [extracurricular, setExtracurricular] = useState<ExtracurricularData[]>([
+        { name: '', predikat: '' }
+    ]);
+    
+    const [aiResult, setAiResult] = useState<AIResultData>({ 
+        kokurikuler_report: '', 
+        teacher_notes_suggestion: '' 
+    });
+    
+    const [manualNote, setManualNote] = useState('');
+
+    // --- STATE PENANDA TANGAN ---
     const [parents, setParents] = useState<ParentOption[]>([]);
     const [selectedParentName, setSelectedParentName] = useState<string>('');
-    const [loadingParents, setLoadingParents] = useState(false);
 
-    const selectedStudent = students.find(s => String(s.id) === config.studentId);
+    // --- SETTING AKADEMIK ---
+    const ACADEMIC_YEAR = '2025/2026';
+    const SEMESTER = 'Genap';
 
-    // --- EFFECT: Cek Data & Load Parents Saat Siswa Dipilih ---
+    // ==================================================================================
+    // 1. USE EFFECT: LOAD DATA SAAT SISWA DIPILIH
+    // ==================================================================================
     useEffect(() => {
-        const checkStudentData = async () => {
-            if (!config.studentId) {
-                setDataRange(null);
-                setParents([]);
-                setSelectedParentName('');
-                return;
-            }
-
-            setIsCheckingData(true);
-            setLoadingParents(true);
-
-            try {
-                // 1. Cek Range Data (History)
-                const logs = await teacherService.getClassHistory(config.studentId);
-                
-                if (logs && logs.length > 0) {
-                    const sortedLogs = logs.sort((a: any, b: any) => new Date(a.log_date).getTime() - new Date(b.log_date).getTime());
-                    const firstDate = sortedLogs[0].log_date;
-                    const lastDate = sortedLogs[sortedLogs.length - 1].log_date;
-                    
-                    setDataRange({
-                        start: firstDate,
-                        end: lastDate,
-                        count: logs.length
-                    });
-                } else {
-                    setDataRange(null);
-                }
-
-                // 2. Ambil Data Orang Tua untuk Tanda Tangan
-                try {
-                    const parentsData = await teacherService.getStudentParents(parseInt(config.studentId));
-                    setParents(parentsData);
-                    if (parentsData.length > 0) {
-                        setSelectedParentName(parentsData[0].full_name); 
-                    } else {
-                        setSelectedParentName('');
-                    }
-                } catch (e) {
-                    console.warn("Gagal load parents, lanjut tanpa parent data");
-                }
-
-            } catch (error) {
-                console.error("Gagal cek data siswa", error);
-                setDataRange(null);
-            } finally {
-                setIsCheckingData(false);
-                setLoadingParents(false);
-            }
-        };
-
-        checkStudentData();
-    }, [config.studentId]);
-
-    const handleGenerate = async () => {
-        // [FIX] Tambahkan ID 'form-warning' agar toast warning tidak menumpuk
-        if (!config.studentId || !config.startDate || !config.endDate) {
-            return toast.error('Lengkapi data siswa dan periode tanggal.', { id: 'form-warning' });
+        if (selectedStudent) {
+            loadStudentReportData(selectedStudent.id);
+            loadStudentParents(selectedStudent.id);
+        } else {
+            resetForm();
         }
-        setIsGenerating(true);
-        // [INFO] Loading sudah menggunakan ID, jadi aman
-        const toastId = toast.loading('Kecerdasan Buatan sedang bekerja...', { id: 'ai-process' });
-        
+    }, [selectedStudent]);
+
+    const resetForm = () => {
+        setAttendance({ sakit: 0, izin: 0, alpha: 0 });
+        setExtracurricular([{ name: '', predikat: '' }]);
+        setAiResult({ kokurikuler_report: '', teacher_notes_suggestion: '' });
+        setManualNote('');
+        setParents([]);
+        setSelectedParentName('');
+    };
+
+    // ==================================================================================
+    // 2. API CALLS (LOAD DATA)
+    // ==================================================================================
+
+    const loadStudentReportData = async (studentId: number) => {
+        setLoadingData(true);
         try {
-            const res = await teacherService.generateReport({
-                studentId: parseInt(config.studentId),
-                startDate: config.startDate,
-                endDate: config.endDate
+            const res = await teacherService.getStudentReportData({ 
+                studentId, 
+                academicYear: ACADEMIC_YEAR, 
+                semester: SEMESTER 
             });
-            setResult(res);
-            toast.success('Analisis AI Selesai!', { icon: '✨', id: toastId });
-        } catch (err) {
-            toast.error('Gagal menyusun analisis AI.', { id: toastId });
+
+            if (res) {
+                setAttendance({ 
+                    sakit: res.attendance_sakit || 0, 
+                    izin: res.attendance_izin || 0, 
+                    alpha: res.attendance_alpha || 0 
+                });
+                
+                const eskulData = res.extracurricular && Array.isArray(res.extracurricular) && res.extracurricular.length > 0 
+                    ? res.extracurricular 
+                    : [{ name: '', predikat: '' }];
+                setExtracurricular(eskulData);
+
+                setManualNote(res.teacher_notes || '');
+            } else {
+                setAttendance({ sakit: 0, izin: 0, alpha: 0 });
+                setExtracurricular([{ name: '', predikat: '' }]);
+                setManualNote('');
+            }
+        } catch (error) {
+            console.error("Gagal memuat data rapor:", error);
+            toast.error("Gagal menyinkronkan data rapor siswa.");
         } finally {
-            setIsGenerating(false);
+            setLoadingData(false);
         }
     };
 
-    const handlePrint = () => window.print();
+    const loadStudentParents = async (studentId: number) => {
+        setLoadingParents(true);
+        try {
+            const data = await teacherService.getStudentParents(studentId);
+            setParents(data);
+            if (data.length > 0) {
+                setSelectedParentName(data[0].full_name);
+            } else {
+                setSelectedParentName('');
+            }
+        } catch (error) {
+            console.error("Gagal memuat ortu:", error);
+        } finally {
+            setLoadingParents(false);
+        }
+    };
 
-    // [BARU] Generate PDF Resmi, Berwarna, & Ada Logo
-    const generatePDF = () => {
-        if (!result || !selectedStudent) return;
+    // ==================================================================================
+    // 3. HANDLERS (SAVE, AI, PDF)
+    // ==================================================================================
 
-        // [FIX] Tambahkan toast loading dengan ID
-        const toastId = toast.loading("Sedang membuat PDF...", { id: 'pdf-gen' });
-
-        const doc = new jsPDF();
-        const dateStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    const handleSaveDraft = async () => {
+        if (!selectedStudent) return;
         
-        // --- LOGO & KOP SURAT ---
-        const img = new Image();
-        img.src = '/logo-smpn6.png'; 
+        setIsSaving(true);
+        const toastId = toast.loading("Menyimpan draft rapor...");
         
-        img.onload = () => {
-            try {
-                // Gambar Logo (x, y, width, height)
-                doc.addImage(img, 'PNG', 20, 10, 20, 20); 
+        try {
+            const cleanEskul = extracurricular.filter(ex => ex.name.trim() !== '');
 
-                // Text Kop Surat
-                doc.setTextColor(0, 0, 0); // Hitam
+            await teacherService.saveReportData({
+                studentId: selectedStudent.id,
+                classId,
+                academicYear: ACADEMIC_YEAR,
+                semester: SEMESTER,
+                extracurricular: cleanEskul,
+                attendance,
+                teacherNotes: manualNote
+            });
+            
+            toast.success("Data rapor berhasil disimpan!", { id: toastId });
+        } catch (e) {
+            console.error(e);
+            toast.error("Gagal menyimpan data.", { id: toastId });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleGenerateAI = async () => {
+        if (!selectedStudent) return toast.error("Pilih siswa terlebih dahulu");
+        
+        setLoadingAI(true);
+        const toastId = toast.loading("AI sedang menganalisis & menyusun laporan...", { id: 'ai-gen' });
+        
+        try {
+            const res = await teacherService.generateReport({
+                studentId: selectedStudent.id,
+                classId,
+                semester: SEMESTER,
+                academicYear: ACADEMIC_YEAR,
+                comparisonMode
+            });
+            
+            let result: AIResultData;
+            if (typeof res.result === 'string') {
+                result = { 
+                    kokurikuler_report: res.result, 
+                    teacher_notes_suggestion: "" 
+                };
+            } else {
+                result = res.result;
+            }
+
+            setAiResult(result);
+            
+            if (!manualNote && result.teacher_notes_suggestion) {
+                setManualNote(result.teacher_notes_suggestion);
+            }
+
+            toast.success("Laporan Kokurikuler Selesai!", { id: toastId, icon: '✨' });
+        } catch (e) {
+            console.error(e);
+            toast.error("Gagal generate analisis AI. Coba lagi nanti.", { id: toastId });
+        } finally {
+            setLoadingAI(false);
+        }
+    };
+
+    // --- PDF GENERATION LOGIC ---
+    const handleDownloadPDF = () => {
+        if (!selectedStudent) return;
+        const toastId = toast.loading("Memproses PDF...");
+        
+        try {
+            const doc: any = new jsPDF();
+            
+            const img = new Image();
+            img.src = '/logo-smpn6.png'; 
+            
+            img.onload = () => {
+                // --- KOP SURAT ---
+                doc.addImage(img, 'PNG', 20, 10, 20, 20);
+                
+                doc.setFont('helvetica', 'bold');
                 doc.setFontSize(16);
-                doc.setFont("helvetica", "bold");
-                doc.text("SMP NEGERI 6 PEKALONGAN", 105, 20, { align: "center" });
+                doc.text("SMP NEGERI 6 PEKALONGAN", 105, 20, { align: 'center' });
                 
                 doc.setFontSize(10);
-                doc.setFont("helvetica", "normal");
-                doc.text("LAPORAN PEMBIASAAN KARAKTER SISWA (AI ANALYSIS)", 105, 26, { align: "center" });
+                doc.setFont('helvetica', 'normal');
+                doc.text("LAPORAN PENGEMBANGAN KARAKTER (RAPOR KOKURIKULER)", 105, 26, { align: 'center' });
                 
                 doc.setFontSize(9);
-                doc.setTextColor(100, 100, 100); // Abu-abu
-                doc.text("Jl. Teratai No.31, Poncol, Kota Pekalongan, Jawa Tengah 51122", 105, 31, { align: "center" });
+                doc.setTextColor(100);
+                doc.text("Jl. Teratai No.31, Poncol, Kota Pekalongan, Jawa Tengah 51122", 105, 31, { align: 'center' });
                 
-                // Garis Pembatas (Double Line Effect)
-                doc.setDrawColor(0, 0, 0);
+                doc.setDrawColor(0);
                 doc.setLineWidth(0.5);
                 doc.line(20, 36, 190, 36);
                 doc.setLineWidth(0.1);
                 doc.line(20, 37, 190, 37);
 
-                // --- INFO SISWA (Box Style) ---
-                let currentY = 48;
+                // --- IDENTITAS SISWA ---
+                doc.setTextColor(0);
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'bold');
                 
-                // Background Box Tipis
-                doc.setFillColor(245, 247, 255); // Biru sangat muda
+                doc.setFillColor(248, 250, 252);
                 doc.rect(20, 42, 170, 28, 'F');
+                doc.setDrawColor(226, 232, 240);
+                doc.rect(20, 42, 170, 28, 'S');
 
-                doc.setTextColor(0, 0, 0);
+                const startYIdentitas = 50;
+                doc.text("Nama Siswa", 25, startYIdentitas); 
+                doc.text(`:  ${selectedStudent.full_name}`, 60, startYIdentitas);
+                doc.text("Nomor Induk / NISN", 25, startYIdentitas + 6); 
+                doc.text(`:  ${selectedStudent.nisn || '-'}`, 60, startYIdentitas + 6);
+                doc.text("Kelas", 25, startYIdentitas + 12);      
+                doc.text(`:  ${teacherClass}`, 60, startYIdentitas + 12);
+                doc.text("Semester", 25, startYIdentitas + 18);   
+                doc.text(`:  ${SEMESTER} ${ACADEMIC_YEAR}`, 60, startYIdentitas + 18);
+
+                let y = 85; 
+
+                // --- BAGIAN A: LAPORAN KOKURIKULER ([FIX] Teks Judul Diperbaiki) ---
+                doc.setFontSize(11);
+                doc.setFont('helvetica', 'bold');
+                doc.text("A. LAPORAN KOKURIKULER", 20, y);
+                doc.setLineWidth(0.5);
+                doc.line(20, y+1, 190, y+1);
+                y += 8;
+                
                 doc.setFontSize(10);
-                doc.setFont("helvetica", "bold");
-                
-                doc.text("Nama Siswa", 25, 50);
-                doc.text("Kelas", 25, 56);
-                doc.text("Periode", 25, 62);
+                doc.setFont('helvetica', 'normal');
+                const reportText = doc.splitTextToSize(aiResult.kokurikuler_report || "Belum ada laporan.", 170);
+                doc.text(reportText, 20, y);
+                y += (reportText.length * 5) + 10;
 
-                doc.setFont("helvetica", "normal");
-                doc.text(`:  ${selectedStudent.full_name}`, 60, 50);
-                doc.text(`:  ${teacherClass || '-'}`, 60, 56);
-                doc.text(`:  ${new Date(config.startDate).toLocaleDateString('id-ID')} s/d ${new Date(config.endDate).toLocaleDateString('id-ID')}`, 60, 62);
-                
-                currentY = 80;
+                // --- BAGIAN B: KEGIATAN EKSTRAKULIKULER ---
+                if (y > 220) { doc.addPage(); y = 20; }
 
-                // --- KONTEN ANALISIS ---
-                const addSection = (title: string, content: string, color: [number, number, number]) => {
-                    // Judul Section Berwarna
-                    doc.setFont("helvetica", "bold");
-                    doc.setFontSize(12);
-                    doc.setTextColor(color[0], color[1], color[2]); 
-                    doc.text(title, 20, currentY);
-                    
-                    // Garis Bawah Judul
-                    doc.setDrawColor(color[0], color[1], color[2]);
-                    doc.setLineWidth(0.5);
-                    doc.line(20, currentY + 1, 190, currentY + 1);
+                doc.setFontSize(11);
+                doc.setFont('helvetica', 'bold');
+                doc.text("B. KEGIATAN EKSTRAKULIKULER", 20, y);
+                doc.line(20, y+1, 190, y+1);
+                y += 8;
 
-                    currentY += 8;
-                    
-                    // Isi Konten
-                    doc.setFont("helvetica", "normal");
+                const eskulBody = extracurricular
+                    .filter(ex => ex.name.trim() !== '')
+                    .map(ex => [ex.name, ex.predikat || '-']);
+
+                if (eskulBody.length > 0) {
+                    // [FIX] Menggunakan autoTable(doc, ...)
+                    autoTable(doc, {
+                        startY: y,
+                        head: [['Nama Kegiatan', 'Predikat / Keterangan']],
+                        body: eskulBody,
+                        margin: { left: 20 },
+                        theme: 'grid',
+                        headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
+                        styles: { fontSize: 10, cellPadding: 3 },
+                        columnStyles: { 0: { cellWidth: 110 }, 1: { cellWidth: 60 } }
+                    });
+                    // [FIX] Mengakses lastAutoTable dari properti doc
+                    y = (doc as any).lastAutoTable.finalY + 10;
+                } else {
+                    doc.setFont('helvetica', 'italic');
                     doc.setFontSize(10);
-                    doc.setTextColor(0, 0, 0); // Kembali hitam untuk teks
-                    const splitText = doc.splitTextToSize(content || "-", 170);
-                    doc.text(splitText, 20, currentY);
-                    currentY += splitText.length * 5 + 10; // Spasi antar paragraf
-                };
-
-                // 1. Ringkasan (Warna Orange Tua)
-                addSection("I. Ringkasan Eksekutif", result.executive_summary, [234, 88, 12]); 
-
-                // 2. Perkembangan (Warna Biru)
-                addSection("II. Perkembangan Karakter", result.character_progress, [37, 99, 235]);
-
-                // 3. Catatan (Warna Ungu)
-                doc.setFont("helvetica", "bold");
-                doc.setFontSize(12);
-                doc.setTextColor(124, 58, 237); // Ungu
-                doc.text("III. Catatan Wali Kelas", 20, currentY);
-                doc.setDrawColor(124, 58, 237);
-                doc.line(20, currentY + 1, 190, currentY + 1);
-                currentY += 8;
-
-                doc.setFont("helvetica", "italic");
-                doc.setFontSize(10);
-                doc.setTextColor(50, 50, 50); // Abu gelap
-                
-                // Box Quote untuk Catatan
-                const narrative = doc.splitTextToSize(`"${result.report_narrative}"`, 160);
-                
-                // Background Box Quote
-                const boxHeight = narrative.length * 5 + 6;
-                doc.setFillColor(250, 245, 255); // Ungu sangat muda
-                doc.rect(20, currentY - 4, 170, boxHeight, 'F');
-                
-                // Garis Kiri Quote
-                doc.setDrawColor(124, 58, 237);
-                doc.setLineWidth(1);
-                doc.line(20, currentY - 4, 20, currentY + boxHeight - 4);
-
-                doc.text(narrative, 25, currentY); // Indent text
-                currentY += boxHeight + 15;
-
-                // --- TANDA TANGAN (AUTO PAGE BREAK IF NEEDED) ---
-                if (currentY > 230) {
-                    doc.addPage();
-                    currentY = 40;
+                    doc.setTextColor(100);
+                    doc.text("- Tidak ada data ekstrakulikuler -", 25, y);
+                    y += 15;
+                    doc.setTextColor(0);
                 }
 
-                doc.setTextColor(0, 0, 0); // Hitam
-                doc.setFont("helvetica", "normal");
-                
-                // Kiri: Orang Tua
-                doc.text("Mengetahui,", 20, currentY);
-                doc.text("Orang Tua / Wali", 20, currentY + 5);
-                
-                // Kanan: Guru
-                doc.text(`Pekalongan, ${dateStr}`, 140, currentY);
-                doc.text("Wali Kelas", 140, currentY + 5);
+                // --- BAGIAN C: KETIDAKHADIRAN ---
+                if (y > 230) { doc.addPage(); y = 20; }
 
-                // Space Tanda Tangan
-                currentY += 30;
+                doc.setFontSize(11);
+                doc.setFont('helvetica', 'bold');
+                doc.text("C. KETIDAKHADIRAN", 20, y);
+                doc.line(20, y+1, 190, y+1);
+                y += 8;
 
-                // Nama Penanda Tangan
-                doc.setFont("helvetica", "bold");
+                // [FIX] Menggunakan autoTable(doc, ...)
+                autoTable(doc, {
+                    startY: y,
+                    head: [['Keterangan', 'Jumlah Hari']],
+                    body: [
+                        ['Sakit', `${attendance.sakit} Hari`],
+                        ['Izin', `${attendance.izin} Hari`],
+                        ['Tanpa Keterangan', `${attendance.alpha} Hari`],
+                    ],
+                    margin: { left: 20 },
+                    theme: 'grid',
+                    tableWidth: 100,
+                    headStyles: { fillColor: [55, 65, 81] }
+                });
+                y = (doc as any).lastAutoTable.finalY + 10;
+
+                // --- BAGIAN D: CATATAN WALI KELAS ([FIX] Teks Judul Diperbaiki) ---
+                if (y > 220) { doc.addPage(); y = 20; }
+
+                doc.setFontSize(11);
+                doc.setFont('helvetica', 'bold');
+                doc.text("D. CATATAN WALI KELAS", 20, y);
+                doc.line(20, y+1, 190, y+1);
+                y += 8;
+
+                doc.setFont('helvetica', 'italic');
+                doc.setFontSize(10);
+                const notes = doc.splitTextToSize(manualNote || "Tetap semangat dan tingkatkan prestasimu!", 160);
                 
-                // Gunakan nama orang tua yang dipilih
-                const finalParentName = selectedParentName || "..........................";
-                doc.text(`( ${finalParentName} )`, 20, currentY);
+                const boxHeight = (notes.length * 5) + 10;
+                doc.setFillColor(250, 250, 250);
+                doc.rect(20, y-4, 170, boxHeight, 'F');
+                doc.setDrawColor(200);
+                doc.rect(20, y-4, 170, boxHeight, 'S'); 
+                doc.text(notes, 25, y);
+                y += boxHeight + 20;
+
+                // --- TANDA TANGAN ---
+                if (y > 230) { doc.addPage(); y = 30; }
                 
-                doc.text(`( ${teacherName} )`, 140, currentY);
+                const dateStr = new Date().toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'});
+                
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(10);
+
+                doc.text("Mengetahui,", 20, y);
+                doc.text("Orang Tua / Wali,", 20, y+5);
+                
+                doc.text(`Pekalongan, ${dateStr}`, 140, y);
+                doc.text("Wali Kelas,", 140, y + 5);
+                
+                doc.setFont('helvetica', 'bold');
+                const parentName = selectedParentName || "..........................";
+                
+                y += 30; 
+
+                doc.text(`( ${parentName} )`, 20, y);
+                doc.text(`( ${teacherName} )`, 140, y);
                 
                 doc.setFontSize(9);
-                doc.setFont("helvetica", "normal");
-                doc.text(`NIP. ${teacherNip}`, 140, currentY + 5);
+                doc.setFont('helvetica', 'normal');
+                doc.text(`NIP. ${teacherNip}`, 140, y + 5);
 
-                doc.save(`Rapor_Karakter_${selectedStudent.full_name}.pdf`);
-                
-                // [FIX] Update toast sukses menggunakan ID yang sama
+                doc.save(`Rapor_${selectedStudent.full_name.replace(/\s+/g, '_')}.pdf`);
                 toast.success("PDF berhasil diunduh!", { id: toastId });
-                
-            } catch (err) {
-                console.error(err);
-                toast.error("Gagal membuat PDF", { id: toastId });
-            }
-        };
+            };
 
-        // Fallback jika gambar gagal load
-        img.onerror = () => {
-            toast.error("Gagal memuat logo sekolah.", { id: toastId });
-        };
-    };
+            img.onerror = () => {
+                toast.error("Gagal memuat logo sekolah.", { id: toastId });
+            };
 
-    const handleStudentSelect = (id: string) => {
-        setConfig({ ...config, studentId: id, startDate: '', endDate: '' });
-        setIsSelectorOpen(false);
-        // [FIX] Tambahkan ID 'select-student' agar tidak menumpuk saat pilih cepat
-        toast.success('Siswa dipilih', { icon: '👤', duration: 1500, id: 'select-student' });
-    };
-
-    const applyDataRange = () => {
-        if (dataRange) {
-            setConfig(prev => ({ ...prev, startDate: dataRange.start, endDate: dataRange.end }));
-            // [FIX] Tambahkan ID 'date-range'
-            toast.success('Tanggal disesuaikan', { icon: '📅', id: 'date-range' });
+        } catch (err) {
+            console.error(err);
+            toast.error("Gagal membuat PDF", { id: toastId });
         }
     };
 
-    // --- LOGIC DISPLAY ---
-    const isDataEmpty = !!config.studentId && !isCheckingData && !dataRange;
-    const isButtonDisabled = isGenerating || !config.studentId || isCheckingData || !dataRange;
+    // ==================================================================================
+    // 4. HELPER COMPONENTS
+    // ==================================================================================
+    
+    const handleAddEskul = () => {
+        setExtracurricular([...extracurricular, { name: '', predikat: '' }]);
+    };
 
-    if (isSelectorOpen) {
-        return (
-            <StudentSelectorView 
-                students={students} 
-                onSelect={handleStudentSelect} 
-                onBack={() => setIsSelectorOpen(false)} 
-            />
-        );
-    }
+    const handleRemoveEskul = (idx: number) => {
+        const newEx = [...extracurricular];
+        newEx.splice(idx, 1);
+        setExtracurricular(newEx);
+    };
 
-    // CSS Khusus Print (Browser Print)
-    const printStyles = `
-        @media print {
-            @page { size: portrait; margin: 1.5cm; }
-            body { visibility: hidden; background: white; }
-            .print-area { 
-                visibility: visible; position: absolute; left: 0; top: 0; width: 100%; 
-                margin: 0; padding: 0; background: white !important; 
-                box-shadow: none !important; border: none !important; color: black !important;
-            }
-            .print-area * { visibility: visible; }
-            .print-area p, .print-area h1, .print-area h2, .print-area h3, .print-area h4, .print-area span, .print-area div {
-                color: #000000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-            }
-            .no-print { display: none !important; }
-            .animate-fade-in, .animate-slide-up { animation: none !important; }
-        }
-    `;
+    const handleChangeEskul = (idx: number, field: keyof ExtracurricularData, value: string) => {
+        const newEx = [...extracurricular];
+        newEx[idx][field] = value;
+        setExtracurricular(newEx);
+    };
+
+    // ==================================================================================
+    // 5. RENDER UI
+    // ==================================================================================
 
     return (
-        <div className="space-y-8 animate-fade-in pb-20">
-            <style>{printStyles}</style>
-
-            {/* Config Panel */}
-            <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-xl border border-gray-200 relative overflow-hidden no-print">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-violet-50 rounded-full blur-3xl opacity-50 -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-                
-                <div className="relative z-10">
-                    <div className="flex items-center gap-4 mb-8">
-                        <div className="p-4 bg-violet-600 text-white rounded-2xl shadow-lg shadow-violet-200">
-                            <Sparkles size={28}/>
-                        </div>
-                        <div>
-                            <h2 className="text-2xl font-black text-gray-800 uppercase tracking-tight">Generator Rapor Karakter AI</h2>
-                            <p className="text-gray-500 font-medium text-sm">Sintesis data perilaku siswa secara otomatis menggunakan kecerdasan buatan.</p>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
-                        
-                        {/* 1. PILIH SISWA */}
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Pilih Siswa</label>
-                            <button 
-                                onClick={() => setIsSelectorOpen(true)}
-                                className={`w-full text-left px-4 py-4 rounded-2xl font-bold border-2 transition-all flex items-center justify-between group ${
-                                    selectedStudent 
-                                    ? 'bg-violet-50 border-violet-200 text-violet-800' 
-                                    : 'bg-gray-50 border-gray-100 text-gray-400 hover:border-violet-200 hover:text-gray-600'
-                                }`}
-                            >
-                                <div className="flex items-center gap-3 overflow-hidden">
-                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${selectedStudent ? 'bg-violet-200 text-violet-700' : 'bg-gray-200 text-gray-500'}`}>
-                                        <User size={14} />
-                                    </div>
-                                    <span className="truncate">
-                                        {selectedStudent ? selectedStudent.full_name : '-- Pilih Siswa --'}
-                                    </span>
-                                </div>
-                                <ChevronRight size={18} className={`transition-transform group-hover:translate-x-1 ${selectedStudent ? 'text-violet-400' : 'text-gray-300'}`}/>
-                            </button>
-                        </div>
-
-                        {/* 2. TANGGAL MULAI */}
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Mulai Tanggal</label>
-                            <input 
-                                type="date" 
-                                className="w-full bg-gray-50 border-2 border-gray-100 px-4 py-4 rounded-2xl font-bold text-gray-700 outline-none focus:border-violet-500 disabled:bg-gray-100 disabled:text-gray-400" 
-                                value={config.startDate} 
-                                onChange={(e) => setConfig({ ...config, startDate: e.target.value })}
-                                disabled={isDataEmpty} 
-                            />
-                        </div>
-
-                        {/* 3. TANGGAL AKHIR */}
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Hingga Tanggal</label>
-                            <input 
-                                type="date" 
-                                className="w-full bg-gray-50 border-2 border-gray-100 px-4 py-4 rounded-2xl font-bold text-gray-700 outline-none focus:border-violet-500 disabled:bg-gray-100 disabled:text-gray-400" 
-                                value={config.endDate} 
-                                onChange={(e) => setConfig({ ...config, endDate: e.target.value })}
-                                disabled={isDataEmpty} 
-                            />
-                        </div>
-
-                        {/* 4. TOMBOL GENERATE */}
-                        <button 
-                            onClick={handleGenerate} 
-                            disabled={isButtonDisabled} 
-                            className={`h-[60px] rounded-2xl font-black transition-all flex justify-center items-center gap-2 shadow-lg disabled:cursor-not-allowed ${
-                                isDataEmpty 
-                                ? 'bg-gray-200 text-gray-400 shadow-none border-2 border-gray-100' 
-                                : 'bg-slate-900 text-white hover:bg-violet-600 hover:shadow-violet-200 disabled:opacity-50'
-                            }`}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in pb-20">
+            {/* PANEL KIRI (30%) - INPUT DATA */}
+            <div className="lg:col-span-4 space-y-6">
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 sticky top-4">
+                    <h3 className="font-black text-slate-800 mb-6 flex items-center gap-2 text-lg">
+                        <FileText className="text-violet-600" size={20}/> 
+                        Input Data Rapor
+                    </h3>
+                    
+                    {/* 1. PILIH SISWA */}
+                    <div className="mb-6">
+                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Pilih Siswa</label>
+                        <select 
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-violet-500 transition-all cursor-pointer hover:bg-slate-100"
+                            value={selectedStudent?.id || ''}
+                            onChange={(e) => {
+                                const s = students.find(x => x.id === parseInt(e.target.value));
+                                setSelectedStudent(s);
+                            }}
                         >
-                            {isGenerating ? (
-                                <RefreshCw className="animate-spin" size={20}/>
-                            ) : isCheckingData ? (
-                                <RefreshCw className="animate-spin" size={20}/> 
-                            ) : isDataEmpty ? (
-                                <><Ban size={18}/> DATA KOSONG</>
-                            ) : (
-                                <><Sparkles size={20}/> ANALISIS</>
-                            )}
-                        </button>
+                            <option value="">-- Pilih Siswa dari Daftar --</option>
+                            {students.map(s => <option key={s.id} value={s.id}>{s.full_name} ({s.nisn || '-'})</option>)}
+                        </select>
                     </div>
 
-                    {/* SMART DATE HELPER */}
-                    {selectedStudent && (
-                        <div className="mt-6 pt-6 border-t border-gray-100 animate-slide-up">
-                            {isCheckingData ? (
-                                <div className="flex items-center gap-2 text-xs text-gray-400 italic">
-                                    <RefreshCw size={12} className="animate-spin"/> Memeriksa riwayat aktivitas...
-                                </div>
-                            ) : dataRange ? (
-                                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                                    <span className="text-xs font-medium text-gray-600">
-                                        <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase mr-2">Data Ditemukan</span>
-                                        Tersedia <strong>{dataRange.count}</strong> aktivitas dari <strong>{new Date(dataRange.start).toLocaleDateString('id-ID')}</strong> s.d <strong>{new Date(dataRange.end).toLocaleDateString('id-ID')}</strong>
-                                    </span>
+                    {selectedStudent ? (
+                        <div className="space-y-6 animate-slide-up">
+                            {/* 2. MODE KOMPARASI AI */}
+                            <div>
+                                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Mode Analisis AI</label>
+                                <div className="p-1 bg-slate-100 rounded-xl flex">
                                     <button 
-                                        onClick={applyDataRange}
-                                        className="px-3 py-1.5 bg-violet-50 text-violet-700 text-xs font-bold rounded-lg hover:bg-violet-100 transition-colors flex items-center gap-1.5"
+                                        onClick={() => setComparisonMode('last_semester')}
+                                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${comparisonMode === 'last_semester' ? 'bg-white shadow text-violet-700' : 'text-slate-500 hover:text-slate-700'}`}
                                     >
-                                        <CalendarRange size={14} /> Gunakan Rentang Ini
+                                        Semester Lalu
+                                    </button>
+                                    <button 
+                                        onClick={() => setComparisonMode('all_time')}
+                                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${comparisonMode === 'all_time' ? 'bg-white shadow text-violet-700' : 'text-slate-500 hover:text-slate-700'}`}
+                                    >
+                                        Awal Masuk
                                     </button>
                                 </div>
-                            ) : (
-                                <div className="flex items-center gap-2 text-xs text-rose-500 font-bold bg-rose-50 px-3 py-2 rounded-lg">
-                                    <Ban size={14}/> Belum ada riwayat aktivitas untuk siswa ini.
+                            </div>
+
+                            <hr className="border-slate-100"/>
+
+                            {/* 3. INPUT ABSENSI */}
+                            <div>
+                                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Ketidakhadiran (Hari)</label>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="relative">
+                                        <input type="number" min="0" value={attendance.sakit} onChange={e => setAttendance({...attendance, sakit: +e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-center font-bold text-slate-700 outline-none focus:border-violet-500 transition-all"/>
+                                        <span className="text-[10px] text-center block text-slate-400 mt-1 font-bold">SAKIT</span>
+                                    </div>
+                                    <div className="relative">
+                                        <input type="number" min="0" value={attendance.izin} onChange={e => setAttendance({...attendance, izin: +e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-center font-bold text-slate-700 outline-none focus:border-violet-500 transition-all"/>
+                                        <span className="text-[10px] text-center block text-slate-400 mt-1 font-bold">IZIN</span>
+                                    </div>
+                                    <div className="relative">
+                                        <input type="number" min="0" value={attendance.alpha} onChange={e => setAttendance({...attendance, alpha: +e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl text-center font-bold text-slate-700 outline-none focus:border-violet-500 transition-all"/>
+                                        <span className="text-[10px] text-center block text-slate-400 mt-1 font-bold">ALPHA</span>
+                                    </div>
                                 </div>
-                            )}
+                            </div>
+
+                            <hr className="border-slate-100"/>
+
+                            {/* 4. INPUT ESKUL */}
+                            <div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Ekstrakulikuler</label>
+                                    <button onClick={handleAddEskul} className="text-xs text-violet-600 font-bold hover:bg-violet-50 px-2 py-1 rounded-lg transition-colors flex items-center gap-1"><Plus size={14}/> Tambah</button>
+                                </div>
+                                <div className="space-y-2">
+                                    {extracurricular.map((ex, idx) => (
+                                        <div key={idx} className="flex gap-2 group">
+                                            <input 
+                                                type="text" 
+                                                placeholder="Kegiatan (Cth: Pramuka)" 
+                                                className="w-2/3 p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-violet-500 transition-all" 
+                                                value={ex.name} 
+                                                onChange={e => handleChangeEskul(idx, 'name', e.target.value)}
+                                            />
+                                            <input 
+                                                type="text" 
+                                                placeholder="Predikat" 
+                                                className="w-1/3 p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-violet-500 transition-all" 
+                                                value={ex.predikat} 
+                                                onChange={e => handleChangeEskul(idx, 'predikat', e.target.value)}
+                                            />
+                                            {extracurricular.length > 1 && (
+                                                <button onClick={() => handleRemoveEskul(idx)} className="text-slate-300 hover:text-rose-500 transition-colors">
+                                                    <Trash2 size={16}/>
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="pt-4 space-y-3">
+                                <button 
+                                    onClick={handleSaveDraft}
+                                    disabled={isSaving}
+                                    className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 flex justify-center items-center gap-2 transition-all active:scale-95"
+                                >
+                                    {isSaving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
+                                    Simpan Data Manual
+                                </button>
+
+                                <button 
+                                    onClick={handleGenerateAI}
+                                    disabled={loadingAI}
+                                    className="w-full py-3.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-violet-200 flex justify-center items-center gap-2 transition-all active:scale-95 disabled:opacity-70"
+                                >
+                                    {loadingAI ? <Loader2 className="animate-spin" size={20}/> : <Sparkles size={20}/>}
+                                    {loadingAI ? "AI Sedang Menganalisis..." : "Generate Rapor AI"}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="py-10 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                            <Users className="mx-auto text-slate-300 mb-2" size={32}/>
+                            <p className="text-xs text-slate-400 font-medium">Silakan pilih siswa untuk mulai mengisi rapor.</p>
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Result Preview & PDF Generation */}
-            {result && (
-                <div ref={printRef} className="print-area animate-slide-up">
-                    <div className="bg-slate-900 p-6 rounded-t-[2.5rem] flex flex-col md:flex-row justify-between items-center gap-4 no-print shadow-xl">
-                        <div className="flex items-center gap-3 text-white px-4">
-                            <FileText size={24} className="text-violet-400"/>
-                            <div>
-                                <span className="font-bold uppercase tracking-wider text-sm block">Preview Dokumen</span>
-                                <span className="text-xs text-slate-400">Pastikan data penanda tangan benar sebelum dicetak.</span>
+            {/* PANEL KANAN (8 Kolom): PREVIEW RAPOR */}
+            <div className="lg:col-span-8 bg-white p-8 md:p-10 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 relative min-h-[800px]">
+                {loadingData && (
+                    <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
+                        <Loader2 className="animate-spin text-violet-600" size={40}/>
+                    </div>
+                )}
+
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-100 pb-6 gap-4">
+                    <div>
+                        <h2 className="text-2xl font-black text-slate-800">Preview Rapor</h2>
+                        <p className="text-sm text-slate-500 font-medium mt-1">
+                            {selectedStudent ? `Draft Rapor: ${selectedStudent.full_name}` : 'Pratinjau konten rapor sebelum dicetak.'}
+                        </p>
+                    </div>
+                    
+                    {selectedStudent && (
+                        <div className="flex flex-wrap gap-3 items-center bg-slate-50 p-2 rounded-xl border border-slate-200">
+                            {/* SELECTOR PENANDA TANGAN */}
+                            <div className="relative group">
+                                <Users size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 z-10"/>
+                                <select 
+                                    className="pl-9 pr-4 py-2 bg-white text-slate-700 rounded-lg text-xs font-bold border border-slate-200 outline-none appearance-none cursor-pointer hover:border-violet-300 transition-colors min-w-[180px]"
+                                    value={selectedParentName}
+                                    onChange={(e) => setSelectedParentName(e.target.value)}
+                                >
+                                    <option value="">-- Pilih Wali Murid --</option>
+                                    {loadingParents ? <option disabled>Memuat data ortu...</option> : 
+                                        parents.map(p => <option key={p.id} value={p.full_name}>{p.full_name} ({p.relationship})</option>)
+                                    }
+                                </select>
                             </div>
-                        </div>
-                        
-                        <div className="flex gap-3">
-                            <button onClick={handlePrint} className="bg-white/10 text-white px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-white/20 transition-all flex items-center gap-2">
-                                <Printer size={16} /> Print Browser
+
+                            <button 
+                                onClick={handleDownloadPDF} 
+                                disabled={!aiResult.kokurikuler_report} 
+                                className="px-5 py-2 bg-slate-800 text-white rounded-lg flex items-center gap-2 text-xs font-bold hover:bg-slate-900 disabled:opacity-50 transition-all shadow-md active:scale-95"
+                            >
+                                <Download size={14}/> Download PDF
                             </button>
-                            <button onClick={generatePDF} className="bg-white text-slate-900 px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-violet-50 transition-all flex items-center gap-2 shadow-lg">
-                                <Download size={18} /> Download PDF Resmi
-                            </button>
                         </div>
+                    )}
+                </div>
+
+                <div className="space-y-8">
+                    {/* BAGIAN A: GABUNGAN KOKURIKULER (TEKS JUDUL DIPERBAIKI) */}
+                    <div className="group">
+                        <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-bold text-slate-700 text-sm uppercase tracking-wide border-l-4 border-violet-500 pl-3">
+                                A. Laporan Kokurikuler
+                            </h4>
+                            <span className="text-[10px] bg-violet-50 text-violet-600 px-2 py-0.5 rounded font-bold uppercase">
+                                Auto-Generated
+                            </span>
+                        </div>
+                        <textarea 
+                            className="w-full h-64 p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed text-slate-700 focus:ring-2 focus:ring-violet-500 outline-none transition-all resize-none group-hover:border-violet-200"
+                            value={aiResult.kokurikuler_report}
+                            onChange={(e) => setAiResult({...aiResult, kokurikuler_report: e.target.value})}
+                            placeholder="Laporan kokurikuler (ringkasan & evaluasi diri) akan muncul otomatis di sini..."
+                        />
+                        {!aiResult.kokurikuler_report && (
+                            <div className="mt-2 text-xs text-amber-600 flex items-center gap-1">
+                                <AlertCircle size={12}/> Belum ada analisis AI. Klik 'Generate Rapor AI' di panel kiri.
+                            </div>
+                        )}
                     </div>
 
-                    <div className="bg-white p-8 md:p-16 rounded-b-[2.5rem] shadow-2xl border border-gray-100 text-black font-serif leading-relaxed">
-                        
-                        {/* --- OPSI PENANDA TANGAN (Hanya muncul di preview, tidak di print) --- */}
-                        <div className="mb-10 p-6 bg-indigo-50/50 rounded-2xl border border-indigo-100 no-print">
-                            <h4 className="font-bold text-indigo-900 text-sm uppercase mb-3 flex items-center gap-2">
-                                <Users size={16}/> Konfigurasi Tanda Tangan
+                    {/* BAGIAN B & C (Tabel Data Statis - Tidak perlu preview teks) */}
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-500 flex items-center gap-2">
+                        <Info size={16}/> Bagian B (Eskul) dan C (Absensi) akan otomatis ditampilkan dalam tabel saat dicetak.
+                    </div>
+
+                    {/* BAGIAN D: CATATAN WALI KELAS (TEKS JUDUL DIPERBAIKI) */}
+                    <div className="group">
+                        <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-bold text-slate-700 text-sm uppercase tracking-wide border-l-4 border-violet-500 pl-3">
+                                D. Catatan Wali Kelas
                             </h4>
                             
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label className="block text-xs font-bold text-indigo-400 uppercase mb-2">Pilih Orang Tua / Wali</label>
-                                    {loadingParents ? (
-                                        <div className="text-xs text-indigo-400 flex items-center gap-2"><Loader2 size={12} className="animate-spin"/> Memuat data...</div>
-                                    ) : parents.length > 0 ? (
-                                        <div className="flex flex-wrap gap-2">
-                                            {parents.map(p => (
-                                                <button
-                                                    key={p.id}
-                                                    onClick={() => setSelectedParentName(p.full_name)}
-                                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                                                        selectedParentName === p.full_name 
-                                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' 
-                                                        : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
-                                                    }`}
-                                                >
-                                                    {p.relationship}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <p className="text-xs text-amber-600 italic">Belum ada data orang tua terhubung.</p>
-                                    )}
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-xs font-bold text-indigo-400 uppercase mb-2">Edit Nama Penanda Tangan (Opsional)</label>
-                                    <input 
-                                        type="text" 
-                                        value={selectedParentName}
-                                        onChange={(e) => setSelectedParentName(e.target.value)}
-                                        className="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-700"
-                                        placeholder="Nama Wali Murid..."
-                                    />
-                                </div>
-                            </div>
+                            {/* Tombol Helper ambil saran AI */}
+                            {aiResult.teacher_notes_suggestion && (
+                                <button 
+                                    onClick={() => setManualNote(aiResult.teacher_notes_suggestion)}
+                                    className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-1 rounded font-bold uppercase hover:bg-emerald-100 transition-colors flex items-center gap-1"
+                                    title="Gunakan saran yang dibuat AI"
+                                >
+                                    <Sparkles size={10}/> Gunakan Saran AI
+                                </button>
+                            )}
                         </div>
-
-                        {/* --- KONTEN RAPOR (Visual Preview) --- */}
-                        {/* KOP SURAT */}
-                        <div className="flex items-center justify-center border-b-4 border-double border-black pb-6 mb-10 gap-6">
-                            <img src="/logo-smpn6.png" alt="Logo" className="w-20 h-auto" />
-                            <div className="text-center">
-                                <h1 className="text-2xl font-bold text-black uppercase mb-1">SMP NEGERI 6 PEKALONGAN</h1>
-                                <p className="text-xs font-bold text-gray-800 uppercase tracking-[0.2em] mb-1">LAPORAN PEMBIASAAN KARAKTER SISWA</p>
-                                <p className="text-[10px] italic text-gray-600">Jl. Teratai No.31, Poncol, Kota Pekalongan, Jawa Tengah 51122</p>
-                            </div>
-                        </div>
-
-                        {/* IDENTITAS */}
-                        <div className="mb-10 text-sm font-sans border-b border-gray-100 pb-6">
-                            <div className="grid grid-cols-[150px_20px_auto] mb-1">
-                                <span className="font-bold uppercase text-gray-900">Nama Siswa</span>
-                                <span>:</span>
-                                <span className="font-bold uppercase text-black">{selectedStudent?.full_name}</span>
-                            </div>
-                            <div className="grid grid-cols-[150px_20px_auto] mb-1">
-                                <span className="font-bold uppercase text-gray-900">Kelas</span>
-                                <span>:</span>
-                                <span className="font-bold uppercase text-black">{teacherClass}</span>
-                            </div>
-                            <div className="grid grid-cols-[150px_20px_auto]">
-                                <span className="font-bold uppercase text-gray-900">Periode</span>
-                                <span>:</span>
-                                <span className="font-bold text-black">{new Date(config.startDate).toLocaleDateString('id-ID')} s.d {new Date(config.endDate).toLocaleDateString('id-ID')}</span>
-                            </div>
-                        </div>
-
-                        {/* CONTENT */}
-                        <div className="space-y-8 text-justify">
-                            <section>
-                                <h4 className="font-bold text-base uppercase mb-2 border-l-4 border-slate-800 pl-3 text-black">I. Ringkasan Eksekutif</h4>
-                                <p className="text-gray-900 text-sm leading-relaxed">{result.executive_summary}</p>
-                            </section>
-                            
-                            <section>
-                                <h4 className="font-bold text-base uppercase mb-2 border-l-4 border-slate-800 pl-3 text-black">II. Perkembangan Karakter</h4>
-                                <p className="text-gray-900 text-sm leading-relaxed">{result.character_progress}</p>
-                            </section>
-                            
-                            <section>
-                                <h4 className="font-bold text-base uppercase mb-2 border-l-4 border-slate-800 pl-3 text-black">III. Catatan Wali Kelas</h4>
-                                <div className="p-4 bg-gray-50 rounded-lg border-l-2 border-gray-300 italic text-gray-800 text-sm leading-relaxed">
-                                    "{result.report_narrative}"
-                                </div>
-                            </section>
-                        </div>
-
-                        {/* TTD PREVIEW */}
-                        <div className="flex justify-between mt-16 pt-8 font-sans break-inside-avoid">
-                            <div className="text-center w-64 flex flex-col items-center">
-                                <p className="font-bold text-black text-xs mb-4">Mengetahui,<br/>Orang Tua / Wali Murid</p>
-                                <div className="h-16"></div> 
-                                <p className="font-bold uppercase text-xs border-b border-black pb-1 px-4 min-w-[150px]">
-                                    {selectedParentName || "..........................."}
-                                </p>
-                            </div>
-                            
-                            <div className="text-center w-64 flex flex-col items-center">
-                                <p className="font-bold text-black text-xs mb-1">
-                                    Pekalongan, {new Date().toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'})}
-                                </p>
-                                <p className="text-xs font-normal mb-4 text-black">Wali Kelas</p>
-                                <div className="h-12"></div>
-                                <p className="font-bold underline uppercase mb-1 text-black text-xs">
-                                    {teacherName || "..........................."}
-                                </p>
-                                <p className="text-[10px] font-bold text-black">
-                                    NIP. {teacherNip || "..........................."}
-                                </p>
-                            </div>
-                        </div>
-
+                        
+                        <textarea 
+                            className="w-full h-32 p-4 bg-white border-2 border-slate-200 rounded-xl text-sm focus:border-violet-500 outline-none placeholder:italic transition-all focus:ring-4 focus:ring-violet-50 resize-none"
+                            value={manualNote}
+                            onChange={(e) => setManualNote(e.target.value)}
+                            placeholder="Tuliskan pesan motivasi... (AI juga akan memberikan saran di sini)"
+                        />
                     </div>
+
+                    {/* PREVIEW TANDA TANGAN */}
+                    {selectedStudent && (
+                        <div className="mt-12 pt-8 border-t border-slate-100 flex justify-between px-10 opacity-70 hover:opacity-100 transition-opacity">
+                            <div className="text-center">
+                                <p className="text-xs text-slate-500 mb-16">Mengetahui,<br/>Orang Tua / Wali</p>
+                                <p className="text-sm font-bold text-slate-800 border-b border-slate-300 pb-1 px-4 min-w-[150px]">
+                                    {selectedParentName || ".........................."}
+                                </p>
+                            </div>
+                            <div className="text-center">
+                                <p className="text-xs text-slate-500 mb-16">Pekalongan, {new Date().toLocaleDateString('id-ID')}<br/>Wali Kelas</p>
+                                <p className="text-sm font-bold text-slate-800 border-b border-slate-300 pb-1 px-4 min-w-[150px]">
+                                    {teacherName}
+                                </p>
+                                <p className="text-[10px] text-slate-400 mt-1">NIP. {teacherNip}</p>
+                            </div>
+                        </div>
+                    )}
                 </div>
-            )}
+            </div>
         </div>
     );
 };

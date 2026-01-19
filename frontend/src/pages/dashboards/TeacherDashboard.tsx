@@ -1,40 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { 
-  LayoutDashboard, 
-  CheckSquare, 
-  CalendarDays, 
-  BarChart3, 
-  LogOut, 
-  Menu, 
-  X,
-  Sparkles,
-  User,
-  BookOpen,
-  Activity,
-  Heart,
-  Coffee,
-  Moon,
-  Sun,
-  Users,
-  ArrowUpCircle,
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  GraduationCap,
-  Clock,
-  AlertCircle
+    LayoutDashboard, 
+    CheckSquare, 
+    CalendarDays, 
+    LogOut, 
+    Menu, 
+    X,
+    Sparkles,
+    User,
+    BookOpen,
+    Activity,
+    Heart,
+    Coffee,
+    Moon,
+    Sun,
+    Users,
+    ArrowUpCircle,
+    Search,
+    ChevronLeft,
+    ChevronRight,
+    GraduationCap,
+    Clock,
+    AlertCircle,
+    Printer // PenTool dihapus karena tab input dihapus
 } from 'lucide-react';
 
 import teacherService from '../../services/teacherService';
 import { useAuth } from '../../services/authService';
 import Spinner from './student/components/Spinner';
-import PersonalEmailAlert from '../../components/PersonalEmailAlert'; // [BARU] Import Alert Email
+import PersonalEmailAlert from '../../components/PersonalEmailAlert'; 
 
 // Sub-Components Views
 import ValidationView from './teacher/ValidationView';
 import HistoryView from './teacher/HistoryView';
 import AIReportView from './teacher/AIReportView';
+// import CharacterInputView dihapus
 
 // Komponen Modal
 import PromoteModal from '../../components/PromoteModal'; 
@@ -59,6 +60,7 @@ const TeacherDashboard: React.FC = () => {
     const [data, setData] = useState<any>(null);
     const [logs, setLogs] = useState<any[]>([]);
     
+    // [UPDATE] Menghapus 'input' dari tipe state activeTab
     const [activeTab, setActiveTab] = useState<'beranda' | 'validasi' | 'riwayat' | 'analisis' | 'promosi'>('beranda');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -71,17 +73,15 @@ const TeacherDashboard: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
-    // --- HELPER: ACADEMIC INFO & DATE (SESUAI FLOWCHART) ---
+    // --- HELPER: ACADEMIC INFO & DATE ---
     const getAcademicInfo = () => {
         const now = new Date();
-        const month = now.getMonth(); // 0-11
+        const month = now.getMonth(); 
         const year = now.getFullYear();
         
         let semester = '';
         let academicYear = '';
 
-        // Juli (Bulan 6) s/d Desember (11) = Ganjil, Tahun Ajar = TahunIni/TahunDepan
-        // Januari (0) s/d Juni (5) = Genap, Tahun Ajar = TahunLalu/TahunIni
         if (month >= 6) { 
             semester = 'Ganjil';
             academicYear = `${year}/${year + 1}`;
@@ -136,7 +136,6 @@ const TeacherDashboard: React.FC = () => {
     // --- LOGIC DATA SISWA ---
     const students = data?.students || [];
 
-    // Filter object siswa lengkap & INJECT CLASS NAME untuk Modal
     const selectedStudentData = students
         .filter((s: any) => selectedStudents.includes(s.id))
         .map((s: any) => ({
@@ -178,13 +177,14 @@ const TeacherDashboard: React.FC = () => {
     const isAllSelected = currentStudents.length > 0 && currentStudents.every((s: any) => selectedStudents.includes(s.id));
 
     // --- NAV ITEMS ---
-    const pendingCount = logs.filter((l: any) => l.status === 'Disetujui').length; // Disetujui Ortu = Menunggu Guru
+    const pendingCount = logs.filter((l: any) => l.status === 'Disetujui').length; 
 
+    // [UPDATE] Menghapus menu Input Penilaian
     const navItems = [
         { id: 'beranda', label: 'Beranda Guru', icon: <LayoutDashboard size={20} /> },
         { id: 'validasi', label: 'Validasi Jurnal', icon: <CheckSquare size={20} />, badge: pendingCount },
         { id: 'riwayat', label: 'Riwayat Kelas', icon: <CalendarDays size={20} /> },
-        { id: 'analisis', label: 'Rapor AI', icon: <BarChart3 size={20} /> },
+        { id: 'analisis', label: 'Cetak Rapor AI', icon: <Printer size={20} /> },
         { id: 'promosi', label: 'Kenaikan Kelas', icon: <ArrowUpCircle size={20} /> },
     ];
 
@@ -274,14 +274,15 @@ const TeacherDashboard: React.FC = () => {
                 {/* CONTENT AREA */}
                 <main className="p-4 md:p-8 max-w-5xl mx-auto w-full pb-20">
                     
-                    {/* [BARU] ALERT EMAIL PRIBADI */}
+                    {/* ALERT EMAIL PRIBADI */}
                     <PersonalEmailAlert />
 
-                    {/* HEADER SECTION (IMPROVED) */}
+                    {/* HEADER SECTION */}
                     <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
                         <div>
                             <h2 className="text-2xl font-black text-gray-800 tracking-tight">
                                 {activeTab === 'beranda' && 'Dashboard Guru'}
+                                {/* {activeTab === 'input' && 'Input Penilaian Siswa'} HAPUS INI JUGA */}
                                 {activeTab === 'validasi' && 'Validasi Jurnal'}
                                 {activeTab === 'riwayat' && 'Riwayat Kelas'}
                                 {activeTab === 'analisis' && 'Rapor Karakter AI'}
@@ -293,7 +294,6 @@ const TeacherDashboard: React.FC = () => {
                             </p>
                         </div>
 
-                        {/* INFO AKADEMIK BADGE */}
                         <div className="flex items-center gap-2 bg-white p-2 pr-4 rounded-xl border border-gray-200 shadow-sm self-start md:self-auto">
                             <div className="bg-violet-100 text-violet-700 px-3 py-2 rounded-lg font-black text-sm flex items-center gap-2">
                                 <GraduationCap size={18}/>
@@ -309,7 +309,6 @@ const TeacherDashboard: React.FC = () => {
                     {activeTab === 'beranda' && (
                         <div className="space-y-8 animate-fade-in">
                             
-                            {/* OVERVIEW CARD */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 {/* Welcome Card */}
                                 <div className="md:col-span-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-[2rem] p-8 text-white shadow-xl relative overflow-hidden flex flex-col justify-center">
@@ -393,6 +392,8 @@ const TeacherDashboard: React.FC = () => {
                         </div>
                     )}
 
+                    {/* [UPDATE] Halaman Input Penilaian Dihapus dari sini */}
+
                     {activeTab === 'validasi' && (
                         <ValidationView 
                             logs={logs} 
@@ -413,6 +414,7 @@ const TeacherDashboard: React.FC = () => {
                             teacherClass={data?.teacherClass}
                             teacherName={user.fullName}
                             teacherNip={user.nip}
+                            classId={data?.teacherClassId} // [FIX] Wajib ada
                         />
                     )}
 
@@ -448,50 +450,50 @@ const TeacherDashboard: React.FC = () => {
                             <div className="flex-1 overflow-auto">
                                 <table className="w-full text-left border-collapse">
                                     <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
-                                        <tr className="text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
-                                            <th className="p-4 w-12 text-center">
-                                                <input 
-                                                    type="checkbox" 
-                                                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                                    onChange={handleSelectAllCurrentPage}
-                                                    checked={isAllSelected}
-                                                />
-                                            </th>
-                                            <th className="p-4">Nama Siswa</th>
-                                            <th className="p-4">NISN</th>
-                                            <th className="p-4">Status Akun</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="text-sm text-slate-700 divide-y divide-slate-100">
-                                        {currentStudents.map((student: any) => (
-                                            <tr 
-                                                key={student.id} 
-                                                className={`hover:bg-violet-50/50 transition-colors ${selectedStudents.includes(student.id) ? 'bg-violet-50' : ''}`}
-                                            >
-                                                <td className="p-4 text-center">
+                                            <tr className="text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
+                                                <th className="p-4 w-12 text-center">
                                                     <input 
                                                         type="checkbox" 
                                                         className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                                        checked={selectedStudents.includes(student.id)}
-                                                        onChange={() => toggleSelectStudent(student.id)}
+                                                        onChange={handleSelectAllCurrentPage}
+                                                        checked={isAllSelected}
                                                     />
-                                                </td>
-                                                <td className="p-4 font-bold text-slate-800">{student.full_name}</td>
-                                                <td className="p-4 text-slate-500 font-mono">{student.nisn || '-'}</td>
-                                                <td className="p-4">
-                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide border ${student.is_active ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
-                                                        {student.is_active ? 'Aktif' : 'Belum Aktivasi'}
-                                                    </span>
-                                                </td>
+                                                </th>
+                                                <th className="p-4">Nama Siswa</th>
+                                                <th className="p-4">NISN</th>
+                                                <th className="p-4">Status Akun</th>
                                             </tr>
-                                        ))}
-                                        {currentStudents.length === 0 && (
-                                            <tr>
-                                                <td colSpan={4} className="p-12 text-center text-slate-400 italic">
-                                                    {searchTerm ? 'Siswa tidak ditemukan.' : 'Tidak ada data siswa.'}
-                                                </td>
-                                            </tr>
-                                        )}
+                                    </thead>
+                                    <tbody className="text-sm text-slate-700 divide-y divide-slate-100">
+                                            {currentStudents.map((student: any) => (
+                                                <tr 
+                                                    key={student.id} 
+                                                    className={`hover:bg-violet-50/50 transition-colors ${selectedStudents.includes(student.id) ? 'bg-violet-50' : ''}`}
+                                                >
+                                                    <td className="p-4 text-center">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                            checked={selectedStudents.includes(student.id)}
+                                                            onChange={() => toggleSelectStudent(student.id)}
+                                                        />
+                                                    </td>
+                                                    <td className="p-4 font-bold text-slate-800">{student.full_name}</td>
+                                                    <td className="p-4 text-slate-500 font-mono">{student.nisn || '-'}</td>
+                                                    <td className="p-4">
+                                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide border ${student.is_active ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                                                            {student.is_active ? 'Aktif' : 'Belum Aktivasi'}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {currentStudents.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={4} className="p-12 text-center text-slate-400 italic">
+                                                        {searchTerm ? 'Siswa tidak ditemukan.' : 'Tidak ada data siswa.'}
+                                                    </td>
+                                                </tr>
+                                            )}
                                     </tbody>
                                 </table>
                             </div>

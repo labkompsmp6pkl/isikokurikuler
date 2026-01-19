@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { 
-    Calendar, Save, ChevronDown, Repeat
+    Calendar, Save, ChevronDown, Repeat, Filter
 } from 'lucide-react';
 import contributorService from '../../../services/contributorService';
 import { authApi, useAuth } from '../../../services/authService';
@@ -9,14 +9,19 @@ import { authApi, useAuth } from '../../../services/authService';
 interface ClassData {
     id: string;
     name: string;
+    academic_year: string; // [PENTING] Tambahkan field ini dari API
     student_count: number;
 }
 
 const CharacterScheduleView: React.FC = () => {
-    const { user } = useAuth(); // Ambil data user login untuk identitas otomatis
+    const { user } = useAuth(); 
     const [classes, setClasses] = useState<ClassData[]>([]);
     
-    // State Form (Identitas Penilai DIHAPUS dari state)
+    // State Filter Tahun Ajaran
+    const [activeYearFilter, setActiveYearFilter] = useState('');
+    const [availableYears, setAvailableYears] = useState<string[]>([]);
+
+    // State Form
     const [targetClass, setTargetClass] = useState('');
     const [habitCategory, setHabitCategory] = useState('Gemar Belajar');
     const [title, setTitle] = useState('');
@@ -29,8 +34,7 @@ const CharacterScheduleView: React.FC = () => {
             try {
                 const res = await authApi.get('/auth/classes-list');
                 
-                // Normalisasi Data (Handle response structure variance)
-                let receivedData = [];
+                let receivedData: ClassData[] = [];
                 if (Array.isArray(res.data)) {
                     receivedData = res.data;
                 } else if (res.data && Array.isArray(res.data.data)) {
@@ -39,6 +43,17 @@ const CharacterScheduleView: React.FC = () => {
 
                 if (Array.isArray(receivedData)) {
                     setClasses(receivedData);
+                    
+                    // Ekstrak Tahun Ajaran Unik & Urutkan (Terbaru di atas)
+                    const years = Array.from(new Set(receivedData.map(c => c.academic_year)))
+                        .filter(y => y) // Hapus null/undefined
+                        .sort()
+                        .reverse();
+                    
+                    setAvailableYears(years);
+                    
+                    // Set default filter ke tahun terbaru (biasanya tahun aktif)
+                    if (years.length > 0) setActiveYearFilter(years[0]);
                 } else {
                     console.error("API Error: Data format not recognized", res.data);
                     setClasses([]); 
@@ -51,22 +66,24 @@ const CharacterScheduleView: React.FC = () => {
         fetchClasses();
     }, []);
 
+    // Filter Kelas berdasarkan Tahun Ajaran yang dipilih
+    const filteredClasses = classes.filter(c => 
+        activeYearFilter ? c.academic_year === activeYearFilter : true
+    );
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         
-        // [MODIFIKASI] Ambil identitas otomatis dari profil user
-        // Prioritas: Agency Name -> Contributor Type -> Default 'Kontributor'
         const finalRole = (user as any)?.agency_name || (user as any)?.contributor_type || 'Kontributor';
         
         if (!title.trim()) return toast.error('Judul karakter wajib diisi', { id: 'val-title' });
-        // Target Class opsional (jika kosong = semua/global, tergantung backend handling)
 
         setIsSubmitting(true);
         const toastId = toast.loading('Menjadwalkan karakter...', { id: 'schedule-process' });
 
         try {
             await contributorService.createMissionSchedule({
-                contributor_role: finalRole, // Dikirim otomatis
+                contributor_role: finalRole, 
                 title,
                 habit_category: habitCategory,
                 target_class: targetClass,
@@ -107,8 +124,6 @@ const CharacterScheduleView: React.FC = () => {
 
             <div className="space-y-6">
                 
-                {/* Input Identitas Penilai SUDAH DIHAPUS */}
-
                 <div className="space-y-2">
                     <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Judul Karakter / Tugas</label>
                     <input type="text" className="w-full px-5 py-4 border-2 border-rose-100 bg-white rounded-2xl font-bold text-gray-700 outline-none focus:border-rose-500" placeholder="Contoh: Membaca Buku Paket Hal 10-15" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -124,18 +139,49 @@ const CharacterScheduleView: React.FC = () => {
                             <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
                         </div>
                     </div>
+                    
                     <div className="space-y-2">
-                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Target Kelas</label>
-                        <div className="relative">
-                            <select value={targetClass} onChange={(e) => setTargetClass(e.target.value)} className="w-full px-5 py-4 border-2 border-rose-100 bg-white rounded-2xl font-bold text-gray-700 outline-none focus:border-rose-500 cursor-pointer">
-                                <option value="">-- Seluruh Kelas --</option>
-                                {Array.isArray(classes) && classes.map((cls) => (
-                                    <option key={cls.id} value={cls.id}>
-                                        {cls.name} {cls.student_count ? `(${cls.student_count} siswa)` : ''}
-                                    </option>
-                                ))}
-                            </select>
-                            <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
+                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1 flex justify-between">
+                            <span>Target Kelas</span>
+                            {/* Filter Tahun Kecil di Label */}
+                            {activeYearFilter && <span className="text-rose-500">({activeYearFilter})</span>}
+                        </label>
+                        
+                        {/* Wrapper untuk Filter Tahun + Select Kelas */}
+                        <div className="flex gap-2">
+                            {/* 1. Filter Tahun Ajaran */}
+                            <div className="relative w-1/3">
+                                <select 
+                                    value={activeYearFilter} 
+                                    onChange={(e) => {
+                                        setActiveYearFilter(e.target.value);
+                                        setTargetClass(''); // Reset pilihan kelas saat tahun berubah
+                                    }} 
+                                    className="w-full pl-3 pr-8 py-4 border-2 border-rose-100 bg-rose-50/50 rounded-2xl font-bold text-rose-700 text-sm outline-none focus:border-rose-500 cursor-pointer appearance-none"
+                                >
+                                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                                <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-rose-400 pointer-events-none" size={14} />
+                            </div>
+
+                            {/* 2. Select Kelas (Difilter) */}
+                            <div className="relative w-2/3">
+                                <select 
+                                    value={targetClass} 
+                                    onChange={(e) => setTargetClass(e.target.value)} 
+                                    className="w-full px-5 py-4 border-2 border-rose-100 bg-white rounded-2xl font-bold text-gray-700 outline-none focus:border-rose-500 cursor-pointer disabled:bg-gray-100 disabled:text-gray-400"
+                                    disabled={!activeYearFilter}
+                                >
+                                    <option value="">-- Seluruh Kelas ({activeYearFilter}) --</option>
+                                    {filteredClasses.map((cls) => (
+                                        <option key={cls.id} value={cls.id}>
+                                            {cls.name} {cls.student_count ? `(${cls.student_count} siswa)` : ''}
+                                        </option>
+                                    ))}
+                                    {filteredClasses.length === 0 && <option disabled>Tidak ada kelas di tahun ini</option>}
+                                </select>
+                                <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={20} />
+                            </div>
                         </div>
                     </div>
                 </div>

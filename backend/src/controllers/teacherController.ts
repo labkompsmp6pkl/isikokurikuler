@@ -304,21 +304,22 @@ export const generateStudentReport = async (req: Request, res: Response) => {
     }
 };
 
-export const promoteStudents = async (req: AuthenticatedRequest, res: Response) => {
+export const promoteStudents = async (req: Request, res: Response) => {
     const { studentIds, targetClassId, isAlumni } = req.body;
-    const teacherId = req.user?.id;
+    // @ts-ignore
+    const teacherId = req.user?.id; // ID Guru yang melakukan aksi
 
-    if (!studentIds || studentIds.length === 0) {
-        return res.status(400).json({ message: 'Tidak ada siswa yang dipilih.' });
+    if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+        return res.status(400).json({ message: "Tidak ada siswa yang dipilih." });
     }
 
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
 
-        // 1. AMBIL DATA KELAS ASAL SISWA (Ambil sampel dari siswa pertama)
+        // 1. AMBIL DATA KELAS ASAL (Sample dari siswa pertama untuk validasi level)
         const [students]: any = await connection.query(
-            `SELECT u.full_name, c.name as class_name 
+            `SELECT u.full_name, c.name as class_name, c.id as source_class_id
              FROM users u 
              LEFT JOIN classes c ON u.class_id = c.id 
              WHERE u.id = ?`, 
@@ -330,67 +331,62 @@ export const promoteStudents = async (req: AuthenticatedRequest, res: Response) 
         }
 
         const sourceClassName = students[0].class_name || "";
+        // Ambil angka depan dari nama kelas (misal "8H" -> 8, "9A" -> 9)
+        const sourceLevel = parseInt(sourceClassName.match(/^\d+/)?.[0] || "0");
         
-        // 2. PARSE TINGKAT KELAS (Asumsi nama kelas diawali angka: "7A", "8B", "9C")
-        const sourceLevel = parseInt(sourceClassName.match(/\d+/)?.[0] || "0");
-        
-        // 3. VALIDASI LOGIKA KENAIKAN
+        // 2. LOGIKA VALIDASI TUJUAN
         if (isAlumni) {
-            // Hanya kelas 9 (atau 12) yang boleh jadi Alumni
-            if (sourceLevel !== 9 && sourceLevel !== 12) {
-                throw new Error(`VALIDASI GAGAL: Siswa kelas ${sourceClassName} tidak bisa langsung diluluskan (Alumni). Harus naik kelas bertahap.`);
+            // --- SKENARIO LULUS (JADI ALUMNI) ---
+            
+            // Validasi: Hanya kelas tingkat akhir (9 atau 12) yang bisa lulus
+            if (sourceLevel !== 0 && sourceLevel !== 9 && sourceLevel !== 12) {
+                throw new Error(`VALIDASI GAGAL: Siswa kelas ${sourceClassName} tidak bisa langsung diluluskan. Hanya kelas tingkat akhir (9/12) yang bisa menjadi Alumni.`);
             }
-        } else if (targetClassId) {
-            // Ambil info kelas tujuan
-            const [targetClass]: any = await connection.query("SELECT name FROM classes WHERE id = ?", [targetClassId]);
-            if (targetClass.length > 0) {
-                const targetClassName = targetClass[0].name;
-                const targetLevel = parseInt(targetClassName.match(/\d+/)?.[0] || "0");
 
-                // Aturan: Target harus (Level + 1) atau (Level sama/Tinggal Kelas)
-                // Tidak boleh loncat (7 ke 9) atau turun (8 ke 7) kecuali admin (opsional)
-                if (targetLevel !== sourceLevel && targetLevel !== sourceLevel + 1) {
-                     // Bolehkan turun kelas hanya jika ada flag khusus, tapi secara default kita blokir yang tidak masuk akal
-                     if (targetLevel > sourceLevel + 1) {
-                         throw new Error(`VALIDASI GAGAL: Tidak bisa melompati kelas dari ${sourceClassName} ke ${targetClassName}.`);
-                     }
-                }
-            }
-        }
-
-        // 4. PROSES UPDATE DATABASE
-        let query = '';
-        let params = [];
-
-        if (isAlumni) {
-            // Set role jadi alumni, hapus class_id, simpan history kelas terakhir
-            query = `
-                UPDATE users 
-                SET role = 'alumni', 
-                    class_id = NULL, 
-                    graduation_year = YEAR(CURDATE()),
-                    last_class_name = ?
-                WHERE id IN (?)
-            `;
-            params = [sourceClassName, studentIds];
         } else {
-            // Pindah kelas biasa
-            query = `UPDATE users SET class_id = ? WHERE id IN (?)`;
-            params = [targetClassId, studentIds];
-        }
+            if (!targetClassId) {
+                connection.release();
+                return res.status(400).json({ message: "Kelas tujuan wajib dipilih untuk kenaikan kelas." });
+            }
 
-        await connection.query(query, params);
+            // [VALIDASI BARU] Cek Apakah Kelas Tujuan Punya Wali Kelas?
+            const [targetClass]: any = await connection.query(
+                "SELECT name, teacher_id FROM classes WHERE id = ?", 
+                [targetClassId]
+            );
+
+            if (targetClass.length === 0) {
+                connection.release();
+                return res.status(404).json({ message: "Kelas tujuan tidak ditemukan." });
+            }
+
+            if (!targetClass[0].teacher_id) {
+                connection.release();
+                return res.status(400).json({ 
+                    message: `GAGAL: Kelas tujuan ${targetClass[0].name} belum memiliki Wali Kelas aktif. Hubungi Admin untuk menugaskan Wali Kelas terlebih dahulu.` 
+                });
+            }
+
+            // Eksekusi Pindah
+            const placeholders = studentIds.map(() => '?').join(',');
+            await connection.query(
+                `UPDATE users SET class_id = ? WHERE id IN (${placeholders})`,
+                [targetClassId, ...studentIds]
+            );
+        }
 
         await connection.commit();
+        
+        // Respons sukses dengan detail
         res.json({ 
-            message: isAlumni ? 'Siswa berhasil diluluskan menjadi Alumni.' : 'Siswa berhasil dipindahkan kelas.',
-            processed: studentIds.length
+            message: "Proses berhasil.",
+            detail: isAlumni ? "Siswa lulus menjadi Alumni." : "Siswa berhasil dipindahkan ke kelas baru yang memiliki Wali Kelas."
         });
 
-    } catch (error: any) {
+    } catch (error) {
         await connection.rollback();
         console.error("Promote Error:", error);
-        res.status(400).json({ message: error.message || 'Gagal memproses kenaikan kelas.' });
+        res.status(500).json({ message: "Gagal memproses data." });
     } finally {
         connection.release();
     }

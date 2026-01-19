@@ -34,7 +34,7 @@ export const getMe = async (req: AuthenticatedRequest, res: Response) => {
       const userId = req.user?.id;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-      // Ambil data terbaru dari Database langsung
+      // [FIX] Ensure personal_email is selected (SELECT * covers it)
       const [rows]: any = await pool.query("SELECT * FROM users WHERE id = ?", [userId]);
       
       if (rows.length === 0) {
@@ -42,9 +42,9 @@ export const getMe = async (req: AuthenticatedRequest, res: Response) => {
       }
 
       const user = rows[0];
-      delete user.password; // Jangan kirim password
+      delete user.password; 
 
-      res.json(user); // Kirim data fresh (termasuk whatsapp_number & agency_name)
+      res.json(user); 
   } catch (error) {
       console.error("Get Me Error:", error);
       res.status(500).json({ message: "Server Error" });
@@ -115,6 +115,10 @@ export const login = async (req: Request, res: Response) => {
         role: user.role,
         nip: user.nip,
         classId: user.class_id,
+        personal_email: user.personal_email, // Added
+        // Add start_period and end_period if available in DB schema
+        start_period: user.start_period,
+        end_period: user.end_period
       }
     });
 
@@ -125,10 +129,11 @@ export const login = async (req: Request, res: Response) => {
 };
 
 export const register = async (req: Request, res: Response) => {
-  const { role, fullName, email, password, nisn, nip, whatsappNumber, classId, contributor_type, agency_name } = req.body;
+  // [FIX] Tambahkan personal_email di sini agar TypeScript mengenalnya
+  const { role, fullName, email, password, nisn, nip, whatsappNumber, classId, contributor_type, agency_name, personal_email } = req.body;
 
   try {
-      // 1. Cek apakah user sudah ada (termasuk yang sudah dihapus/soft-deleted)
+      // 1. Cek user exist
       const [existingUsers]: any = await pool.query(
           `SELECT * FROM users WHERE email = ? OR (nisn IS NOT NULL AND nisn = ?) OR (nip IS NOT NULL AND nip = ?)`,
           [email, nisn || '', nip || '']
@@ -136,18 +141,13 @@ export const register = async (req: Request, res: Response) => {
 
       if (existingUsers.length > 0) {
           const existing = existingUsers[0];
-          
-          // SKENARIO A: User masih aktif (belum dihapus)
           if (!existing.deleted_at) {
               return res.status(400).json({ message: 'Email, NISN, atau NIP sudah terdaftar dan aktif.' });
           }
-
-          // SKENARIO B: User sudah dihapus (ada di sampah/soft-deleted)
-          // Kita HAPUS PERMANEN data lama agar data baru bisa masuk tanpa error duplikat
           await pool.query("DELETE FROM users WHERE id = ?", [existing.id]);
       }
 
-      // 2. Hash Password (jika ada)
+      // 2. Hash Password
       let hashedPassword = null;
       if (password) {
           const salt = await bcrypt.genSalt(10);
@@ -159,20 +159,19 @@ export const register = async (req: Request, res: Response) => {
           `INSERT INTO users (
               full_name, email, password, role, 
               nisn, nip, whatsapp_number, class_id, 
-              contributor_type, agency_name
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              contributor_type, agency_name, personal_email
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
               fullName, email, hashedPassword, role, 
               nisn || null, nip || null, whatsappNumber || null, classId || null,
-              contributor_type || null, agency_name || null
+              contributor_type || null, agency_name || null, personal_email || null
           ]
       );
 
       const newUserId = result.insertId;
 
-      // 4. Logika Khusus Role (Wali Kelas)
+      // 4. Update Kelas jika Wali Kelas
       if (role === 'teacher' && classId) {
-          // Cek apakah kelas sudah punya wali
           const [classCheck]: any = await pool.query("SELECT teacher_id FROM classes WHERE id = ?", [classId]);
           if (classCheck.length > 0 && !classCheck[0].teacher_id) {
               await pool.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [newUserId, classId]);
@@ -180,7 +179,7 @@ export const register = async (req: Request, res: Response) => {
       }
 
       // 5. Response
-      const [newUser]: any = await pool.query("SELECT id, full_name, email, role FROM users WHERE id = ?", [newUserId]);
+      const [newUser]: any = await pool.query("SELECT id, full_name, email, role, personal_email FROM users WHERE id = ?", [newUserId]);
 
       res.status(201).json({
           message: 'Registrasi berhasil',
@@ -209,6 +208,23 @@ export const getPublicSettings = async (req: Request, res: Response) => {
   } catch (error) {
       console.error("Public Settings Error:", error);
       res.status(500).json({ message: 'Gagal mengambil pengaturan publik.' });
+  }
+};
+
+export const updatePersonalEmail = async (req: Request, res: Response) => {
+  const userId = (req as any).user.id;
+  const { personal_email } = req.body;
+
+  if (!personal_email || !personal_email.includes('@')) {
+      return res.status(400).json({ message: "Email tidak valid." });
+  }
+
+  try {
+      await pool.query("UPDATE users SET personal_email = ? WHERE id = ?", [personal_email, userId]);
+      res.json({ message: "Email pribadi berhasil disimpan." });
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Gagal menyimpan email." });
   }
 };
 

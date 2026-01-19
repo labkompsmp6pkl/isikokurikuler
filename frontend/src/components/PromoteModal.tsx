@@ -2,16 +2,13 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2'; 
 import teacherService from '../services/teacherService';
-import { X, RefreshCw, Save, Info } from 'lucide-react';
+import { X, RefreshCw, Save, Info, UserCheck, UserX, ArrowRight, XCircle, GraduationCap } from 'lucide-react';
 
 interface StudentData {
   id: number;
   full_name: string;
   nisn?: string;
   class_name?: string; 
-  // Properti tambahan untuk logic
-  _manualMode?: 'move' | 'promote'; 
-  _targetYear?: string;
 }
 
 interface PromoteModalProps {
@@ -21,178 +18,192 @@ interface PromoteModalProps {
   userRole: 'teacher' | 'admin';
   onSuccess: () => void;
   sourceClassId?: string; 
-  // [BARU] Mode operasi yang dikirim dari parent
   mode?: 'move' | 'promote'; 
+  currentTeacherName?: string; 
 }
 
+type ActionType = 'promote' | 'retain' | 'graduate';
+
 const PromoteModal: React.FC<PromoteModalProps> = ({ 
-  isOpen, onClose, selectedStudents, onSuccess, sourceClassId, mode = 'move' 
+  isOpen, onClose, selectedStudents, onSuccess, sourceClassId, mode = 'move', currentTeacherName
 }) => {
   const [targetClass, setTargetClass] = useState('');
-  const [isAlumni, setIsAlumni] = useState(false);
   const [classes, setClasses] = useState<any[]>([]);
   const [filteredClasses, setFilteredClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   
-  // Ambil data siswa pertama sebagai sampel info
+  // State baru untuk menangani tipe aksi (Naik, Tinggal, Lulus)
+  const [actionType, setActionType] = useState<ActionType>('promote');
+  
   const sampleStudent = selectedStudents[0];
 
-  // Helper: Deteksi Level Kelas (7, 8, 9)
+  // Helper
   const getLevel = (name: string) => parseInt(name?.match(/\d+/)?.[0] || "0");
-
-  // Helper: Parse Tahun Ajaran (misal 2025/2026 -> start: 2025)
-
-  // Helper: Generate Next Year String (2025/2026 -> 2026/2027)
   const getNextYearString = (currentYear: string) => {
       if (!currentYear) return "";
       const parts = currentYear.split('/');
-      if (parts.length !== 2) return "";
-      return `${parseInt(parts[0]) + 1}/${parseInt(parts[1]) + 1}`;
+      return parts.length === 2 ? `${parseInt(parts[0]) + 1}/${parseInt(parts[1]) + 1}` : "";
   };
 
-  // 1. Load Daftar Kelas (Sekali saat modal buka)
   useEffect(() => {
     if (isOpen) {
       setTargetClass('');
-      setIsAlumni(false);
-      
+      // Reset action type based on logic later, but default to promote
+      setActionType('promote'); 
       teacherService.getAllClasses()
-        .then(res => {
-            const list = res.data || res;
-            setClasses(list);
-        })
-        .catch(err => {
-            console.error(err);
-            toast.error("Gagal memuat daftar kelas.");
-        });
+        .then(res => setClasses(res.data || res))
+        .catch(() => toast.error("Gagal memuat daftar kelas."));
     }
   }, [isOpen]);
 
-  // 2. LOGIKA FILTER UTAMA (SESUAI REQUEST ANDA)
   useEffect(() => {
     if (classes.length === 0) return;
 
-    // Cari Object Kelas Asal untuk tau Tahun Ajarannya
     const sourceClassObj = classes.find(c => c.id.toString() === sourceClassId?.toString());
     const currentYear = sourceClassObj?.academic_year || "";
     const currentLevel = getLevel(sourceClassObj?.name || "");
 
-    // ----------------------------------------------------------------
-    // SKENARIO A: PINDAH KELAS (PARALEL / BEBAS)
-    // ----------------------------------------------------------------
-    if (mode === 'move') {
-        // Instruksi: "Bebas dari kelas 7 ke alumni juga bisa"
-        // Filter: Tampilkan SEMUA kelas kecuali kelas asal dia sendiri
-        const options = classes.filter(c => c.id.toString() !== sourceClassId?.toString());
-        setFilteredClasses(options);
-        // Alumni selalu boleh dipilih di mode ini
-        return; 
+    // Set default action type based on level if opening for the first time
+    if (isOpen && currentLevel === 9) {
+        // Default kelas 9 adalah Lulus, tapi user bisa ubah
+        // setActionType('graduate'); 
     }
 
-    // ----------------------------------------------------------------
-    // SKENARIO B: KENAIKAN KELAS (PROMOTE) - STRICT
-    // ----------------------------------------------------------------
-    if (mode === 'promote') {
-        // Instruksi: "Hanya menampilkan kelas yang ada di tahun ajaran baru"
-        // "Tahun ajaran lama gaboleh nampil"
-        
+    if (mode === 'move') {
+        // Pindah kelas biasa (Tahun ajaran sama)
+        setFilteredClasses(classes.filter(c => c.id.toString() !== sourceClassId?.toString()));
+    } else if (mode === 'promote') {
         const targetYearString = getNextYearString(currentYear);
         const nextLevel = currentLevel + 1;
 
-        // Filter 1: Harus Tahun Ajaran Baru
-        let validClasses = classes.filter(c => c.academic_year === targetYearString);
+        let validClasses: any[] = [];
 
-        // Filter 2: Logika Tingkat (Hanya Naik atau Tinggal Kelas)
-        // Kelas 9 -> Hanya bisa Tinggal Kelas 9 (di tahun baru) atau Alumni. Tidak ada kelas 10.
-        // Kelas 7/8 -> Bisa Naik (N+1) atau Tinggal (N)
-        
-        if (currentLevel === 9) {
-            // Jika kelas 9, hanya tampilkan kelas 9 tahun depan (untuk yang tidak lulus)
-            validClasses = validClasses.filter(c => getLevel(c.name) === 9);
+        if (actionType === 'graduate') {
+            // Jika Lulus, tidak perlu load kelas
+            validClasses = [];
+        } else if (actionType === 'retain') {
+            // KASUS TIDAK NAIK KELAS:
+            // Cari kelas di Tahun Ajaran BARU, tapi Level SAMA (misal 7 -> 7)
+            validClasses = classes.filter(c => 
+                c.academic_year === targetYearString && 
+                getLevel(c.name) === currentLevel
+            );
         } else {
-            // Jika kelas 7 atau 8, tampilkan N dan N+1
-            validClasses = validClasses.filter(c => {
-                const lvl = getLevel(c.name);
-                return lvl === currentLevel || lvl === nextLevel;
-            });
+            // KASUS NAIK KELAS (Default):
+            // Cari kelas di Tahun Ajaran BARU, Level + 1 (misal 7 -> 8)
+            validClasses = classes.filter(c => 
+                c.academic_year === targetYearString && 
+                getLevel(c.name) === nextLevel
+            );
         }
-
+        
         setFilteredClasses(validClasses);
-        // Reset checkbox alumni jika ganti filter
-        setIsAlumni(false);
+        
+        // Reset pilihan kelas jika list berubah
+        setTargetClass('');
     }
+  }, [isOpen, classes, sourceClassId, mode, actionType]);
 
-  }, [isOpen, classes, sourceClassId, mode]);
-
+  const generateStudentListHtml = () => {
+    if (selectedStudents.length === 1) {
+        return `<div class="p-2 bg-gray-50 border rounded text-left font-bold text-gray-700">${selectedStudents[0].full_name}</div>`;
+    }
+    return `<div class="p-2 bg-gray-50 border rounded text-left text-xs text-gray-600">
+        <ul class="list-disc pl-4">${selectedStudents.slice(0, 3).map(s => `<li>${s.full_name}</li>`).join('')}</ul>
+        ${selectedStudents.length > 3 ? `...dan ${selectedStudents.length - 3} lainnya` : ''}
+    </div>`;
+  };
 
   const handleSubmit = async () => {
+    const isAlumni = actionType === 'graduate';
+
     if (!isAlumni && !targetClass) {
       toast.error("Mohon pilih kelas tujuan!");
       return;
     }
 
-    // Ambil nama kelas tujuan untuk konfirmasi visual
     const targetClassObj = classes.find(c => c.id == targetClass);
-    const targetNameDisplay = isAlumni 
-        ? "<span class='text-emerald-600 font-bold'>LULUS (ALUMNI)</span>" 
-        : `<span class='text-indigo-600 font-bold'>${targetClassObj?.name} (${targetClassObj?.academic_year})</span>`;
+    
+    // Validasi Wali Kelas
+    if (!isAlumni && !targetClassObj?.teacher_name) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Wali Kelas Kosong!',
+            html: `Kelas tujuan <b>${targetClassObj?.name}</b> belum memiliki Wali Kelas.<br/><br/>
+            Siswa tidak dapat dipindahkan ke kelas tanpa pengampu. Silakan hubungi Admin.`,
+            confirmButtonColor: '#d33'
+        });
+        return;
+    }
 
-    // Tampilan Konfirmasi
+    const targetNameDisplay = isAlumni ? "LULUS (ALUMNI)" : targetClassObj?.name;
+    const sourceNameDisplay = sampleStudent?.class_name || 'Kelas Lama';
+    const processorName = currentTeacherName || 'Guru Wali Kelas';
+
+    // Text konfirmasi yang dinamis
+    let actionText = "Kenaikan Kelas";
+    if (actionType === 'retain') actionText = "Tinggal Kelas (Tidak Naik)";
+    if (actionType === 'graduate') actionText = "Kelulusan";
+
     const result = await Swal.fire({
-      title: mode === 'promote' ? 'Konfirmasi Kenaikan' : 'Konfirmasi Pindah',
+      title: `<span class="text-xl font-bold">Konfirmasi ${actionText}</span>`,
       html: `
-        <div class="text-left text-sm bg-gray-50 p-4 rounded-lg border border-gray-200 mb-2">
-          <p class="font-bold text-gray-500 text-xs uppercase mb-2">Ringkasan:</p>
-          <ul class="list-disc pl-4 space-y-1 mb-3 text-gray-700">
-            <li><b>Siswa:</b> ${selectedStudents.length} Orang</li>
-            <li><b>Asal:</b> ${sampleStudent?.class_name || 'Kelas Lama'}</li>
-          </ul>
-          
-          <div class="flex items-center gap-2 justify-center my-4 bg-white p-3 rounded border border-gray-100">
-             <span class="text-xs font-bold text-gray-500">TUJUAN:</span>
-             ${targetNameDisplay}
-          </div>
+        <div class="text-sm text-left space-y-3">
+            <div>
+                <p class="text-xs text-gray-500 uppercase font-bold">Siswa yang diproses:</p>
+                ${generateStudentListHtml()}
+            </div>
+            
+            <div class="flex items-center gap-2 bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                <div class="flex-1 text-center">
+                    <p class="text-[10px] text-gray-400">DARI</p>
+                    <p class="font-bold text-gray-800">${sourceNameDisplay}</p>
+                </div>
+                <div class="text-indigo-400">➝</div>
+                <div class="flex-1 text-center">
+                    <p class="text-[10px] text-gray-400">MENUJU</p>
+                    <p class="font-bold text-indigo-700">${targetNameDisplay}</p>
+                    ${!isAlumni ? `<p class="text-[9px] text-gray-500">TA: ${targetClassObj?.academic_year}</p>` : ''}
+                </div>
+            </div>
 
-          <p class="text-xs text-amber-600 bg-amber-50 p-2 rounded mt-2 border border-amber-100">
-            ⚠ Pastikan data benar. Riwayat kelas lama akan tersimpan.
-          </p>
+            ${!isAlumni ? `
+            <div class="flex items-start gap-2 bg-emerald-50 p-2 rounded border border-emerald-100">
+                <div class="mt-0.5 text-emerald-600">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <div>
+                    <p class="text-[10px] font-bold text-emerald-600 uppercase">Wali Kelas Baru:</p>
+                    <p class="text-xs font-bold text-gray-700">${targetClassObj?.teacher_name || '?'}</p>
+                </div>
+            </div>` : ''}
+
+            <div class="text-xs text-gray-400 mt-2 border-t pt-2">
+                Diproses oleh: <b>${processorName}</b>
+            </div>
         </div>
       `,
-      icon: 'question',
       showCancelButton: true,
-      confirmButtonColor: '#4f46e5',
-      cancelButtonColor: '#d1d5db',
       confirmButtonText: 'Ya, Proses',
       cancelButtonText: 'Batal',
-      reverseButtons: true
+      confirmButtonColor: '#4f46e5'
     });
 
     if (!result.isConfirmed) return;
 
     setLoading(true);
     try {
-      const studentIds = selectedStudents.map(s => s.id);
-      
       await teacherService.promoteStudents({
-        studentIds: studentIds,
+        studentIds: selectedStudents.map(s => s.id),
         targetClassId: isAlumni ? null : Number(targetClass),
         isAlumni: isAlumni
       });
 
-      await Swal.fire({
-        title: 'Berhasil!',
-        text: 'Data siswa berhasil diperbarui.',
-        icon: 'success',
-        timer: 1500,
-        showConfirmButton: false
-      });
-      
+      Swal.fire('Berhasil!', 'Data siswa berhasil diperbarui.', 'success');
       onSuccess();
       onClose();
     } catch (error: any) {
-      console.error(error);
-      const msg = error.response?.data?.message || "Gagal memproses data.";
-      Swal.fire('Gagal', msg, 'error');
+      Swal.fire('Gagal', error.response?.data?.message || "Terjadi kesalahan.", 'error');
     } finally {
       setLoading(false);
     }
@@ -200,114 +211,142 @@ const PromoteModal: React.FC<PromoteModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Logic UI: Apakah opsi Alumni boleh muncul?
-  // Mode Move: Bebas (Selalu boleh).
-  // Mode Promote: Hanya boleh jika kelas 9 (atau 12).
-  const currentLvl = sampleStudent?.class_name ? getLevel(sampleStudent.class_name) : 0;
-  const showAlumniOption = mode === 'move' || (mode === 'promote' && currentLvl === 9);
+  // Cek Level Kelas Saat Ini
+  const sourceClassObj = classes.find(c => c.id.toString() === sourceClassId?.toString());
+  const currentLvl = getLevel(sourceClassObj?.name || "");
+  const isFinalGrade = currentLvl === 9 || currentLvl === 12; // Cek apakah kelas akhir
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden transform transition-all scale-100">
-        
-        {/* HEADER */}
-        <div className={`px-6 py-4 border-b border-gray-100 flex justify-between items-center ${mode === 'promote' ? 'bg-indigo-50' : 'bg-gray-50'}`}>
-          <div>
-            <h2 className="text-lg font-bold text-gray-800">
-                {mode === 'promote' ? 'Proses Kenaikan Kelas' : 'Pindah Kelas (Paralel)'}
-            </h2>
-            <p className="text-xs text-gray-500">
-                {mode === 'promote' ? 'Menuju Tahun Ajaran Baru' : 'Perpindahan bebas antar kelas'}
-            </p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <X size={20} />
-          </button>
+    <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b bg-gray-50 flex justify-between items-center">
+          <h2 className="font-bold text-gray-800 flex gap-2 items-center">
+            <RefreshCw size={18} className="text-indigo-600"/> Proses Kenaikan Kelas
+          </h2>
+          <button onClick={onClose}><X size={20} className="text-gray-400 hover:text-red-500"/></button>
         </div>
         
-        {/* BODY */}
-        <div className="p-6">
-            <div className="mb-5">
-               <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Siswa Terpilih</label>
-               <div className="p-3 bg-slate-50 text-slate-800 rounded-lg text-sm font-medium border border-slate-200 flex justify-between items-center">
-                  <span>{selectedStudents.length} Siswa</span>
-                  <span className="text-xs bg-white border px-2 py-1 rounded text-gray-500">Dari: <b>{sampleStudent?.class_name || '-'}</b></span>
-               </div>
-            </div>
-
-            {/* OPSI ALUMNI (Kondisional) */}
-            {showAlumniOption && (
-                <div className="mb-5">
-                    <label className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl cursor-pointer hover:bg-emerald-100 transition-colors">
+        <div className="p-6 space-y-5">
+            
+            {/* 1. PILIH JENIS PROSES */}
+            <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Jenis Proses:</label>
+                <div className="grid grid-cols-2 gap-3">
+                    {/* Opsi 1: Naik Kelas / Lulus (Default Positif) */}
+                    <label className={`flex flex-col items-center justify-center p-3 border rounded-xl cursor-pointer transition-all ${
+                        (isFinalGrade ? actionType === 'graduate' : actionType === 'promote')
+                        ? 'bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500 text-emerald-700' 
+                        : 'bg-white hover:bg-gray-50 text-gray-600'
+                    }`}>
                         <input 
-                            type="checkbox" 
-                            checked={isAlumni} 
-                            onChange={(e) => {
-                                setIsAlumni(e.target.checked);
-                                if(e.target.checked) setTargetClass('');
-                            }}
-                            className="w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500"
+                            type="radio" 
+                            name="actionType" 
+                            className="hidden"
+                            checked={isFinalGrade ? actionType === 'graduate' : actionType === 'promote'}
+                            onChange={() => setActionType(isFinalGrade ? 'graduate' : 'promote')}
                         />
-                        <div>
-                            <span className="block font-bold text-emerald-800">Set Sebagai Alumni (Lulus)</span>
-                            <span className="text-xs text-emerald-600">Siswa akan dikeluarkan dari kelas aktif.</span>
-                        </div>
+                        {isFinalGrade ? <GraduationCap size={24} className="mb-1"/> : <ArrowRight size={24} className="mb-1 -rotate-45"/>}
+                        <span className="text-xs font-bold">{isFinalGrade ? 'Lulus (Alumni)' : 'Naik Kelas'}</span>
+                    </label>
+
+                    {/* Opsi 2: Tidak Naik / Tidak Lulus (Negatif) */}
+                    <label className={`flex flex-col items-center justify-center p-3 border rounded-xl cursor-pointer transition-all ${
+                        actionType === 'retain'
+                        ? 'bg-red-50 border-red-500 ring-1 ring-red-500 text-red-700' 
+                        : 'bg-white hover:bg-gray-50 text-gray-600'
+                    }`}>
+                        <input 
+                            type="radio" 
+                            name="actionType" 
+                            className="hidden"
+                            checked={actionType === 'retain'}
+                            onChange={() => setActionType('retain')}
+                        />
+                        <XCircle size={24} className="mb-1"/>
+                        <span className="text-xs font-bold">{isFinalGrade ? 'Tidak Lulus' : 'Tidak Naik Kelas'}</span>
                     </label>
                 </div>
-            )}
+            </div>
 
-            {/* DROPDOWN KELAS */}
-            {!isAlumni && (
-                <div className="mb-2 animate-in fade-in slide-in-from-top-2">
+            {/* 2. PILIH KELAS TUJUAN (Hanya jika bukan Lulus) */}
+            {actionType !== 'graduate' && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
-                        {mode === 'promote' ? 'Target Kenaikan Kelas:' : 'Pindah Ke Kelas:'}
+                        {actionType === 'promote' ? 'Pilih Kelas Lanjutan:' : 'Pilih Kelas (Mengulang):'}
                     </label>
-                    <select 
-                        className="w-full appearance-none bg-white border border-gray-300 text-gray-700 py-3 px-4 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium"
-                        value={targetClass}
-                        onChange={e => setTargetClass(e.target.value)}
-                    >
-                        <option value="">-- Pilih Kelas Tujuan --</option>
+                    <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar border border-gray-100 rounded-lg p-1 bg-gray-50/50">
                         {filteredClasses.length === 0 ? (
-                            <option disabled>Tidak ada kelas tersedia</option>
+                            <div className="p-4 text-center">
+                                <p className="text-sm text-gray-400 italic">Tidak ada kelas tersedia untuk opsi ini di tahun ajaran baru.</p>
+                            </div>
                         ) : (
                             filteredClasses.map((c: any) => {
-                                // Logic Label di Dropdown
-                                let label = `${c.name} (${c.academic_year})`;
-                                if (mode === 'promote') {
-                                    // Beri hint visual apakah naik atau tinggal
-                                    const cLvl = getLevel(c.name);
-                                    if (cLvl === currentLvl) label += " - [Tinggal Kelas]";
-                                    else if (cLvl > currentLvl) label += " - [Naik Kelas]";
-                                }
+                                // Logic visual untuk kelas tanpa wali
+                                const hasTeacher = !!c.teacher_name; 
                                 return (
-                                    <option key={c.id} value={c.id}>{label}</option>
+                                    <label key={c.id} className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-all ${
+                                        targetClass === c.id.toString() 
+                                            ? 'border-indigo-500 bg-white ring-1 ring-indigo-500 shadow-sm' 
+                                            : hasTeacher ? 'bg-white hover:border-indigo-300' : 'opacity-60 bg-gray-100 cursor-not-allowed'
+                                    }`}>
+                                        <div className="flex items-center gap-3">
+                                            <input 
+                                                type="radio" 
+                                                name="targetClass" 
+                                                value={c.id} 
+                                                checked={targetClass === c.id.toString()} 
+                                                onChange={(e) => setTargetClass(e.target.value)}
+                                                disabled={!hasTeacher} // DISABLED JIKA TIDAK ADA GURU
+                                                className="text-indigo-600"
+                                            />
+                                            <div>
+                                                <p className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                                                    {c.name}
+                                                    {/* Badge Level */}
+                                                    {getLevel(c.name) === currentLvl ? 
+                                                        <span className="text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200">Mengulang</span> :
+                                                        <span className="text-[9px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded border border-emerald-200">Naik Level</span>
+                                                    }
+                                                </p>
+                                                <p className="text-[10px] text-gray-500">TA: {c.academic_year}</p>
+                                            </div>
+                                        </div>
+                                        {/* Indikator Guru */}
+                                        {hasTeacher ? (
+                                            <div className="text-right">
+                                                <div className="flex items-center justify-end gap-1 text-[10px] text-emerald-600 font-bold bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
+                                                    <UserCheck size={12} /> {c.teacher_name.split(' ')[0]}..
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1 text-[10px] text-red-600 font-bold bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
+                                                <UserX size={12} /> Kosong
+                                            </div>
+                                        )}
+                                    </label>
                                 );
                             })
                         )}
-                    </select>
-                    
-                    {/* HINT TEXT */}
-                    {mode === 'promote' && (
-                        <p className="text-[10px] text-gray-400 mt-2 flex gap-1">
-                            <Info size={12} className="mt-0.5"/>
-                            <span>Hanya menampilkan kelas di tahun ajaran baru.</span>
+                    </div>
+                    {actionType === 'retain' && (
+                        <p className="text-[10px] text-red-500 mt-2 flex items-center gap-1 bg-red-50 p-2 rounded">
+                            <Info size={12} /> 
+                            <b>Perhatian:</b> Siswa akan tetap berada di tingkat {currentLvl} pada tahun ajaran baru.
                         </p>
                     )}
                 </div>
             )}
         </div>
 
-        {/* FOOTER */}
         <div className="p-6 pt-0 flex justify-end gap-3">
             <button onClick={onClose} className="px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 rounded-lg">Batal</button>
             <button 
               onClick={handleSubmit} 
-              disabled={loading || (!isAlumni && !targetClass)}
-              className="px-6 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              disabled={loading || (actionType !== 'graduate' && !targetClass)}
+              className="px-6 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {loading ? <RefreshCw className="animate-spin" size={16}/> : <Save size={16}/>}
-              {loading ? 'Memproses...' : 'Simpan Perubahan'}
+              Proses Sekarang
             </button>
         </div>
       </div>

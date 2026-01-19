@@ -126,13 +126,14 @@ export const createUser = async (req: Request, res: Response) => {
     const { 
         full_name, email, password, role, nisn, nip, 
         class_id, whatsapp_number,
-        contributor_type, agency_name 
+        contributor_type, agency_name,
+        // [BARU] Tambah Parameter
+        start_period, end_period 
     } = req.body;
 
-    const connection = await pool.getConnection(); // Pakai Transaction agar aman
+    const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-
         const hashedPassword = await bcrypt.hash(password, 10);
         let finalAgencyName = agency_name;
         if (role === 'contributor' && !finalAgencyName && contributor_type !== 'Lainnya') {
@@ -143,13 +144,15 @@ export const createUser = async (req: Request, res: Response) => {
         const [result]: any = await connection.query(
             `INSERT INTO users (
                 full_name, email, password, role, nisn, nip, 
-                class_id, whatsapp_number, contributor_type, agency_name
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                class_id, whatsapp_number, contributor_type, agency_name,
+                start_period, end_period 
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 full_name, email, hashedPassword, role, 
                 nisn || null, nip || null, class_id || null, whatsapp_number || null,
                 role === 'contributor' ? (contributor_type || null) : null,
-                role === 'contributor' ? (finalAgencyName || null) : null
+                role === 'contributor' ? (agency_name || null) : null,
+                start_period || null, end_period || null // [BARU]
             ]
         );
 
@@ -182,7 +185,9 @@ export const updateUser = async (req: Request, res: Response) => {
     const { 
         full_name, email, role, nisn, nip, 
         class_id, whatsapp_number, password,
-        contributor_type, agency_name 
+        contributor_type, agency_name,
+        // [BARU] Tambah Parameter
+        start_period, end_period, personal_email 
     } = req.body;
 
     const connection = await pool.getConnection();
@@ -228,16 +233,18 @@ export const updateUser = async (req: Request, res: Response) => {
 
         // 4. Update Tabel Users Utama
         let query = `
-            UPDATE users 
-            SET full_name=?, email=?, role=?, nisn=?, nip=?, 
-                class_id=?, whatsapp_number=?, last_class_name=?, graduation_year=?,
-                contributor_type=?, agency_name=?
-        `;
-        const params = [
-            full_name, email, role, nisn || null, nip || null, 
-            finalClassId || null, whatsapp_number || null, lastClassName, gradYear,
-            finalContribType, finalAgencyName
-        ];
+        UPDATE users 
+        SET full_name=?, email=?, role=?, nisn=?, nip=?, 
+            class_id=?, whatsapp_number=?, last_class_name=?, graduation_year=?,
+            contributor_type=?, agency_name=?,
+            start_period=?, end_period=?, personal_email=? -- [BARU]
+    `;
+    const params = [
+        full_name, email, role, nisn || null, nip || null, 
+        class_id || null, whatsapp_number || null, null, null, // (sesuaikan var lama)
+        contributor_type || null, agency_name || null,
+        start_period || null, end_period || null, personal_email || null // [BARU]
+    ];
 
         if (password) {
             query += `, password=?`;
@@ -619,13 +626,35 @@ export const getTeachersList = async (req: Request, res: Response) => {
     }
 };
 
-// --- 3. DASHBOARD STATS & ANALYSIS ---
-
 export const getAdminDashboardStats = async (req: Request, res: Response) => {
     try {
-        const [totalRows]: any = await pool.query("SELECT COUNT(*) as total FROM character_logs");
-        const totalLogs = totalRows[0].total || 1;
+        const { period } = req.query; // 'all' or 'active'
 
+        // 1. Get Active Academic Year settings
+        const [settings]: any = await pool.query("SELECT setting_value FROM app_settings WHERE setting_key = 'current_academic_year'");
+        const activeYear = settings[0]?.setting_value || '';
+
+        // 2. Build Filter Clause
+        let whereClause = "";
+        const queryParams: any[] = [];
+
+        if (period === 'active' && activeYear) {
+            // Filter logs only from students currently in classes of the active academic year
+            whereClause = `
+                WHERE student_id IN (
+                    SELECT u.id FROM users u
+                    JOIN classes c ON u.class_id = c.id
+                    WHERE c.academic_year = ?
+                )
+            `;
+            queryParams.push(activeYear);
+        }
+
+        // 3. Count Total Logs (Filtered)
+        const [totalRows]: any = await pool.query(`SELECT COUNT(*) as total FROM character_logs ${whereClause}`, queryParams);
+        const totalLogs = totalRows[0].total || 1; // Avoid division by zero
+
+        // 4. Calculate Stats (Filtered)
         const [statsRows]: any = await pool.query(`
             SELECT 
                 COUNT(CASE WHEN wake_up_time IS NOT NULL AND wake_up_time != '' THEN 1 END) as bangun_pagi,
@@ -636,7 +665,8 @@ export const getAdminDashboardStats = async (req: Request, res: Response) => {
                 COUNT(CASE WHEN social_activities IS NOT NULL AND social_activities != '[]' AND social_activities != '' THEN 1 END) as sosial,
                 COUNT(CASE WHEN sleep_time IS NOT NULL AND sleep_time != '' THEN 1 END) as tidur_cepat
             FROM character_logs
-        `);
+            ${whereClause}
+        `, queryParams);
 
         const stats = statsRows[0];
         const calc = (val: number) => Math.round((val / totalLogs) * 100);
@@ -662,7 +692,21 @@ export const getAdminDashboardStats = async (req: Request, res: Response) => {
             komunikasi: Math.round((habits.bermasyarakat + habits.gemarBelajar) / 2)
         };
 
-        res.json({ totalLogs: totalRows[0].total, habits, profile });
+        // 5. Get General School Stats (Independent of period filter usually, or modify if needed)
+        // Note: Total students is usually "Current Active Students", so filtering by period might not apply to headcount unless specified.
+        // We'll keep general counts as global.
+        const [studentCountRes]: any = await pool.query("SELECT COUNT(*) as total FROM users WHERE role = 'student' AND deleted_at IS NULL");
+        const [classCountRes]: any = await pool.query("SELECT COUNT(*) as total FROM classes");
+        const [noTeacherRes]: any = await pool.query("SELECT COUNT(*) as total FROM classes WHERE teacher_id IS NULL");
+
+        res.json({ 
+            totalStudents: studentCountRes[0].total,
+            totalClasses: classCountRes[0].total,
+            classesNoTeacher: noTeacherRes[0].total,
+            totalLogs: totalRows[0].total, 
+            habits, 
+            profile 
+        });
 
     } catch (error) {
         console.error("Error admin stats:", error);
@@ -729,7 +773,7 @@ export const generateNationalAnalysis = async (req: Request, res: Response) => {
                 "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
                 "Content-Type": "application/json",
                 // Opsional: Untuk identifikasi aplikasi di dashboard OpenRouter
-                "HTTP-Referer": "http://localhost:5000", 
+                "HTTP-Referer": `${process.env.BACKEND_URL}`, 
                 "X-Title": "IsiKokurikuler Analysis", 
             },
             body: JSON.stringify({

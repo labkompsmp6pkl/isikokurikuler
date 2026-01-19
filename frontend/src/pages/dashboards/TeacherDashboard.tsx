@@ -20,12 +20,16 @@ import {
   ArrowUpCircle,
   Search,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  GraduationCap,
+  Clock,
+  AlertCircle
 } from 'lucide-react';
 
 import teacherService from '../../services/teacherService';
 import { useAuth } from '../../services/authService';
 import Spinner from './student/components/Spinner';
+import PersonalEmailAlert from '../../components/PersonalEmailAlert'; // [BARU] Import Alert Email
 
 // Sub-Components Views
 import ValidationView from './teacher/ValidationView';
@@ -67,6 +71,39 @@ const TeacherDashboard: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
+    // --- HELPER: ACADEMIC INFO & DATE (SESUAI FLOWCHART) ---
+    const getAcademicInfo = () => {
+        const now = new Date();
+        const month = now.getMonth(); // 0-11
+        const year = now.getFullYear();
+        
+        let semester = '';
+        let academicYear = '';
+
+        // Juli (Bulan 6) s/d Desember (11) = Ganjil, Tahun Ajar = TahunIni/TahunDepan
+        // Januari (0) s/d Juni (5) = Genap, Tahun Ajar = TahunLalu/TahunIni
+        if (month >= 6) { 
+            semester = 'Ganjil';
+            academicYear = `${year}/${year + 1}`;
+        } else {
+            semester = 'Genap';
+            academicYear = `${year - 1}/${year}`;
+        }
+
+        return { semester, academicYear };
+    };
+
+    const academicInfo = getAcademicInfo();
+
+    const getCurrentDate = () => {
+        return new Date().toLocaleDateString('id-ID', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+        });
+    };
+
     // --- FETCH DATA ---
     const fetchDashboard = async () => {
         setIsLoading(true);
@@ -97,11 +134,15 @@ const TeacherDashboard: React.FC = () => {
     };
 
     // --- LOGIC DATA SISWA ---
-    // [FIX] Ambil daftar siswa dari data dashboard, default ke array kosong jika null
     const students = data?.students || [];
 
-    // [FIX] Filter object siswa lengkap berdasarkan ID yang dicentang (untuk dikirim ke Modal)
-    const selectedStudentData = students.filter((s: any) => selectedStudents.includes(s.id));
+    // Filter object siswa lengkap & INJECT CLASS NAME untuk Modal
+    const selectedStudentData = students
+        .filter((s: any) => selectedStudents.includes(s.id))
+        .map((s: any) => ({
+            ...s,
+            class_name: s.class_name || data?.teacherClass 
+        }));
 
     // --- LOGIC SEARCH & PAGINATION (TAB PROMOSI) ---
     const getFilteredStudents = () => {
@@ -115,7 +156,6 @@ const TeacherDashboard: React.FC = () => {
     const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
     const currentStudents = filteredStudents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-    // Reset pagination saat search berubah
     useEffect(() => { setCurrentPage(1); }, [searchTerm]);
 
     // --- SELECTION LOGIC ---
@@ -127,22 +167,18 @@ const TeacherDashboard: React.FC = () => {
 
     const handleSelectAllCurrentPage = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.checked) {
-            // Select semua di halaman ini
             const newIds = currentStudents.map((s: any) => s.id);
-            // Gabungkan dengan yang sudah dipilih (hindari duplikat)
             setSelectedStudents(prev => [...new Set([...prev, ...newIds])]);
         } else {
-            // Unselect semua di halaman ini
             const currentPageIds = currentStudents.map((s: any) => s.id);
             setSelectedStudents(prev => prev.filter(id => !currentPageIds.includes(id)));
         }
     };
 
-    // Helper: Cek apakah semua siswa di halaman ini terpilih
     const isAllSelected = currentStudents.length > 0 && currentStudents.every((s: any) => selectedStudents.includes(s.id));
 
     // --- NAV ITEMS ---
-    const pendingCount = logs.filter((l: any) => l.status === 'Menunggu Validasi').length;
+    const pendingCount = logs.filter((l: any) => l.status === 'Disetujui').length; // Disetujui Ortu = Menunggu Guru
 
     const navItems = [
         { id: 'beranda', label: 'Beranda Guru', icon: <LayoutDashboard size={20} /> },
@@ -153,6 +189,8 @@ const TeacherDashboard: React.FC = () => {
     ];
 
     if (isLoading) return <div className="h-screen flex items-center justify-center bg-slate-50"><Spinner /></div>;
+
+    const teacherClassName = data?.teacherClass || '-';
 
     return (
         <div className="min-h-screen bg-gray-50 flex font-sans text-slate-800">
@@ -197,7 +235,7 @@ const TeacherDashboard: React.FC = () => {
                             <p className="text-sm font-bold text-gray-800 truncate leading-tight">{user.fullName}</p>
                             <div className="mt-1 flex flex-col">
                                 <span className="text-[10px] font-semibold text-gray-500 truncate">Halaman Guru</span>
-                                <span className="text-[10px] font-bold text-violet-600 mt-0.5 uppercase tracking-wider">Kelas {data?.teacherClass || '-'}</span>
+                                <span className="text-[10px] font-bold text-violet-600 mt-0.5 uppercase tracking-wider">Kelas {teacherClassName}</span>
                             </div>
                         </div>
                     </div>
@@ -219,7 +257,6 @@ const TeacherDashboard: React.FC = () => {
                         </div>
                         <button onClick={() => setIsSidebarOpen(true)} className="text-gray-600 p-1 bg-gray-50 rounded-lg active:scale-95 transition-transform"><Menu size={24} /></button>
                     </div>
-                    
                     <div className="flex items-center gap-3 pt-2 border-t border-gray-100 mt-2">
                         <div className="w-9 h-9 shrink-0 rounded-full bg-violet-600 text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm">
                             {user.fullName.charAt(0)}
@@ -229,39 +266,107 @@ const TeacherDashboard: React.FC = () => {
                             <p className="text-xs font-black text-gray-800 truncate mt-1">{user.fullName}</p>
                         </div>
                         <div className="bg-violet-100 text-violet-700 px-2 py-1 rounded text-[10px] font-black uppercase shadow-sm">
-                            Kelas {data?.teacherClass || '-'}
+                            Kelas {teacherClassName}
                         </div>
                     </div>
                 </header>
 
                 {/* CONTENT AREA */}
                 <main className="p-4 md:p-8 max-w-5xl mx-auto w-full pb-20">
-                    <div className="mb-6">
-                        <h2 className="text-2xl font-black text-gray-800 tracking-tight">
-                            {activeTab === 'beranda' && 'Dashboard Guru'}
-                            {activeTab === 'validasi' && 'Validasi Jurnal'}
-                            {activeTab === 'riwayat' && 'Riwayat Kelas'}
-                            {activeTab === 'analisis' && 'Rapor Karakter AI'}
-                            {activeTab === 'promosi' && 'Manajemen Kenaikan Kelas'}
-                        </h2>
-                        <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-[0.2em]">Wali Kelas {data?.teacherClass}</p>
+                    
+                    {/* [BARU] ALERT EMAIL PRIBADI */}
+                    <PersonalEmailAlert />
+
+                    {/* HEADER SECTION (IMPROVED) */}
+                    <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div>
+                            <h2 className="text-2xl font-black text-gray-800 tracking-tight">
+                                {activeTab === 'beranda' && 'Dashboard Guru'}
+                                {activeTab === 'validasi' && 'Validasi Jurnal'}
+                                {activeTab === 'riwayat' && 'Riwayat Kelas'}
+                                {activeTab === 'analisis' && 'Rapor Karakter AI'}
+                                {activeTab === 'promosi' && 'Manajemen Kenaikan Kelas'}
+                            </h2>
+                            <p className="text-gray-500 font-medium flex items-center gap-2 text-sm mt-1">
+                                <Clock size={16} className="text-violet-500"/>
+                                {getCurrentDate()}
+                            </p>
+                        </div>
+
+                        {/* INFO AKADEMIK BADGE */}
+                        <div className="flex items-center gap-2 bg-white p-2 pr-4 rounded-xl border border-gray-200 shadow-sm self-start md:self-auto">
+                            <div className="bg-violet-100 text-violet-700 px-3 py-2 rounded-lg font-black text-sm flex items-center gap-2">
+                                <GraduationCap size={18}/>
+                                {teacherClassName}
+                            </div>
+                            <div className="flex flex-col text-xs leading-none gap-1">
+                                <span className="font-bold text-gray-700">Sem. {academicInfo.semester}</span>
+                                <span className="text-gray-400 font-medium">{academicInfo.academicYear}</span>
+                            </div>
+                        </div>
                     </div>
 
                     {activeTab === 'beranda' && (
                         <div className="space-y-8 animate-fade-in">
-                            <div className="bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-[2rem] p-8 text-white shadow-xl relative overflow-hidden">
-                                <div className="relative z-10">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm"><Sparkles size={24} /></div>
-                                        <span className="font-bold tracking-widest uppercase text-xs">Overview Kelas</span>
+                            
+                            {/* OVERVIEW CARD */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {/* Welcome Card */}
+                                <div className="md:col-span-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-[2rem] p-8 text-white shadow-xl relative overflow-hidden flex flex-col justify-center">
+                                    <div className="relative z-10">
+                                        <div className="flex items-center gap-3 mb-4">
+                                            <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm"><Sparkles size={24} /></div>
+                                            <span className="font-bold tracking-widest uppercase text-xs">Overview Kelas</span>
+                                        </div>
+                                        <h1 className="text-3xl font-black mb-4 leading-tight tracking-tighter">
+                                            Selamat Bertugas, <br/><span className="text-yellow-300 italic">{user.fullName}</span>
+                                        </h1>
+                                        <p className="text-violet-100 text-lg font-medium max-w-2xl opacity-90">
+                                            Anda mengampu <strong>{students.length} Siswa</strong> di kelas <strong>{teacherClassName}</strong>.
+                                        </p>
                                     </div>
-                                    <h1 className="text-3xl font-black mb-4 leading-tight tracking-tighter">Selamat Bertugas, <br/><span className="text-yellow-300 italic">{user.fullName}</span></h1>
-                                    <p className="text-violet-100 text-lg font-medium max-w-2xl opacity-90">
-                                        Anda mengampu <strong>{students.length} Siswa</strong> di kelas ini. Pastikan untuk selalu memantau perkembangan karakter mereka.
-                                    </p>
+                                    <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-10 -translate-y-10">
+                                        <User size={200} />
+                                    </div>
                                 </div>
-                                <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-10 -translate-y-10">
-                                    <User size={200} />
+
+                                {/* Task Summary Card */}
+                                <div className="bg-white border border-gray-200 rounded-[2rem] p-6 shadow-sm flex flex-col">
+                                    <h3 className="font-black text-gray-800 text-lg mb-4 flex items-center gap-2">
+                                        <AlertCircle size={20} className="text-rose-500" />
+                                        Tugas Hari Ini
+                                    </h3>
+                                    
+                                    <div className="flex-1 flex flex-col gap-3">
+                                        <div className="flex items-center justify-between p-3 bg-rose-50 border border-rose-100 rounded-xl">
+                                            <div className="flex items-center gap-3">
+                                                <div className="bg-white p-2 rounded-lg text-rose-500 shadow-sm"><CheckSquare size={18}/></div>
+                                                <div>
+                                                    <p className="text-xs font-bold text-rose-400 uppercase">Validasi Jurnal</p>
+                                                    <p className="text-sm font-bold text-gray-700">Perlu Dicek</p>
+                                                </div>
+                                            </div>
+                                            <span className="text-2xl font-black text-rose-600">{pendingCount}</span>
+                                        </div>
+
+                                        <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                                            <div className="flex items-center gap-3">
+                                                <div className="bg-white p-2 rounded-lg text-blue-500 shadow-sm"><Users size={18}/></div>
+                                                <div>
+                                                    <p className="text-xs font-bold text-blue-400 uppercase">Total Siswa</p>
+                                                    <p className="text-sm font-bold text-gray-700">Kelas {teacherClassName}</p>
+                                                </div>
+                                            </div>
+                                            <span className="text-2xl font-black text-blue-600">{students.length}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <button 
+                                        onClick={() => setActiveTab('validasi')}
+                                        className="mt-4 w-full py-2 bg-gray-900 text-white text-sm font-bold rounded-xl hover:bg-gray-800 transition-colors"
+                                    >
+                                        Mulai Validasi &rarr;
+                                    </button>
                                 </div>
                             </div>
 
@@ -419,23 +524,22 @@ const TeacherDashboard: React.FC = () => {
                         </div>
                     )}
 
-                    {/* MODAL PROMOSI (FIXED: Passing array of objects) */}
+                    {/* MODAL PROMOSI */}
                     {isPromoteModalOpen && (
                         <PromoteModal 
                             isOpen={isPromoteModalOpen}
                             onClose={() => setIsPromoteModalOpen(false)}
                             selectedStudents={selectedStudentData}
                             userRole="teacher"
-                            // Guru hanya bisa melakukan kenaikan kelas (promote), tidak pindah paralel
                             mode="promote" 
-                            // ID Kelas asal (untuk filter) diambil dari data dashboard guru
-                            sourceClassId={data?.teacherClassId} 
+                            sourceClassId={data?.teacherClassId}
+                            currentTeacherName={user.fullName}
                             onSuccess={() => {
                                 fetchDashboard();
-                                setSelectedStudents([]); // Reset pilihan setelah sukses
+                                setSelectedStudents([]); 
                             }}
                         />
-                    )}
+                    )} 
 
                 </main>
             </div>

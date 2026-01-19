@@ -7,11 +7,14 @@ const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Interceptor untuk Token Auth
 apiClient.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) config.headers['Authorization'] = `Bearer ${token}`;
     return config;
 });
+
+// --- API ACTIONS ---
 
 const getStudentParents = async (studentId: number) => {
   const response = await apiClient.get(`/api/teacher/students/${studentId}/parents`);
@@ -20,7 +23,19 @@ const getStudentParents = async (studentId: number) => {
 
 const getDashboard = async () => (await apiClient.get('/api/teacher/dashboard')).data;
 
+// Validasi Satu Jurnal
 const validateLog = async (logId: number) => (await apiClient.patch(`/api/teacher/validate/${logId}`)).data;
+
+// [BARU] Validasi Massal (Bulk Approve)
+const validateBulkLogs = async (logIds: number[]) => {
+    // Karena backend belum memiliki endpoint bulk khusus, kita gunakan Promise.all
+    // untuk mengirim request validate per item secara paralel.
+    const promises = logIds.map(id => 
+        apiClient.patch(`/api/teacher/validate/${id}`)
+    );
+    const results = await Promise.all(promises);
+    return results.map(r => r.data);
+};
 
 const getClassHistory = async (studentId?: string) => (await apiClient.get('/api/teacher/history', { params: { studentId } })).data;
 
@@ -29,20 +44,21 @@ const generateReport = async (payload: { studentId: number, startDate: string, e
 
 const getValidationLogs = async () => (await apiClient.get('/api/teacher/validation-logs')).data;
 
-// [NEW] Function for Student Promotion
+// Promosi / Kenaikan Kelas
 const promoteStudents = async (payload: { studentIds: number[], targetClassId: number | null, isAlumni: boolean }) => 
     (await apiClient.post('/api/teacher/promote-students', payload)).data;
 
-// [NEW] Helper to get all classes (to select target class)
+// Helper ambil semua kelas (untuk dropdown promote)
 const getAllClasses = async () => (await apiClient.get('/api/auth/classes-list')).data;
 
 export default { 
     getDashboard, 
     validateLog, 
+    validateBulkLogs, // Export fungsi baru ini
     getClassHistory, 
     generateReport, 
     getValidationLogs,
     getStudentParents,
-    promoteStudents, // Export here
-    getAllClasses    // Export here
+    promoteStudents, 
+    getAllClasses    
 };

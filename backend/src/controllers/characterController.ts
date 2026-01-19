@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import pool from '../config/db';
 
-// Get Log Harian
 export const getDailyLog = async (req: Request, res: Response) => {
   try {
     const studentId = (req as any).user.id;
@@ -23,26 +22,25 @@ export const getDailyLog = async (req: Request, res: Response) => {
   }
 };
 
-// Save Log (Updated dengan field baru)
 export const saveCharacterLog = async (req: Request, res: Response) => {
   try {
     const studentId = (req as any).user.id;
     const { 
       log_date, mode, 
       // Eksekusi Fields
-      wake_up_time, worship_activities, worship_detail, // New
+      wake_up_time, worship_activities, worship_detail, 
       sport_activities, sport_detail, 
       meal_text, 
-      study_activities, study_detail, // New
-      social_activities, social_detail, // New
+      study_activities, study_detail, 
+      social_activities, social_detail, 
       sleep_time, 
       
       // Rencana Fields
-      plan_wake_up_time, plan_worship_activities, plan_worship_detail, // New
+      plan_wake_up_time, plan_worship_activities, plan_worship_detail, 
       plan_sport_activities, plan_sport_detail,
       plan_meal_text, 
-      plan_study_activities, plan_study_detail, // New
-      plan_social_activities, plan_social_detail, // New
+      plan_study_activities, plan_study_detail, 
+      plan_social_activities, plan_social_detail, 
       plan_sleep_time
     } = req.body;
 
@@ -66,11 +64,11 @@ export const saveCharacterLog = async (req: Request, res: Response) => {
            plan_sleep_time, is_plan_submitted)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
           [studentId, log_date, 
-           plan_wake_up_time, JSON.stringify(plan_worship_activities), plan_worship_detail,
-           plan_sport_activities, plan_sport_detail,
+           plan_wake_up_time, JSON.stringify(plan_worship_activities || []), plan_worship_detail,
+           JSON.stringify(plan_sport_activities || []), plan_sport_detail,
            plan_meal_text, 
-           JSON.stringify(plan_study_activities), plan_study_detail,
-           JSON.stringify(plan_social_activities), plan_social_detail,
+           JSON.stringify(plan_study_activities || []), plan_study_detail,
+           JSON.stringify(plan_social_activities || []), plan_social_detail,
            plan_sleep_time]
         );
       } else {
@@ -85,11 +83,11 @@ export const saveCharacterLog = async (req: Request, res: Response) => {
              sleep_time, is_execution_submitted)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
             [studentId, log_date, 
-             wake_up_time, JSON.stringify(worship_activities), worship_detail,
-             sport_activities, sport_detail, 
+             wake_up_time, JSON.stringify(worship_activities || []), worship_detail,
+             JSON.stringify(sport_activities || []), sport_detail, 
              meal_text, 
-             JSON.stringify(study_activities), study_detail,
-             JSON.stringify(social_activities), social_detail,
+             JSON.stringify(study_activities || []), study_detail,
+             JSON.stringify(social_activities || []), social_detail,
              sleep_time]
           );
       }
@@ -105,11 +103,11 @@ export const saveCharacterLog = async (req: Request, res: Response) => {
            plan_social_activities = ?, plan_social_detail = ?,
            plan_sleep_time = ?, is_plan_submitted = 1
            WHERE student_id = ? AND log_date = ?`,
-          [plan_wake_up_time, JSON.stringify(plan_worship_activities), plan_worship_detail,
-           plan_sport_activities, plan_sport_detail,
+          [plan_wake_up_time, JSON.stringify(plan_worship_activities || []), plan_worship_detail,
+           JSON.stringify(plan_sport_activities || []), plan_sport_detail,
            plan_meal_text, 
-           JSON.stringify(plan_study_activities), plan_study_detail,
-           JSON.stringify(plan_social_activities), plan_social_detail,
+           JSON.stringify(plan_study_activities || []), plan_study_detail,
+           JSON.stringify(plan_social_activities || []), plan_social_detail,
            plan_sleep_time, 
            studentId, log_date]
         );
@@ -124,11 +122,11 @@ export const saveCharacterLog = async (req: Request, res: Response) => {
            social_activities = ?, social_detail = ?,
            sleep_time = ?, is_execution_submitted = 1
            WHERE student_id = ? AND log_date = ?`,
-          [wake_up_time, JSON.stringify(worship_activities), worship_detail,
-           sport_activities, sport_detail, 
+          [wake_up_time, JSON.stringify(worship_activities || []), worship_detail,
+           JSON.stringify(sport_activities || []), sport_detail,
            meal_text, 
-           JSON.stringify(study_activities), study_detail,
-           JSON.stringify(social_activities), social_detail,
+           JSON.stringify(study_activities || []), study_detail,
+           JSON.stringify(social_activities || []), social_detail,
            sleep_time, 
            studentId, log_date]
         );
@@ -141,6 +139,7 @@ export const saveCharacterLog = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Error saving log', error });
   }
 };
+
 export const getHistory = async (req: Request, res: Response) => {
     try {
       const studentId = (req as any).user.id;

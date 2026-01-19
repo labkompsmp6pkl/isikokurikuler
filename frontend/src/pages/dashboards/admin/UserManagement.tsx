@@ -21,6 +21,9 @@ interface UserFormState {
     // Field Kontributor
     contributor_type?: string;
     agency_name?: string;
+    // [BARU] Field Periode
+    start_period?: string;
+    end_period?: string;
 }
 
 const UserManagement: React.FC = () => {
@@ -57,7 +60,8 @@ const UserManagement: React.FC = () => {
     const initialForm: UserFormState = { 
         full_name: '', email: '', role: 'student', class_id: '', 
         nisn: '', nip: '', whatsapp_number: '', password: '',
-        contributor_type: '', agency_name: ''
+        contributor_type: '', agency_name: '',
+        start_period: '', end_period: '' // [BARU]
     };
     const [formData, setFormData] = useState<UserFormState>(initialForm);
     
@@ -94,7 +98,7 @@ const UserManagement: React.FC = () => {
                 let classesData = Array.isArray(response) ? response : (response?.data || []);
                 setAvailableClasses(classesData);
 
-                // Extract unik tahun
+                // Extract unik tahun untuk dropdown
                 const years = Array.from(new Set(classesData.map((c: any) => c.academic_year))).sort().reverse();
                 setAvailableYears(years as string[]);
             } catch (error) { 
@@ -120,14 +124,11 @@ const UserManagement: React.FC = () => {
             const queryFilters = { ...filters, page };
 
             // [LOGIKA FILTER]
-            // Cek apakah role yang dipilih relevan dengan Tahun Ajaran (Student/Teacher/All)
             const isYearSensitive = ['all', 'student', 'teacher'].includes(filters.role);
 
             if (!isYearSensitive) {
-                // Jika role Orang Tua, Kontributor, Alumni -> Paksa ambil SEMUA tahun
                 queryFilters.academic_year = 'all';
             } else {
-                // Jika relevan, gunakan filter yang dipilih (convert 'active' ke tahun string)
                 if (queryFilters.academic_year === 'active') {
                     queryFilters.academic_year = activeYear;
                 }
@@ -168,7 +169,6 @@ const UserManagement: React.FC = () => {
         setFormData(initialForm);
         setIsEditMode(false);
         setSelectedUserId(null);
-        // Set default filter form ke tahun aktif
         setFormYearFilter(activeYear);
         setViewMode('form');
     };
@@ -178,7 +178,6 @@ const UserManagement: React.FC = () => {
         setIsEditMode(true);
         const targetClassId = user.active_class_id ? user.active_class_id.toString() : (user.class_id ? user.class_id.toString() : '');
 
-        // Deteksi tahun ajaran user tersebut untuk set filter form
         const userClass = availableClasses.find(c => c.id.toString() === targetClassId);
         const userYear = userClass ? userClass.academic_year : activeYear;
         setFormYearFilter(userYear);
@@ -193,7 +192,10 @@ const UserManagement: React.FC = () => {
             class_id: targetClassId, 
             whatsapp_number: user.whatsapp_number || '',
             contributor_type: user.contributor_type || '',
-            agency_name: user.agency_name || ''
+            agency_name: user.agency_name || '',
+            // [BARU] Load Periode
+            start_period: user.start_period || '',
+            end_period: user.end_period || ''
         });
         setViewMode('form');
     };
@@ -265,7 +267,9 @@ const UserManagement: React.FC = () => {
                 ...formData, 
                 email: emailToSave, 
                 class_id: formData.role === 'alumni' ? null : (formData.class_id ? Number(formData.class_id) : null),
-                agency_name: formData.role === 'contributor' ? (formData.agency_name || formData.contributor_type) : null
+                agency_name: formData.role === 'contributor' ? (formData.agency_name || formData.contributor_type) : null,
+                start_period: formData.start_period || null, 
+                end_period: formData.end_period || null      
             };
 
             if (isEditMode && selectedUserId) {
@@ -355,7 +359,6 @@ const UserManagement: React.FC = () => {
         return <span className={`${base} bg-gray-50 text-gray-600 border-gray-100`}>{role}</span>;
     };
 
-    // Helper: Tampilkan kelas di form, urutkan berdasarkan tahun aktif
     const getClassesForFormFiltered = () => {
         if (!formYearFilter) return [];
         return availableClasses
@@ -363,7 +366,6 @@ const UserManagement: React.FC = () => {
             .sort((a, b) => a.name.localeCompare(b.name));
     };
 
-    // Helper: Generate Display Class Name
     const getDisplayClassName = (user: any) => {
         if (user.class_name) {
             const year = user.class_academic_year || user.active_academic_year || '-';
@@ -377,7 +379,6 @@ const UserManagement: React.FC = () => {
         return '-';
     };
 
-    // [LOGIKA FILTER TAHUN]
     const isYearSensitiveRole = ['all', 'student', 'teacher'].includes(filters.role);
 
     // ==========================================
@@ -417,6 +418,15 @@ const UserManagement: React.FC = () => {
                                         </div>
                                         <h1 className="text-xl font-black text-white leading-tight mb-2">{selectedUserDetail.full_name}</h1>
                                         
+                                        {/* TAMPILKAN PERIODE DI DETAIL JIKA ADA */}
+                                        {(selectedUserDetail.start_period || selectedUserDetail.end_period) && (
+                                            <div className="mb-3">
+                                                <span className="bg-white/20 text-white/90 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-sm">
+                                                    <Calendar size={10} /> {selectedUserDetail.start_period || '?'} - {selectedUserDetail.end_period || 'Selesai'}
+                                                </span>
+                                            </div>
+                                        )}
+
                                         {selectedUserDetail.role === 'student' && !selectedUserDetail.is_active && (
                                             <div className="mb-3"><span className="bg-amber-400/90 text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm backdrop-blur-sm"><Lock size={10} /> Belum Aktivasi</span></div>
                                         )}
@@ -436,7 +446,19 @@ const UserManagement: React.FC = () => {
                                     </div>
                                 </div>
                                 <div className="p-6 space-y-4">
-                                    <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100"><div className="p-2 bg-white rounded-lg text-violet-500 shadow-sm"><Mail size={18}/></div><div className="overflow-hidden"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email</p><p className="font-bold text-slate-700 text-sm truncate">{selectedUserDetail.email}</p></div></div>
+                                    <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100"><div className="p-2 bg-white rounded-lg text-violet-500 shadow-sm"><Mail size={18}/></div><div className="overflow-hidden"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email Login</p><p className="font-bold text-slate-700 text-sm truncate">{selectedUserDetail.email}</p></div></div>
+                                    
+                                    {/* EMAIL PRIBADI */}
+                                    {selectedUserDetail.personal_email && (
+                                        <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                            <div className="p-2 bg-white rounded-lg text-indigo-500 shadow-sm"><Mail size={18}/></div>
+                                            <div className="overflow-hidden">
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email Pribadi</p>
+                                                <p className="font-bold text-slate-700 text-sm truncate">{selectedUserDetail.personal_email}</p>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {(selectedUserDetail.nisn || selectedUserDetail.nip) && (<div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100"><div className="p-2 bg-white rounded-lg text-blue-500 shadow-sm"><Hash size={18}/></div><div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{selectedUserDetail.role === 'student' || selectedUserDetail.role === 'alumni' ? 'NISN' : 'NIP / ID'}</p><p className="font-mono font-bold text-slate-700 text-sm">{selectedUserDetail.nisn || selectedUserDetail.nip}</p></div></div>)}
                                     {selectedUserDetail.whatsapp_number && (<div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-100"><div className="p-2 bg-white rounded-lg text-green-500 shadow-sm"><Phone size={18}/></div><div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">WhatsApp</p><p className="font-bold text-slate-700 text-sm">{selectedUserDetail.whatsapp_number}</p></div></div>)}
                                     {selectedUserDetail.role === 'contributor' && selectedUserDetail.agency_name && (<div className="flex items-center gap-4 p-3 rounded-xl bg-green-50 border border-green-100"><div className="p-2 bg-white rounded-lg text-green-600 shadow-sm"><School size={18}/></div><div><p className="text-[10px] font-bold text-green-700 uppercase tracking-wider">Instansi</p><p className="font-bold text-slate-700 text-sm">{selectedUserDetail.agency_name}</p></div></div>)}
@@ -632,6 +654,42 @@ const UserManagement: React.FC = () => {
                             <div><label className="block text-xs font-bold text-slate-600 mb-2">Password {!isEditMode ? '(Wajib)' : '(Kosongkan jika tidak ubah)'}</label><input type="password" name="password" value={formData.password} onChange={handleChange} required={!isEditMode} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"/></div>
                             
                             <div className="md:col-span-2 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100/50 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                
+                                {/* [BARU] Input Periode Aktif (DROPDOWN) */}
+                                <div className="md:col-span-2 grid grid-cols-2 gap-4 border-b border-indigo-100 pb-4 mb-2">
+                                    <div>
+                                        <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Mulai Periode</label>
+                                        {/* GANTI INPUT TEKS DENGAN SELECT */}
+                                        <select 
+                                            name="start_period" 
+                                            value={formData.start_period || ''} 
+                                            onChange={handleChange} 
+                                            className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                                        >
+                                            <option value="">-- Pilih Tahun Mulai --</option>
+                                            {availableYears.map(y => (
+                                                <option key={y} value={y}>{y}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Selesai Periode</label>
+                                        {/* GANTI INPUT TEKS DENGAN SELECT */}
+                                        <select 
+                                            name="end_period" 
+                                            value={formData.end_period || ''} 
+                                            onChange={handleChange} 
+                                            className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                                        >
+                                            <option value="">-- Pilih Tahun Selesai --</option>
+                                            {availableYears.map(y => (
+                                                <option key={y} value={y}>{y}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 col-span-2 italic">*Opsional: Pilih dari daftar tahun ajaran untuk menetapkan masa aktif pengguna (Masa Studi / Kontrak).</p>
+                                </div>
+
                                 {(formData.role === 'student' || formData.role === 'alumni' || formData.role === 'teacher') && (
                                     <>
                                         {/* FILTER TAHUN UNTUK FORM */}
@@ -742,15 +800,14 @@ const UserManagement: React.FC = () => {
                                 <select className="bg-slate-50 border border-slate-100 pl-9 pr-8 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer" value={filters.class_id} onChange={(e) => setFilters({...filters, class_id: e.target.value})}>
                                     <option value="all">Semua Kelas</option>
                                     <option value="none">Belum Ada Kelas</option>
-                                    {/* HANYA TAMPILKAN KELAS YANG SESUAI DENGAN TAHUN YANG DIPILIH */}
                                     {availableClasses
-                                        .filter(c => {
-                                            if (filters.academic_year === 'all') return true;
-                                            if (filters.academic_year === 'active') return c.academic_year === activeYear;
-                                            return c.academic_year === filters.academic_year;
-                                        })
-                                        .map(c => (
-                                            <option key={c.id} value={c.id}>{c.name} ({c.academic_year})</option>
+                                    .filter(c => {
+                                        if (filters.academic_year === 'all') return true;
+                                        if (filters.academic_year === 'active') return c.academic_year === activeYear;
+                                        return c.academic_year === filters.academic_year;
+                                    })
+                                    .map(c => (
+                                        <option key={c.id} value={c.id}>{c.name} ({c.academic_year})</option>
                                     ))}
                                 </select>
                             </div>
@@ -784,7 +841,6 @@ const UserManagement: React.FC = () => {
                                     <>
                                         <div className="flex justify-between items-center text-[11px]">
                                             <span className="text-slate-400 font-bold uppercase flex items-center gap-1.5"><BookOpen size={12}/> {u.role === 'teacher' ? 'Wali Kelas' : 'Kelas'}</span> 
-                                            {/* TAMPILKAN KELAS & TAHUN AJARAN */}
                                             <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-100">
                                                 {getDisplayClassName(u)}
                                             </span>

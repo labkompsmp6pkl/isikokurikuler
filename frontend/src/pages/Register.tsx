@@ -22,7 +22,8 @@ import {
   CheckCircle2,
   Info,
   Calendar,
-  School
+  School,
+  Mail // Ikon Email
 } from 'lucide-react';
 
 // ==========================================
@@ -124,7 +125,7 @@ const Register: React.FC = () => {
   // State untuk Filter Tahun Ajaran
   const [selectedYear, setSelectedYear] = useState<string>('');
   const [availableYears, setAvailableYears] = useState<string[]>([]);
-  const [activeYear, setActiveYear] = useState<string>(''); // Tahun yang aktif di sistem (Database)
+  const [activeYear, setActiveYear] = useState<string>(''); 
 
   const roleOptions = [
     { id: 'student', label: 'Siswa', icon: <GraduationCap size={24}/> },
@@ -136,6 +137,7 @@ const Register: React.FC = () => {
   // State Form
   const [formData, setFormData] = useState({
     fullName: '',
+    email: '', // [BARU] Input Email Pribadi
     nisn: '',
     nip: '',
     whatsappNumber: '',
@@ -163,32 +165,25 @@ const Register: React.FC = () => {
     const initData = async () => {
       setIsClassLoading(true);
       try {
-        // 1. Fetch Data Kelas & Settings secara paralel
         const [classesRes, settingsRes] = await Promise.allSettled([
             authApi.get('/auth/classes-list'),
-            authApi.get('/auth/settings') // Pastikan endpoint ini dibuat di backend
+            authApi.get('/auth/settings') 
         ]);
 
-        // Process Settings (Tahun Aktif)
         let systemActiveYear = '';
         if (settingsRes.status === 'fulfilled') {
             systemActiveYear = settingsRes.value.data?.current_academic_year || '';
             setActiveYear(systemActiveYear);
         }
 
-        // Process Classes
         if (classesRes.status === 'fulfilled') {
             const data = classesRes.value.data.data || classesRes.value.data;
             if (Array.isArray(data)) {
                 setClassList(data);
 
-                // Extract unik tahun ajaran dari daftar kelas
                 const years = Array.from(new Set(data.map((c: any) => c.academic_year))).sort().reverse();
                 setAvailableYears(years as string[]);
 
-                // Set default selected year:
-                // Prioritas 1: Tahun Aktif dari Sistem
-                // Prioritas 2: Tahun Paling Baru di daftar kelas
                 if (systemActiveYear && years.includes(systemActiveYear)) {
                     setSelectedYear(systemActiveYear);
                 } else if (years.length > 0) {
@@ -208,13 +203,11 @@ const Register: React.FC = () => {
 
   // --- OPSI KELAS SISWA (DIFILTER TAHUN) ---
   const studentClassOptions = useMemo(() => {
-    // 1. Filter berdasarkan Tahun Ajaran yang dipilih
     let filtered = classList;
     if (selectedYear) {
         filtered = classList.filter(c => c.academic_year === selectedYear);
     }
 
-    // 2. Sort Nama Kelas
     const sortedClasses = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
 
     return sortedClasses.map(c => {
@@ -223,7 +216,6 @@ const Register: React.FC = () => {
         const remaining = capacity - currentFilled;
         const isFull = remaining <= 0;
         
-        // Label Sisa Bangku
         const subLabel = isFull ? `Penuh` : `Sisa ${remaining} Bangku`;
 
         return {
@@ -238,13 +230,11 @@ const Register: React.FC = () => {
 
   // --- OPSI KELAS GURU (DIFILTER TAHUN) ---
   const teacherClassOptions = useMemo(() => {
-    // 1. Filter Tahun
     let filtered = classList;
     if (selectedYear) {
         filtered = classList.filter(c => c.academic_year === selectedYear);
     }
     
-    // 2. Sort Nama Kelas
     const sortedClasses = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
 
     return sortedClasses.map(c => {
@@ -266,7 +256,6 @@ const Register: React.FC = () => {
 
   const handleYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
       setSelectedYear(e.target.value);
-      // Reset pilihan kelas jika tahun berubah agar tidak invalid
       setFormData(prev => ({ ...prev, classId: '' }));
   };
 
@@ -284,6 +273,7 @@ const Register: React.FC = () => {
     setLoading(true);
     setError('');
 
+    // Validasi Password (kecuali siswa)
     if (selectedRole !== 'student') {
         if (formData.password.length < 6) {
             setError('Password minimal 6 karakter.');
@@ -297,17 +287,32 @@ const Register: React.FC = () => {
         }
     }
 
+    // Validasi Email (jika diisi)
+    if (formData.email && !formData.email.includes('@')) {
+        setError('Format email tidak valid.');
+        setLoading(false);
+        return;
+    }
+
     const loadingToast = toast.loading('Mendaftarkan akun...');
 
     try {
-      const namePrefix = formData.fullName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
-      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-      const generatedEmail = `${namePrefix}${randomSuffix}@isokurikuler.id`;
+      // Generate email sistem jika user tidak mengisi email atau role siswa
+      // (Backend biasanya tetap butuh kolom 'email' unik sebagai identifier login)
+      let finalEmail = formData.email;
+      
+      // Jika email kosong, generate dummy email untuk login sistem
+      if (!finalEmail) {
+          const namePrefix = formData.fullName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
+          const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+          finalEmail = `${namePrefix}${randomSuffix}@isokurikuler.id`;
+      }
 
       const registrationData = {
         role: selectedRole,
         fullName: formData.fullName.trim(),
-        email: generatedEmail,
+        email: finalEmail, // Gunakan email input atau generated
+        personal_email: formData.email, // Kirim juga sebagai personal_email jika diisi
         password: selectedRole === 'student' ? '' : formData.password,
         nisn: selectedRole === 'student' ? formData.nisn : undefined,
         nip: (selectedRole === 'teacher' || selectedRole === 'contributor') ? formData.nip : undefined,
@@ -353,6 +358,17 @@ const Register: React.FC = () => {
           value={formData.fullName} 
           onChange={handleFormChange}
           icon={<User size={22}/>}
+        />
+
+        {/* [BARU] Input Email Pribadi (Opsional) */}
+        <InputField 
+          name="email" 
+          placeholder="Email Pribadi (Opsional, untuk pemulihan)" 
+          value={formData.email} 
+          onChange={handleFormChange}
+          required={false}
+          type="email"
+          icon={<Mail size={22}/>}
         />
 
         {selectedRole === 'student' && (
@@ -409,7 +425,6 @@ const Register: React.FC = () => {
               icon={<ShieldCheck size={22}/>}
             />
             
-            {/* FILTER TAHUN AJARAN UNTUK GURU */}
             <div className="bg-indigo-50 p-4 rounded-[1.5rem] border border-indigo-100">
                 <label className="text-[10px] font-bold text-indigo-500 uppercase mb-2 block ml-2">Tahun Ajaran Kelas Wali</label>
                 <div className="relative group mb-3">
@@ -444,7 +459,6 @@ const Register: React.FC = () => {
           </>
         )}
 
-        {/* LOGIKA FORM KONTRIBUTOR */}
         {selectedRole === 'contributor' && (
           <>
             <SelectField 
@@ -552,7 +566,8 @@ const Register: React.FC = () => {
                         password: '', 
                         confirmPassword: '',
                         contributor_type: '',
-                        agency_name: ''
+                        agency_name: '',
+                        email: '' // Reset email saat ganti role
                     }));
                     setError('');
                   }} 

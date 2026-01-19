@@ -18,10 +18,11 @@ import {
 import { useAuth, authApi } from '../../services/authService';
 import toast from 'react-hot-toast';
 
-// --- IMPORT SEMUA VIEW (TERMASUK MISI) ---
+// --- IMPORT COMPONENTS ---
 import CharacterInputView from './contributor/CharacterInputView'; 
-import CharacterScheduleView from './contributor/CharacterScheduleView'; // Restore fitur Misi
+import CharacterScheduleView from './contributor/CharacterScheduleView'; 
 import HistoryView from './contributor/HistoryView';
+import PersonalEmailAlert from '../../components/PersonalEmailAlert'; // [BARU] Import Alert Email
 
 const ContributorDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -33,7 +34,6 @@ const ContributorDashboard: React.FC = () => {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
-  // [RESTORE] Tambahkan 'misi' ke activeTab
   const [activeTab, setActiveTab] = useState<'dashboard' | 'input' | 'misi' | 'history'>('dashboard');
 
   // Fetch Data Terbaru
@@ -87,11 +87,10 @@ const ContributorDashboard: React.FC = () => {
     }, 800);
   };
 
-  // [RESTORE] Menu Misi Ditambahkan Kembali
   const navItems = [
     { id: 'dashboard', label: 'Beranda', icon: <LayoutDashboard size={20} />, disabled: false },
     { id: 'input', label: 'Input Penilaian', icon: <PenTool size={20} />, disabled: !isAccountActive },
-    { id: 'misi', label: 'Buat Misi', icon: <Target size={20} />, disabled: !isAccountActive }, // Menu Misi
+    { id: 'misi', label: 'Buat Misi', icon: <Target size={20} />, disabled: !isAccountActive }, 
     { id: 'history', label: 'Riwayat', icon: <History size={20} />, disabled: !isAccountActive },
   ];
 
@@ -219,6 +218,9 @@ const ContributorDashboard: React.FC = () => {
         {/* Page Content */}
         <main className="p-4 md:p-10 max-w-7xl mx-auto w-full pb-20">
           
+          {/* [BARU] Alert Email Pribadi */}
+          <PersonalEmailAlert />
+
           <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
              <div>
                 <h1 className="text-3xl font-black text-gray-800">
@@ -241,7 +243,7 @@ const ContributorDashboard: React.FC = () => {
              </button>
           </div>
 
-          {/* ALERT BLOCKING */}
+          {/* ALERT BLOCKING (Fitur Terkunci) */}
           {!isAccountActive && (
              <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-r-xl shadow-sm mb-8 animate-fade-in-up">
                 <div className="flex items-start gap-4">

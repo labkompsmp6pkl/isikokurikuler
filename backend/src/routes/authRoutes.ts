@@ -7,7 +7,8 @@ import {
     getStudentsList,
     getClasses, // <<< PERBAIKAN: Impor dari authController
     getMe,
-    getPublicSettings
+    getPublicSettings,
+    updatePersonalEmail
 } from '../controllers/authController';
 import passport from 'passport';
 import { authMiddleware } from '../middleware/authMiddleware'; 
@@ -18,6 +19,7 @@ const router = Router();
 router.post('/login', login as RequestHandler);
 router.post('/register', register as RequestHandler);
 router.get('/settings', getPublicSettings as RequestHandler);
+router.post('/update-email', authMiddleware as RequestHandler,updatePersonalEmail as RequestHandler);
 
 // Mengambil daftar kelas untuk pendaftaran
 router.get('/classes-list', getClasses as RequestHandler); // <<< PERBAIKAN: Sekarang menggunakan fungsi yang benar

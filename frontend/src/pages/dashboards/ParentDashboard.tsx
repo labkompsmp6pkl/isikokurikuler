@@ -23,6 +23,7 @@ import { useAuth, authApi } from '../../services/authService';
 import Spinner from './student/components/Spinner';
 import ApprovalPanel from './parent/ApprovalPanel';
 import HistoryCalendar from './parent/HistoryCalendar';
+import PersonalEmailAlert from '../../components/PersonalEmailAlert'; // [PENTING] Import Komponen Alert
 
 // --- INTERFACE ---
 interface StudentSearchResult {
@@ -384,16 +385,14 @@ const ActivationStudentForm: React.FC<{ studentName: string, studentNisn: string
 
 // --- UTAMA: PARENT DASHBOARD ---
 const ParentDashboard: React.FC = () => {
-    const { logout: authLogout } = useAuth();
+    // [PENTING] Gunakan user dari Context Auth, bukan localStorage manual agar reaktif
+    const { user, logout: authLogout } = useAuth();
+    
     const [dashboardData, setDashboardData] = useState<ParentDashboardData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'beranda' | 'validasi' | 'kalender'>('beranda');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     
-    // Pastikan user ada dan punya ID
-    const userString = localStorage.getItem('user');
-    const user = userString ? JSON.parse(userString) : { id: 0, fullName: 'Orang Tua' };
-
     const fetchData = async () => {
         setIsLoading(true);
         try {
@@ -419,7 +418,6 @@ const ParentDashboard: React.FC = () => {
     if (dashboardData && dashboardData.student) {
         
         // Cek status aktif (apakah sudah punya password)
-        // Backend harus mengirimkan flag 'is_active' (boolean/number)
         const isStudentActive = Boolean((dashboardData.student as any).is_active);
 
         if (!isStudentActive) {
@@ -474,10 +472,10 @@ const ParentDashboard: React.FC = () => {
                 <div className="p-4 border-t bg-gray-50">
                     <div className="flex items-center gap-3 mb-4">
                         <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold shadow-sm uppercase">
-                            {user.fullName?.charAt(0) || 'O'}
+                            {user?.fullName?.charAt(0) || 'O'}
                         </div>
                         <div className="overflow-hidden">
-                            <p className="text-sm font-bold truncate">{user.fullName}</p>
+                            <p className="text-sm font-bold truncate">{user?.fullName || 'Orang Tua'}</p>
                             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{relationshipLabel}</p>
                         </div>
                     </div>
@@ -496,6 +494,10 @@ const ParentDashboard: React.FC = () => {
                 </header>
 
                 <div className="p-4 md:p-8 max-w-5xl mx-auto w-full pb-24">
+                    
+                    {/* [BARU] Alert Email Pribadi - Akan mengecek user.personal_email */}
+                    <PersonalEmailAlert />
+
                     <div className="mb-6">
                         <h2 className="text-2xl font-black text-slate-800 tracking-tight">
                             {activeTab === 'beranda' ? 'Dukungan Orang Tua' : activeTab === 'validasi' ? 'Konfirmasi Aktivitas' : 'Riwayat Kegiatan'}
@@ -517,9 +519,9 @@ const ParentDashboard: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {parentHabits.map((h, i) => (
                                     <div key={i} className={`p-5 rounded-2xl border transition-all hover:shadow-md ${h.color}`}>
-                                        <div className="text-3xl mb-3">{h.icon}</div>
-                                        <h3 className="font-black text-lg mb-1">{h.title}</h3>
-                                        <p className="text-xs font-medium opacity-80 leading-relaxed">{h.desc}</p>
+                                            <div className="text-3xl mb-3">{h.icon}</div>
+                                            <h3 className="font-black text-lg mb-1">{h.title}</h3>
+                                            <p className="text-xs font-medium opacity-80 leading-relaxed">{h.desc}</p>
                                     </div>
                                 ))}
                             </div>
@@ -536,7 +538,7 @@ const ParentDashboard: React.FC = () => {
                                 <ApprovalPanel 
                                     logs={dashboardData.logs} 
                                     onApproveSuccess={() => fetchData()} 
-                                    currentUserId={user.id}
+                                    currentUserId={user?.id || 0}
                                 />
                             </div>
                         </div>

@@ -6,61 +6,67 @@ import { AuthenticatedRequest } from '../middleware/authMiddleware';
 // [REVISI] Mengambil Data Dashboard Siswa
 // Perbaikan: Menambahkan kolom 'graduation_year' dan 'last_class_name'
 // ------------------------------------------------------------------
-export const getStudentDashboardData = async (req: AuthenticatedRequest, res: Response) => {
-    const studentId = req.user?.id;
-
+export const getStudentDashboardData = async (req: Request, res: Response) => {
     try {
-        // [PASTIKAN QUERY SELECT MENGAMBIL graduation_year]
-        const [userRows]: any = await pool.query(
-            'SELECT full_name, nisn, class, role, graduation_year, last_class_name FROM users WHERE id = ?', 
-            [studentId]
-        );
-        
-        if (userRows.length === 0) {
-            return res.status(404).json({ message: 'Siswa tidak ditemukan' });
+        const studentId = (req as any).user.id;
+    
+        // 1. Ambil Data Siswa (UPDATE QUERY DISINI)
+        const [rows]: any = await pool.query(`
+          SELECT u.id, u.full_name, u.nisn, u.role, 
+                 u.class_id, -- Pastikan class_id terambil
+                 u.start_period, u.end_period, -- [BARU] Tambahkan ini
+                 c.name as class_name, 
+                 (SELECT setting_value FROM app_settings WHERE setting_key = 'current_academic_year') as academic_year,
+                 (SELECT setting_value FROM app_settings WHERE setting_key = 'current_semester') as semester
+          FROM users u
+          LEFT JOIN classes c ON u.class_id = c.id
+          WHERE u.id = ?
+        `, [studentId]);
+    
+        if (rows.length === 0) {
+          return res.status(404).json({ message: 'Siswa tidak ditemukan' });
         }
-        
-        const user = userRows[0];
-
-        // 2. Statistik Jurnal
-        const [logStats]: any = await pool.query(
-            `SELECT COUNT(*) as total, SUM(CASE WHEN status = 'Disahkan' THEN 1 ELSE 0 END) as approved FROM character_logs WHERE student_id = ?`,
-            [studentId]
-        );
-
-        // 3. Total Poin Sikap
-        const [scoreData]: any = await pool.query(
-            `SELECT SUM(score) as total_score FROM behavior_records WHERE student_id = ?`,
-            [studentId]
-        );
-        const behaviorScore = scoreData[0].total_score || 0;
-
-        // 4. Misi Individu Aktif
-        // Alumni boleh melihat data ini (Read Only), jadi tidak ada blokir 403
-        const [missions]: any = await pool.query(
-            `SELECT m.*, u.full_name as contributor_name 
-             FROM missions m
-             JOIN users u ON m.contributor_id = u.id
-             WHERE m.student_id = ? AND m.is_completed = 0
-             ORDER BY m.due_date ASC`,
-            [studentId]
-        );
-
-        res.json({
-            student: user,
-            stats: {
-                journalTotal: logStats[0].total,
-                journalApproved: logStats[0].approved,
-                behaviorScore: behaviorScore
-            },
-            missions: missions
-        });
-
+        const student = rows[0];
+  
+      // 2. Hitung Jurnal Selesai (Count Logs where execution submitted)
+      // [FIX] Menghitung jurnal yang status eksekusinya sudah disubmit (1)
+      const [journalRes]: any = await pool.query(`
+        SELECT COUNT(id) as total_completed 
+        FROM character_logs 
+        WHERE student_id = ? AND is_execution_submitted = 1
+      `, [studentId]);
+      
+      const completedTasks = journalRes[0].total_completed || 0;
+  
+      // 3. Hitung Poin Sikap (Contoh: Total Jurnal * 10 Poin)
+      const behaviorScore = completedTasks * 10; 
+  
+      // 4. Kirim Response
+      res.json({
+        student: {
+          id: student.id,
+          full_name: student.full_name,
+          nisn: student.nisn,
+          role: student.role,
+          class_name: student.class_name,
+          class_id: student.class_id,
+          start_period: student.start_period, // [BARU] Sertakan di JSON
+          end_period: student.end_period      // [BARU] Sertakan di JSON
+        },
+        academic_year: student.academic_year || '2024/2025',
+        semester: student.semester || 'Genap',
+        stats: {
+          behaviorScore: behaviorScore, // dari variabel yg sudah dihitung sebelumnya
+          completedTasks: completedTasks,
+          current_week: 4
+        }
+      });
+  
     } catch (error) {
-        console.error("Error dashboard:", error);
-        res.status(500).json({ message: 'Gagal memuat dashboard.' });
+      console.error("Error fetching student dashboard:", error);
+      res.status(500).json({ message: 'Gagal memuat dashboard siswa.' });
     }
-};
+  };
 
 // ------------------------------------------------------------------
 // [REVISI] Mengambil Daftar Misi Harian

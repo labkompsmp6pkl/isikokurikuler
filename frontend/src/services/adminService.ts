@@ -8,10 +8,12 @@ const getAuthHeaders = () => {
   return { headers: { Authorization: `Bearer ${token}` } };
 };
 
-// --- 1. Dashboard & Analisis ---
-const getDashboardStats = async () => {
+const getDashboardStats = async (period: 'all' | 'active' = 'active') => {
     try {
-        const response = await axios.get(`${API_URL}/dashboard-stats`, getAuthHeaders());
+        const response = await axios.get(`${API_URL}/dashboard-stats`, {
+            ...getAuthHeaders(),
+            params: { period }
+        });
         return response.data;
     } catch (error) {
         console.error("Error fetching admin stats:", error);

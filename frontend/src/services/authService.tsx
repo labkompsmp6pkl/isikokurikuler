@@ -2,23 +2,27 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import axios from 'axios';
 
 // ==========================================
-// 1. Definisi Tipe Data
+// 1. Definisi Tipe Data (DIPERBARUI)
 // ==========================================
 export interface User {
   id: number;
   name: string;
+  full_name?: string; // Tambahan: karena backend sering kirim full_name
   role: 'student' | 'teacher' | 'parent' | 'contributor' | 'admin' | 'alumni' | string;
-  classId?: string | number; // Bisa string atau number dari database
+  classId?: string | number; 
+  class_name?: string; // Tambahan: untuk fix error 'class_name does not exist'
+  personal_email?: string; // Tambahan: untuk email pribadi
+  [key: string]: any; // Tambahan: agar fleksibel menerima properti lain (nisn, nip, dll)
 }
 
 export interface RegistrationData {
   fullName: string;
-  email: string; // Tambahkan email untuk registrasi manual
+  email: string; 
   role: string;
   password?: string;
   nisn?: string;
   nip?: string;
-  classId?: string | number; // Sesuaikan dengan backend (classId, bukan class)
+  classId?: string | number; 
   whatsappNumber?: string;
 }
 
@@ -34,9 +38,10 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (loginIdentifier: string, password: string) => Promise<any>;
-  register: (data: RegistrationData) => Promise<any>; // Diperbarui
+  register: (data: RegistrationData) => Promise<any>; 
   completeGoogleRegistration: (data: GoogleCompleteData) => Promise<any>;
   logout: () => void;
+  updateUserContext: (userData: any) => void; // <--- FUNGSI BARU (PENTING)
   isLoading: boolean;
 }
 
@@ -92,12 +97,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(false);
   }, []);
 
-  // Helper untuk simpan state sesi
+  // Helper untuk simpan state sesi (Login/Register)
   const handleAuthSuccess = (newToken: string, newUser: any) => {
     setToken(newToken);
     setUser(newUser);
     localStorage.setItem('token', newToken);
     localStorage.setItem('user', JSON.stringify(newUser));
+  };
+
+  // [BARU] Fungsi untuk update data user secara manual (Update Profil/Email)
+  const updateUserContext = (updatedData: any) => {
+    if (!user) return;
+    const mergedUser = { ...user, ...updatedData };
+    setUser(mergedUser);
+    localStorage.setItem('user', JSON.stringify(mergedUser));
   };
 
   // --- ACTIONS ---
@@ -143,8 +156,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('token');
     window.location.href = '/login'; 
   };
 
@@ -155,6 +168,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     register,
     completeGoogleRegistration,
     logout,
+    updateUserContext, // Export fungsi ini agar bisa dipakai di komponen lain
     isLoading
   };
 

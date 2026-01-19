@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { Filter, CalendarDays, Loader2, ArrowLeft } from 'lucide-react';
+import { Filter, CalendarDays, Loader2, ArrowLeft, CheckCircle2, UserCheck, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import teacherService from '../../../services/teacherService';
-import LogDetailView from './LogDetailView'; // Import View Baru
+import LogDetailView from './LogDetailView'; 
 
 interface HistoryViewProps {
     students: any[];
@@ -27,10 +27,6 @@ const HistoryView: React.FC<HistoryViewProps> = ({ students, teacherClass }) => 
         try {
             const res = await teacherService.getClassHistory(filterStudentId || undefined);
             setHistoryLogs(res || []);
-            // Reset view ke kalender saat filter berubah
-            setView('calendar');
-            setSelectedLog(null);
-            setSelectedDateLogs([]);
         } catch (error) {
             console.error(error);
             toast.error('Gagal memuat riwayat.', { id: 'history-fetch-error' });
@@ -41,6 +37,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ students, teacherClass }) => 
 
     useEffect(() => {
         fetchHistory();
+        setView('calendar');
+        setSelectedLog(null);
+        setSelectedDateLogs([]);
     }, [filterStudentId]);
 
     const formatISODate = (date: Date) => {
@@ -62,28 +61,22 @@ const HistoryView: React.FC<HistoryViewProps> = ({ students, teacherClass }) => 
         setSelectedDate(date);
         setSelectedDateLogs(logsOnDate);
 
-        // LOGIKA NAVIGASI
         if (filterStudentId) {
-            // Jika sedang filter 1 siswa, langsung buka detailnya
             setSelectedLog(logsOnDate[0]);
             setView('detail');
         } else {
-            // Jika filter semua kelas, buka list siswa yg mengisi di tanggal tsb
             setView('daily-list');
         }
         
-        // Scroll ke atas agar user sadar tampilan berubah
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleBack = () => {
         if (view === 'detail') {
             if (filterStudentId) {
-                // Jika filter siswa, back langsung ke kalender
                 setView('calendar');
                 setSelectedLog(null);
             } else {
-                // Jika semua kelas, back ke daily-list
                 setView('daily-list');
                 setSelectedLog(null);
             }
@@ -93,14 +86,53 @@ const HistoryView: React.FC<HistoryViewProps> = ({ students, teacherClass }) => 
         }
     };
 
+    // --- [BARU] FUNGSI RENDER STATUS ---
+    const renderStatusBadge = (log: any) => {
+        // 1. Jika Disahkan (oleh Guru)
+        if (log.status === 'Disahkan') {
+            return (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-100">
+                    <CheckCircle2 size={14} />
+                    <span className="text-[10px] font-bold uppercase">Disahkan oleh Anda</span>
+                </div>
+            );
+        }
+        
+        // 2. Jika Disetujui (oleh Orang Tua)
+        if (log.status === 'Disetujui') {
+            // Ambil relasi dari data log (pastikan backend mengirim field ini, misal: validator_relationship)
+            // Jika tidak ada, fallback ke 'Wali Murid'
+            const approver = log.validator_relationship || 'Wali Murid';
+            
+            return (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100">
+                    <UserCheck size={14} />
+                    <span className="text-[10px] font-bold uppercase">Disetujui oleh {approver}</span>
+                </div>
+            );
+        }
+
+        // 3. Menunggu / Belum Diisi
+        return (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-100">
+                <Clock size={14} />
+                <span className="text-[10px] font-bold uppercase">Menunggu Validasi</span>
+            </div>
+        );
+    };
+
     // --- RENDERERS ---
 
-    // 1. DETAIL VIEW
     if (view === 'detail' && selectedLog) {
-        return <LogDetailView log={selectedLog} onBack={handleBack} />;
+        return (
+            <LogDetailView 
+                log={selectedLog} 
+                onBack={handleBack} 
+                onRefresh={fetchHistory} 
+            />
+        );
     }
 
-    // 2. DAILY LIST VIEW (Daftar siswa pada tanggal tertentu)
     if (view === 'daily-list') {
         return (
             <div className="space-y-4 animate-slide-up">
@@ -128,19 +160,16 @@ const HistoryView: React.FC<HistoryViewProps> = ({ students, teacherClass }) => 
                         >
                             <div className="flex items-center gap-4">
                                 <div className="p-3 rounded-full bg-violet-50 text-violet-600 font-bold w-12 h-12 flex items-center justify-center">
-                                    {log.student_name.charAt(0)}
+                                    {log.student_name ? log.student_name.charAt(0) : '?'}
                                 </div>
                                 <div>
                                     <h4 className="font-black text-gray-800 group-hover:text-violet-700 transition-colors">{log.student_name}</h4>
                                     <p className="text-xs text-gray-400 font-medium group-hover:text-violet-500">Klik untuk melihat detail</p>
                                 </div>
                             </div>
-                             <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${
-                                log.status === 'Disahkan' ? 'bg-blue-50 text-blue-600' : 
-                                log.status === 'Disetujui' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
-                            }`}>
-                                {log.status}
-                            </div>
+                            
+                            {/* [FIX] Gunakan fungsi render baru */}
+                            {renderStatusBadge(log)}
                         </div>
                     ))}
                 </div>
@@ -148,7 +177,6 @@ const HistoryView: React.FC<HistoryViewProps> = ({ students, teacherClass }) => 
         );
     }
 
-    // 3. CALENDAR VIEW (Default)
     return (
         <div className="space-y-6 animate-fade-in">
             {/* Filter Section */}
@@ -165,7 +193,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ students, teacherClass }) => 
                             <option value="">-- Tampilkan Seluruh Kelas {teacherClass} --</option>
                             {students.map((s: any) => (
                                 <option key={s.id} value={s.id}>
-                                    {s.full_name} ({s.class_name} - {s.teacher_name})
+                                    {s.full_name} ({s.class_name || teacherClass})
                                 </option>
                             ))}
                         </select>

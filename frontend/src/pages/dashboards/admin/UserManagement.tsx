@@ -21,7 +21,7 @@ interface UserFormState {
     // Field Kontributor
     contributor_type?: string;
     agency_name?: string;
-    // [BARU] Field Periode
+    // Field Periode
     start_period?: string;
     end_period?: string;
 }
@@ -61,7 +61,7 @@ const UserManagement: React.FC = () => {
         full_name: '', email: '', role: 'student', class_id: '', 
         nisn: '', nip: '', whatsapp_number: '', password: '',
         contributor_type: '', agency_name: '',
-        start_period: '', end_period: '' // [BARU]
+        start_period: '', end_period: '' 
     };
     const [formData, setFormData] = useState<UserFormState>(initialForm);
     
@@ -193,7 +193,7 @@ const UserManagement: React.FC = () => {
             whatsapp_number: user.whatsapp_number || '',
             contributor_type: user.contributor_type || '',
             agency_name: user.agency_name || '',
-            // [BARU] Load Periode
+            // Load Periode
             start_period: user.start_period || '',
             end_period: user.end_period || ''
         });
@@ -655,40 +655,46 @@ const UserManagement: React.FC = () => {
                             
                             <div className="md:col-span-2 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100/50 grid grid-cols-1 md:grid-cols-2 gap-6">
                                 
-                                {/* [BARU] Input Periode Aktif (DROPDOWN) */}
-                                <div className="md:col-span-2 grid grid-cols-2 gap-4 border-b border-indigo-100 pb-4 mb-2">
-                                    <div>
-                                        <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Mulai Periode</label>
-                                        {/* GANTI INPUT TEKS DENGAN SELECT */}
-                                        <select 
-                                            name="start_period" 
-                                            value={formData.start_period || ''} 
-                                            onChange={handleChange} 
-                                            className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                                        >
-                                            <option value="">-- Pilih Tahun Mulai --</option>
-                                            {availableYears.map(y => (
-                                                <option key={y} value={y}>{y}</option>
-                                            ))}
-                                        </select>
+                                {/* [MODIFIKASI] Hanya Tampil untuk Siswa, Guru, dan Kontributor */}
+                                {['student', 'teacher', 'contributor'].includes(formData.role) && (
+                                    <div className="md:col-span-2 grid grid-cols-2 gap-4 border-b border-indigo-100 pb-4 mb-2 animate-in fade-in slide-in-from-top-2">
+                                        <div>
+                                            <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Mulai Periode</label>
+                                            <select 
+                                                name="start_period" 
+                                                value={formData.start_period || ''} 
+                                                onChange={handleChange} 
+                                                className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                                            >
+                                                <option value="">-- Tahun Mulai --</option>
+                                                {availableYears.map(y => (
+                                                    <>
+                                                        <option value={`${y} Ganjil`}>{y} Ganjil</option>
+                                                        <option value={`${y} Genap`}>{y} Genap</option>
+                                                    </>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Selesai Periode</label>
+                                            <select 
+                                                name="end_period" 
+                                                value={formData.end_period || ''} 
+                                                onChange={handleChange} 
+                                                className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                                            >
+                                                <option value="">-- Tahun Selesai --</option>
+                                                {availableYears.map(y => (
+                                                    <>
+                                                        <option value={`${y} Ganjil`}>{y} Ganjil</option>
+                                                        <option value={`${y} Genap`}>{y} Genap</option>
+                                                    </>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 col-span-2 italic">*Opsional: Pilih dari daftar tahun ajaran untuk menetapkan masa aktif pengguna (Masa Studi / Kontrak).</p>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-indigo-600 uppercase mb-2">Selesai Periode</label>
-                                        {/* GANTI INPUT TEKS DENGAN SELECT */}
-                                        <select 
-                                            name="end_period" 
-                                            value={formData.end_period || ''} 
-                                            onChange={handleChange} 
-                                            className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-                                        >
-                                            <option value="">-- Pilih Tahun Selesai --</option>
-                                            {availableYears.map(y => (
-                                                <option key={y} value={y}>{y}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <p className="text-[10px] text-slate-500 col-span-2 italic">*Opsional: Pilih dari daftar tahun ajaran untuk menetapkan masa aktif pengguna (Masa Studi / Kontrak).</p>
-                                </div>
+                                )}
 
                                 {(formData.role === 'student' || formData.role === 'alumni' || formData.role === 'teacher') && (
                                     <>

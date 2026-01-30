@@ -147,7 +147,6 @@ const LinkStudentForm: React.FC<LinkFormProps> = ({ onLinkSuccess, onLogout }) =
                             onChange={(e) => setSearchTerm(e.target.value.replace(/\D/g, ''))} // Hanya angka
                             className="w-full pl-6 pr-32 py-5 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 focus:outline-none font-bold text-slate-800 text-lg placeholder:text-slate-300 transition-all tracking-widest text-center"
                             autoFocus
-                            maxLength={10} 
                         />
                         <button 
                             type="submit"

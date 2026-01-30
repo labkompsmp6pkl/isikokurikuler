@@ -14,20 +14,18 @@ const parseJSON = (data: any) => {
     }
 };
 
-// --- [UPDATED] SEARCH STUDENTS (STRICT & SECURE) ---
 export const searchStudents = async (req: AuthenticatedRequest, res: Response) => {
-    // Kita abaikan pagination karena hasil pasti cuma 1 (atau 0) untuk keamanan
     const q = (req.query.q as string) || ''; // q adalah NISN
     const parentId = req.user?.id; 
 
-    // [KEAMANAN] Jika input kosong, kembalikan kosong
     if (!q || q.trim() === '') {
         return res.json({ data: [] });
     }
 
     try {
-        // 1. Query: HANYA cari berdasarkan NISN yang SAMA PERSIS (=)
-        // Hapus pencarian nama dan LIKE.
+        // PERBAIKAN: 
+        // 1. Menambahkan TRIM() pada u.nisn untuk menghindari spasi tak terlihat di database
+        // 2. Memastikan role 'student' dicek tanpa case-sensitive (beberapa DB sensitif)
         const query = `
             SELECT 
                 u.id, 
@@ -38,21 +36,21 @@ export const searchStudents = async (req: AuthenticatedRequest, res: Response) =
                 (SELECT COUNT(*) FROM family_relations fr WHERE fr.student_id = u.id AND fr.parent_id = ?) as is_linked
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            WHERE u.role = 'student' AND u.nisn = ? 
+            WHERE LOWER(u.role) = 'student' 
+            AND TRIM(u.nisn) = ? 
             LIMIT 1
         `;
 
-        // Params: [parentId, nisn]
         const [rows]: any = await pool.query(query, [parentId, q.trim()]);
 
-        // 2. Format Data
         const data = rows.map((row: any) => ({
             id: row.id,
             full_name: row.full_name,
             nisn: row.nisn,
             class_name: row.class_name || 'Belum Masuk Kelas',
             class_level: row.class_name ? row.class_name.charAt(0) : '-',
-            is_active: !!row.password, // True jika password tidak NULL/Empty
+            // Perbaikan logika is_active: akun dianggap aktif jika password ada dan bukan hash kosong/default
+            is_active: row.password && row.password !== '' && row.password !== '$2y$10$', 
             is_linked_to_me: row.is_linked > 0 
         }));
 

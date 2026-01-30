@@ -2,17 +2,17 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import axios from 'axios';
 
 // ==========================================
-// 1. Definisi Tipe Data (DIPERBARUI)
+// 1. Definisi Tipe Data
 // ==========================================
 export interface User {
   id: number;
   name: string;
-  full_name?: string; // Tambahan: karena backend sering kirim full_name
+  full_name?: string; 
   role: 'student' | 'teacher' | 'parent' | 'contributor' | 'admin' | 'alumni' | string;
   classId?: string | number; 
-  class_name?: string; // Tambahan: untuk fix error 'class_name does not exist'
-  personal_email?: string; // Tambahan: untuk email pribadi
-  [key: string]: any; // Tambahan: agar fleksibel menerima properti lain (nisn, nip, dll)
+  class_name?: string;
+  personal_email?: string; 
+  [key: string]: any; 
 }
 
 export interface RegistrationData {
@@ -41,12 +41,12 @@ interface AuthContextType {
   register: (data: RegistrationData) => Promise<any>; 
   completeGoogleRegistration: (data: GoogleCompleteData) => Promise<any>;
   logout: () => void;
-  updateUserContext: (userData: any) => void; // <--- FUNGSI BARU (PENTING)
+  updateUserContext: (userData: any) => void; 
   isLoading: boolean;
 }
 
 // ==========================================
-// 2. Setup Axios & Environment
+// 2. Setup Axios & Interceptors
 // ==========================================
 export const API_HOST = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -57,6 +57,7 @@ export const authApi = axios.create({
   },
 });
 
+// Request Interceptor: Menambahkan Token ke Header
 authApi.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -66,6 +67,23 @@ authApi.interceptors.request.use((config) => {
 }, (error) => {
   return Promise.reject(error);
 });
+
+// Response Interceptor: Menangani Token Expired (401)
+authApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Jika server merespons 401 (Unauthorized), maka sesi dianggap habis
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      // Paksa halaman kembali ke login
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // ==========================================
 // 3. Context Creation
@@ -80,24 +98,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // Cek sesi saat aplikasi pertama kali dimuat
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const storedToken = localStorage.getItem('token');
-    
-    if (storedUser && storedToken) {
-      try {
-        setUser(JSON.parse(storedUser));
-        setToken(storedToken);
-      } catch (e) {
-        console.error("Failed to parse user data", e);
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
+    const checkSession = () => {
+      const storedUser = localStorage.getItem('user');
+      const storedToken = localStorage.getItem('token');
+      
+      if (storedUser && storedToken) {
+        try {
+          setUser(JSON.parse(storedUser));
+          setToken(storedToken);
+        } catch (e) {
+          console.error("Gagal memuat sesi:", e);
+          logout(); // Bersihkan jika data korup
+        }
+      } else {
+        // Jika salah satu tidak ada, pastikan status logout
+        setUser(null);
+        setToken(null);
       }
-    }
-    setIsLoading(false);
+      setIsLoading(false);
+    };
+
+    checkSession();
   }, []);
 
-  // Helper untuk simpan state sesi (Login/Register)
   const handleAuthSuccess = (newToken: string, newUser: any) => {
     setToken(newToken);
     setUser(newUser);
@@ -105,15 +130,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem('user', JSON.stringify(newUser));
   };
 
-  // [BARU] Fungsi untuk update data user secara manual (Update Profil/Email)
   const updateUserContext = (updatedData: any) => {
     if (!user) return;
     const mergedUser = { ...user, ...updatedData };
     setUser(mergedUser);
     localStorage.setItem('user', JSON.stringify(mergedUser));
   };
-
-  // --- ACTIONS ---
 
   const login = async (loginIdentifier: string, password: string) => {
     try {
@@ -129,12 +151,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const register = async (data: RegistrationData) => {
     try {
       const response = await authApi.post('/auth/register', data);
-      
-      // Jika backend dikonfigurasi untuk auto-login setelah register
       if (response.data.token && response.data.user) {
         handleAuthSuccess(response.data.token, response.data.user);
       }
-      
       return response.data;
     } catch (error) {
       throw error;
@@ -158,7 +177,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');
-    window.location.href = '/login'; 
+    // Mencegah looping redirect jika sudah di halaman login
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
   };
 
   const contextValue: AuthContextType = {
@@ -168,7 +190,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     register,
     completeGoogleRegistration,
     logout,
-    updateUserContext, // Export fungsi ini agar bisa dipakai di komponen lain
+    updateUserContext,
     isLoading
   };
 

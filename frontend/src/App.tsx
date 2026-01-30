@@ -12,7 +12,6 @@ import NationalAnalysis from './pages/dashboards/NationalAnalysis';
 import UserManagement from './pages/dashboards/admin/UserManagement';
 import UserDetail from './pages/dashboards/admin/UserDetail';
 import ClassManagement from './pages/dashboards/admin/ClassManagement';
-// Pastikan PromotionManagement diimport jika sudah ada filenya
 import PromotionManagement from './pages/dashboards/admin/PromotionManagement'; 
 
 // Other Roles
@@ -34,26 +33,35 @@ import GoogleRegisterComplete from './pages/GoogleRegisterComplete';
 // Auth Hook
 import { useAuth } from './services/authService'; 
 
-// [MODIFIKASI] Menerima Array allowedRoles
+/**
+ * [PERBAIKAN] PrivateRoute
+ * Menjamin jika token hilang atau user null, aplikasi langsung melempar ke /login.
+ */
 const PrivateRoute = ({ children, allowedRoles }: { children: JSX.Element, allowedRoles: string[] }) => {
   const { user, token, isLoading } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
-    return <div className="flex justify-center items-center h-screen">Memuat Sesi...</div>;
+    return (
+      <div className="flex flex-col justify-center items-center h-screen bg-slate-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mb-4"></div>
+        <p className="text-slate-500 font-medium">Memuat Sesi...</p>
+      </div>
+    );
   }
 
+  // Jika tidak ada token atau user, paksa ke login
   if (!token || !user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if ((user.role as string) === 'new_user') {
+  // Handle user baru Google yang belum melengkapi profile
+  if (user.role === 'new_user') {
     return <Navigate to="/google-register-complete" replace />;
   }
 
-  // Cek apakah role user ada di dalam daftar yang diizinkan
+  // Proteksi Role
   if (!allowedRoles.includes(user.role)) {
-    // Redirect cerdas berdasarkan role user
     let target = '/login';
     if (user.role === 'student' || user.role === 'alumni') target = '/student';
     else if (user.role === 'teacher') target = '/teacher/dashboard';
@@ -67,27 +75,40 @@ const PrivateRoute = ({ children, allowedRoles }: { children: JSX.Element, allow
   return children;
 };
 
+/**
+ * [PERBAIKAN] RedirectRoot
+ * Mengatur halaman awal berdasarkan status login terbaru.
+ */
 const RedirectRoot = () => {
   const { user, token, isLoading } = useAuth();
 
   if (isLoading) return null;
 
   if (token && user) {
-    // User baru Google yang belum lengkap datanya
     if (user.role === 'new_user') return <Navigate to="/google-register-complete" replace />;
-    
-    // [MODIFIKASI] Alumni diarahkan ke dashboard student
     if (user.role === 'student' || user.role === 'alumni') return <Navigate to="/student" replace />;
-    
     return <Navigate to={`/${user.role}/dashboard`} replace />;
   }
+
+  // Default jika tidak terautentikasi adalah LOGIN
   return <Navigate to="/login" replace />;
 };
 
 const App: React.FC = () => {
   return (
     <>
-      <Toaster position="top-right" reverseOrder={false} />
+      <Toaster 
+        position="top-right" 
+        reverseOrder={false}
+        toastOptions={{
+          duration: 3000,
+          style: {
+            borderRadius: '12px',
+            background: '#333',
+            color: '#fff',
+          },
+        }}
+      />
       
       <Routes>
         {/* Public Routes */}
@@ -99,7 +120,7 @@ const App: React.FC = () => {
         <Route path="/auth/google/complete" element={<GoogleRegisterComplete />} />
         <Route path="/auth/google/success" element={<GoogleSuccess />} />
 
-        {/* Root Redirect */}
+        {/* Root Redirect - Menentukan kemana user pergi saat buka URL utama */}
         <Route path="/" element={<RedirectRoot />} />
 
         {/* --- Private Routes --- */}
@@ -121,7 +142,7 @@ const App: React.FC = () => {
         {/* CONTRIBUTOR */}
         <Route path="/contributor/dashboard" element={<PrivateRoute allowedRoles={['contributor']}><ContributorDashboard /></PrivateRoute>} />
 
-        {/* STUDENT & ALUMNI (Shared Routes) */}
+        {/* STUDENT & ALUMNI */}
         <Route path="/student" element={<PrivateRoute allowedRoles={['student', 'alumni']}><StudentLayout /></PrivateRoute>}>
           <Route index element={<Beranda />} /> 
           <Route path="beranda" element={<Beranda />} />
@@ -130,7 +151,7 @@ const App: React.FC = () => {
           <Route path="misi" element={<StudentMissions />} />
         </Route>
 
-        {/* Catch-all */}
+        {/* Catch-all: Jika URL tidak dikenal, lempar ke RedirectRoot untuk dicek loginnya */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

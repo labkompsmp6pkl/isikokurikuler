@@ -16,8 +16,18 @@ import {
     getAppSettings,
     deleteClassesByYear
 } from '../controllers/adminController';
-
+import * as scheduleController from '../controllers/scheduleController';
+import multer from 'multer';
 const router = Router();
+
+const upload = multer({ 
+    dest: 'uploads/', 
+    limits: { fileSize: 5 * 1024 * 1024 }, // Max 5MB
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/pdf') cb(null, true);
+        else cb(new Error('Hanya file PDF yang diperbolehkan!'));
+    }
+});
 
 // ==================================================================
 // 1. GLOBAL AUTH (Semua route di file ini butuh login)
@@ -72,5 +82,10 @@ router.post('/classes/move-students', moveStudents);
 router.post('/classes/reset-all', resetAllStudentClasses as RequestHandler);
 router.post('/classes/promote-batch', promoteMassBatch as RequestHandler);
 router.post('/classes/update-year', updateGlobalAcademicYear as RequestHandler);
+
+router.post('/schedule/upload', upload.single('pdfFile'), scheduleController.uploadSchedulePDF as RequestHandler);
+
+// 2. Lihat Jadwal per Kelas (Opsional, untuk pengecekan admin)
+router.get('/schedule/class/:classId', scheduleController.getSchedulesByClass as RequestHandler);
 
 export default router;

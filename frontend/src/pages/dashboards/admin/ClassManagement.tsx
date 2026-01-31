@@ -2,11 +2,115 @@ import React, { useState, useEffect } from 'react';
 import { 
     Plus, Trash2, Edit, Save, X, Eye, User, 
     GraduationCap, Sparkles, Search, ChevronLeft, ChevronRight,
-    UserPlus, CheckSquare, Calendar, Info, BookOpen, Filter
+    UserPlus, CheckSquare, Calendar, Info, BookOpen, Filter,
+    FileText, UploadCloud // [BARU] Import Icon Tambahan
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import toast from 'react-hot-toast';
 import adminService from '../../../services/adminService';
 
+// --- [BARU] MODAL UPLOAD JADWAL (KOMPONEN INTERNAL) ---
+const UploadScheduleModal = ({ isOpen, onClose, onSuccess }: any) => {
+    const [file, setFile] = useState<File | null>(null);
+    const [uploading, setUploading] = useState(false);
+
+    if (!isOpen) return null;
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setFile(e.target.files[0]);
+        }
+    };
+
+    const handleUpload = async () => {
+        if (!file) {
+            toast.error("Pilih file PDF terlebih dahulu!");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('pdfFile', file);
+
+        setUploading(true);
+        const toastId = toast.loading("Memproses PDF...");
+
+        try {
+            const res = await adminService.uploadSchedule(formData);
+            toast.success(res.message || "Jadwal berhasil diimport!", { id: toastId });
+            setFile(null);
+            onSuccess();
+            onClose();
+            
+            Swal.fire({
+                title: 'Berhasil!',
+                text: `${res.message}. Siswa sekarang akan melihat jurnal otomatis terisi sesuai jadwal.`,
+                icon: 'success'
+            });
+
+        } catch (error: any) {
+            console.error(error);
+            toast.error(error.response?.data?.message || "Gagal upload jadwal.", { id: toastId });
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
+            <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 relative">
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                    <X size={20} />
+                </button>
+                
+                <div className="text-center mb-6">
+                    <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <FileText size={32} className="text-indigo-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-800">Import Jadwal Pelajaran</h3>
+                    <p className="text-sm text-slate-500 mt-2">
+                        Upload file PDF jadwal sekolah. Sistem akan otomatis mendeteksi Hari, Kelas, dan Mapel untuk mengisi jurnal siswa.
+                    </p>
+                </div>
+
+                <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 bg-slate-50 text-center mb-6 hover:border-indigo-400 transition-colors">
+                    <input 
+                        type="file" 
+                        accept=".pdf" 
+                        onChange={handleFileChange}
+                        className="hidden" 
+                        id="schedule-upload"
+                    />
+                    <label htmlFor="schedule-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                        <UploadCloud size={32} className="text-slate-400" />
+                        <span className="text-sm font-bold text-slate-600">
+                            {file ? file.name : "Klik untuk pilih file PDF"}
+                        </span>
+                        <span className="text-xs text-slate-400">Maksimal 5MB</span>
+                    </label>
+                </div>
+
+                <div className="flex gap-3">
+                    <button 
+                        onClick={onClose}
+                        disabled={uploading} 
+                        className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors"
+                    >
+                        Batal
+                    </button>
+                    <button 
+                        onClick={handleUpload}
+                        disabled={!file || uploading}
+                        className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                    >
+                        {uploading ? 'Memproses...' : 'Upload & Scan'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- KOMPONEN UTAMA ---
 const ClassManagement: React.FC = () => {
     // --- STATE UTAMA ---
     const [classes, setClasses] = useState<any[]>([]);
@@ -30,6 +134,7 @@ const ClassManagement: React.FC = () => {
     const [showModal, setShowModal] = useState(false); 
     const [showDetailModal, setShowDetailModal] = useState(false); 
     const [showAddStudentModal, setShowAddStudentModal] = useState(false); 
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false); // [BARU] State Modal Upload
 
     // Mode Form
     const [isEdit, setIsEdit] = useState(false);
@@ -83,7 +188,7 @@ const ClassManagement: React.FC = () => {
             const validTeachers = Array.isArray(teachersResponse) ? teachersResponse : (teachersResponse?.data || []);
             setTeachers(validTeachers);
 
-            // Pre-fill form state dengan tahun aktif (untuk create baru)
+            // Pre-fill form state dengan tahun aktif
             setFormData(prev => ({ ...prev, academic_year: currentActiveYear }));
             setGenerateData(prev => ({ ...prev, academic_year: currentActiveYear }));
 
@@ -198,11 +303,9 @@ const ClassManagement: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            // Validasi tambahan: Pastikan tahun yang disubmit = activeYear (karena form disabled)
             const targetYear = isGenerate ? generateData.academic_year : formData.academic_year;
             
             if (targetYear !== activeYear && !isEdit) {
-               // Fallback: paksa ke activeYear jika create baru
                if(isGenerate) generateData.academic_year = activeYear;
                else formData.academic_year = activeYear;
             }
@@ -247,8 +350,14 @@ const ClassManagement: React.FC = () => {
                     </div>
                     
                     <div className="flex flex-wrap gap-2">
-                        {/* TOMBOL "Atur T.A" DIHAPUS */}
-                        
+                        {/* [BARU] Tombol Import Jadwal */}
+                        <button 
+                            onClick={() => setIsUploadModalOpen(true)} 
+                            className="bg-orange-50 text-orange-600 hover:bg-orange-100 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 border border-orange-200 transition-all text-sm"
+                        >
+                            <FileText size={18}/> Import Jadwal PDF
+                        </button>
+
                         <button onClick={handleOpenGenerate} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 border border-emerald-200 transition-all text-sm">
                             <Sparkles size={18}/> Auto-Generate
                         </button>
@@ -420,6 +529,15 @@ const ClassManagement: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* --- MODAL UPLOAD JADWAL (BARU) --- */}
+            <UploadScheduleModal 
+                isOpen={isUploadModalOpen} 
+                onClose={() => setIsUploadModalOpen(false)} 
+                onSuccess={() => {
+                    fetchData(); // Refresh data jika perlu
+                }}
+            />
         </div>
     );
 };

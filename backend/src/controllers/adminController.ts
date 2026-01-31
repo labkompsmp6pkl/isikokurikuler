@@ -35,16 +35,16 @@ export const getUsers = async (req: Request, res: Response) => {
             else { query += ` AND u.class_id = ?`; params.push(class_id); }
         }
 
-        // [PERBAIKAN UTAMA DI SINI] Filter Tahun
-        if (academic_year !== 'all') {
-            if (academic_year === 'active') {
-                // Tambahkan 'COLLATE utf8mb4_unicode_ci' untuk memaksa penyamaan collation
-                query += ` AND (c.academic_year COLLATE utf8mb4_unicode_ci = (SELECT setting_value COLLATE utf8mb4_unicode_ci FROM app_settings WHERE setting_key = 'current_academic_year') OR u.class_id IS NULL)`;
-            } else {
-                query += ` AND c.academic_year = ?`;
-                params.push(academic_year);
-            }
-        }
+        // Di dalam export const getUsers
+     if (academic_year !== 'all') {
+    if (academic_year === 'active') {
+        // [Cek Collation] Pastikan setting_value disamakan collation-nya dengan c.academic_year
+        query += ` AND (c.academic_year COLLATE utf8mb4_unicode_ci = (SELECT setting_value COLLATE utf8mb4_unicode_ci FROM app_settings WHERE setting_key = 'current_academic_year') OR u.class_id IS NULL)`;
+    } else {
+        query += ` AND c.academic_year = ?`;
+        params.push(academic_year);
+    }
+}
 
         // Filter Status
         if (status !== 'all') {

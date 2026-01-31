@@ -25,6 +25,7 @@ import {
   School,
   Mail // Ikon Email
 } from 'lucide-react';
+import Swal from 'sweetalert2';
 
 // ==========================================
 // KOMPONEN UI PENDUKUNG (InputField, SelectField)
@@ -137,7 +138,7 @@ const Register: React.FC = () => {
   // State Form
   const [formData, setFormData] = useState({
     fullName: '',
-    email: '', // [BARU] Input Email Pribadi
+    email: '', // Input Email Pribadi (Gmail, dll)
     nisn: '',
     nip: '',
     whatsappNumber: '',
@@ -268,12 +269,19 @@ const Register: React.FC = () => {
     }));
   };
 
+  // =========================================================================
+  // [MODIFIKASI] HANDLE REGISTER UTAMA
+  // Menangani:
+  // 1. Pendaftaran Baru (SUCCESS)
+  // 2. Data Ganda / Sinkronisasi (ALREADY_EXISTS)
+  // 3. Email Pribadi (Personal Email)
+  // =========================================================================
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    // Validasi Password (kecuali siswa)
+    // 1. Validasi Password
     if (selectedRole !== 'student') {
         if (formData.password.length < 6) {
             setError('Password minimal 6 karakter.');
@@ -287,65 +295,104 @@ const Register: React.FC = () => {
         }
     }
 
-    // Validasi Email (jika diisi)
+    // 2. Validasi Email
     if (formData.email && !formData.email.includes('@')) {
         setError('Format email tidak valid.');
         setLoading(false);
         return;
     }
 
-    const loadingToast = toast.loading('Mendaftarkan akun...');
+    const loadingToast = toast.loading('Memproses pendaftaran...');
 
     try {
-      // Generate email sistem jika user tidak mengisi email atau role siswa
-      // (Backend biasanya tetap butuh kolom 'email' unik sebagai identifier login)
-      let finalEmail = formData.email;
-      
-      // Jika email kosong, generate dummy email untuk login sistem
-      if (!finalEmail) {
-          const namePrefix = formData.fullName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
-          const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-          finalEmail = `${namePrefix}${randomSuffix}@isokurikuler.id`;
-      }
-
-      const registrationData = {
-        role: selectedRole,
-        fullName: formData.fullName.trim(),
-        email: finalEmail, // Gunakan email input atau generated
-        personal_email: formData.email, // Kirim juga sebagai personal_email jika diisi
-        password: selectedRole === 'student' ? '' : formData.password,
-        nisn: selectedRole === 'student' ? formData.nisn : undefined,
-        nip: (selectedRole === 'teacher' || selectedRole === 'contributor') ? formData.nip : undefined,
-        whatsappNumber: selectedRole === 'parent' ? formData.whatsappNumber : undefined,
-        classId: (selectedRole === 'student' || selectedRole === 'teacher') ? (formData.classId || undefined) : undefined,
+        // [LOGIKA BARU] Generate System Email (Wajib untuk Database)
+        // Jika user isi email -> Pakai itu.
+        // Jika kosong -> Generate dummy dari NISN/NIP/WA atau Nama.
+        let systemEmail = formData.email;
         
-        contributor_type: selectedRole === 'contributor' ? formData.contributor_type : undefined,
-        agency_name: selectedRole === 'contributor' ? (formData.agency_name || formData.contributor_type) : undefined,
-      };
-      
-      const response = await authRegister(registrationData);
-      
-      toast.dismiss(loadingToast);
-      
-      if (selectedRole === 'student') {
-        toast.success('Pendaftaran Berhasil! Minta Orang Tua untuk aktivasi akun.', { duration: 5000, icon: '🎓' });
-        navigate('/login', { state: { message: 'Akun berhasil dibuat. Silakan minta Orang Tua untuk menautkan akun dan mengatur password agar Anda bisa login.' } });
-      } else {
-        toast.success('Pendaftaran Berhasil!', { icon: '🎉' });
-        if (response.user) {
-            const target = response.user.role === 'student' ? '/student/beranda' : `/${response.user.role}/dashboard`;
-            navigate(target, { replace: true });
-        } else {
-            navigate('/login');
+        if (!systemEmail) {
+            const identifier = formData.nisn || formData.nip || formData.whatsappNumber || '';
+            const cleanName = formData.fullName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5);
+            const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+            
+            // Format: identifier@isokul.id atau nama1234@isokul.id
+            systemEmail = identifier ? `${identifier}@isokul.id` : `${cleanName}${randomSuffix}@isokul.id`;
         }
-      }
+
+        // 3. Persiapan Data
+        const registrationData = {
+            role: selectedRole,
+            fullName: formData.fullName.trim(),
+            
+            // [FIX] Kirim 'email' (Wajib Sistem) DAN 'personal_email' (Opsional User)
+            email: systemEmail, 
+            personal_email: formData.email || null,
+
+            password: selectedRole === 'student' ? '' : formData.password,
+            nisn: selectedRole === 'student' ? formData.nisn : undefined,
+            nip: (selectedRole === 'teacher' || selectedRole === 'contributor') ? formData.nip : undefined,
+            whatsappNumber: selectedRole === 'parent' ? formData.whatsappNumber : undefined,
+            classId: (selectedRole === 'student' || selectedRole === 'teacher') ? (formData.classId || undefined) : undefined,
+            contributor_type: selectedRole === 'contributor' ? formData.contributor_type : undefined,
+            agency_name: selectedRole === 'contributor' ? (formData.agency_name || formData.contributor_type) : undefined,
+        };
+
+        // 4. Kirim ke Backend
+        const response = await authRegister(registrationData);
+        toast.dismiss(loadingToast);
+
+        // 5. [LOGIKA BARU] Penanganan Data Ganda (ALREADY_EXISTS)
+        if (response.status === 'ALREADY_EXISTS') {
+            setLoading(false);
+            
+            Swal.fire({
+                title: 'Data Sudah Tersedia',
+                text: `${response.message} Apakah Anda ingin masuk untuk melengkapi data atau melakukan sinkronisasi Gmail?`,
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonColor: '#4F46E5', // Indigo-600
+                confirmButtonText: 'Ya, Masuk ke Akun',
+                cancelButtonText: 'Batal',
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Arahkan ke Login dengan membawa email sistem (jika ada) untuk memudahkan
+                    navigate('/login', { 
+                        state: { 
+                            identifier: response.existingData?.systemEmail,
+                            message: 'Silakan login menggunakan kredensial Anda untuk melengkapi profil.' 
+                        } 
+                    });
+                }
+            });
+            return;
+        }
+
+        // 6. Penanganan Sukses Pendaftaran Baru
+        if (selectedRole === 'student') {
+            toast.success('Akun Berhasil Dibuat!', { duration: 5000, icon: '🎓' });
+            Swal.fire({
+                title: 'Pendaftaran Berhasil',
+                text: 'Akun Anda telah terdaftar di sistem. Silakan hubungi Orang Tua Anda untuk melakukan aktivasi akun (atur password) agar Anda dapat login.',
+                icon: 'success',
+                confirmButtonText: 'Paham'
+            }).then(() => navigate('/login'));
+        } else {
+            toast.success('Pendaftaran Berhasil!', { icon: '🎉' });
+            // Auto Login jika backend mengembalikan user
+            if (response.user) {
+                const target = `/${response.user.role}/dashboard`;
+                navigate(target, { replace: true });
+            } else {
+                navigate('/login');
+            }
+        }
 
     } catch (err: any) {
-      toast.dismiss(loadingToast);
-      const msg = err.response?.data?.message || 'Gagal mendaftar. Data mungkin sudah ada.';
-      setError(msg);
-      toast.error("Registrasi Gagal");
-      setLoading(false);
+        toast.dismiss(loadingToast);
+        setLoading(false);
+        const msg = err.response?.data?.message || 'Gagal mendaftar. Silakan hubungi admin.';
+        setError(msg);
+        toast.error("Registrasi Gagal");
     }
   };
 
@@ -363,7 +410,7 @@ const Register: React.FC = () => {
         {/* [BARU] Input Email Pribadi (Opsional) */}
         <InputField 
           name="email" 
-          placeholder="Email Pribadi (Opsional, untuk pemulihan)" 
+          placeholder="Email Pribadi (Gmail, dll - Opsional)" 
           value={formData.email} 
           onChange={handleFormChange}
           required={false}

@@ -31,7 +31,7 @@ const UserManagement: React.FC = () => {
     const [viewMode, setViewMode] = useState<'list' | 'form' | 'detail'>('list');
     const [isEditMode, setIsEditMode] = useState(false);
     const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-
+    const [classSearch, setClassSearch] = useState('');
     // --- STATE DATA ---
     const [loading, setLoading] = useState(true);
     const [users, setUsers] = useState<any[]>([]);
@@ -801,23 +801,70 @@ const UserManagement: React.FC = () => {
                         
                         {/* FILTER KELAS */}
                         {(filters.role === 'all' || filters.role === 'student' || filters.role === 'teacher') && (
-                            <div className="relative flex items-center">
-                                <Filter size={16} className="absolute left-3 text-slate-400 z-10"/>
-                                <select className="bg-slate-50 border border-slate-100 pl-9 pr-8 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer" value={filters.class_id} onChange={(e) => setFilters({...filters, class_id: e.target.value})}>
-                                    <option value="all">Semua Kelas</option>
-                                    <option value="none">Belum Ada Kelas</option>
-                                    {availableClasses
-                                    .filter(c => {
-                                        if (filters.academic_year === 'all') return true;
-                                        if (filters.academic_year === 'active') return c.academic_year === activeYear;
-                                        return c.academic_year === filters.academic_year;
-                                    })
-                                    .map(c => (
-                                        <option key={c.id} value={c.id}>{c.name} ({c.academic_year})</option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
+    <div className="relative flex items-center group">
+        <Filter size={16} className="absolute left-3 text-slate-400 z-10"/>
+        
+        {/* Container Custom Select dengan Search */}
+        <div className="relative min-w-[200px]">
+            <select 
+                className="w-full bg-slate-50 border border-slate-100 pl-9 pr-8 py-2.5 rounded-lg text-xs font-bold text-slate-600 outline-none cursor-pointer appearance-none" 
+                value={filters.class_id} 
+                onChange={(e) => setFilters({...filters, class_id: e.target.value})}
+            >
+                <option value="all">-- Semua Kelas --</option>
+                <option value="none">Belum Ada Kelas</option>
+                
+                {/* [REVISI] Logic Filter:
+                  1. Filter berdasarkan Tahun Ajaran yang dipilih di filter sebelah kiri
+                  2. Filter berdasarkan teks pencarian 'classSearch'
+                */}
+                {availableClasses
+                    .filter(c => {
+                        // Filter Tahun
+                        const matchYear = filters.academic_year === 'all' 
+                            ? true 
+                            : (filters.academic_year === 'active' ? c.academic_year === activeYear : c.academic_year === filters.academic_year);
+                        
+                        // Filter Search Kelas (Case Insensitive)
+                        const matchSearch = c.name.toLowerCase().includes(classSearch.toLowerCase());
+                        
+                        return matchYear && matchSearch;
+                    })
+                    .map(c => (
+                        <option key={c.id} value={c.id}>
+                            {c.name} ({c.academic_year})
+                        </option>
+                    ))
+                }
+            </select>
+            
+            {/* Input Pencarian Kecil di atas Dropdown (Opsional: Memudahkan navigasi) */}
+            <div className="absolute -top-10 left-0 w-full hidden group-hover:block animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <div className="bg-white border border-indigo-100 shadow-xl rounded-lg p-1 flex items-center gap-2">
+                    <Search size={12} className="ml-2 text-indigo-400"/>
+                    <input 
+                        type="text" 
+                        placeholder="Ketik nama kelas..." 
+                        className="w-full p-1.5 text-[10px] font-bold outline-none"
+                        value={classSearch}
+                        onChange={(e) => setClassSearch(e.target.value)}
+                        onClick={(e) => e.stopPropagation()} 
+                    />
+                </div>
+            </div>
+            
+            {/* Indikator jika sedang memfilter */}
+            {classSearch && (
+                <button 
+                    onClick={() => setClassSearch('')}
+                    className="absolute right-8 top-3 text-rose-500 hover:text-rose-700"
+                >
+                    <X size={14}/>
+                </button>
+            )}
+        </div>
+    </div>
+)}
                     </div>
                 </div>
                 <button onClick={handleAddNew} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-200 transition-all"><Plus size={20}/> <span className="hidden sm:inline">Tambah User</span></button>

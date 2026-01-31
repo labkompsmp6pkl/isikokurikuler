@@ -7,6 +7,7 @@ import {
     getStudentMissions 
 } from '../controllers/studentController';
 import { authMiddleware, roleMiddleware } from '../middleware/authMiddleware';
+import { getStudentDailyAutoFill } from '../controllers/scheduleController';
 
 const router = Router();
 
@@ -31,5 +32,6 @@ router.get('/dashboard', getStudentDashboardData as unknown as RequestHandler);
 router.get('/missions', getStudentMissions as RequestHandler);
 router.post('/missions/complete', completeMission as RequestHandler);
 // ^ Controller completeMission akan cek: Jika Alumni -> Return 403 (Tidak bisa selesaikan misi)
+router.get('/journal/autofill', getStudentDailyAutoFill as RequestHandler);
 
 export default router;

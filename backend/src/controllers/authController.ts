@@ -129,32 +129,62 @@ export const login = async (req: Request, res: Response) => {
 };
 
 export const register = async (req: Request, res: Response) => {
-  // [FIX] Tambahkan personal_email di sini agar TypeScript mengenalnya
-  const { role, fullName, email, password, nisn, nip, whatsappNumber, classId, contributor_type, agency_name, personal_email } = req.body;
+  const { 
+      role, 
+      fullName, 
+      email, 
+      password, 
+      nisn, 
+      nip, 
+      whatsappNumber, 
+      classId, 
+      contributor_type, 
+      agency_name, 
+      personal_email 
+  } = req.body;
 
   try {
-      // 1. Cek user exist
+      // 1. Tentukan Identifier Unik berdasarkan Role
+      let identifier = null;
+      let fieldName = '';
+      if (role === 'student') { identifier = nisn; fieldName = 'NISN'; }
+      else if (role === 'teacher' || role === 'contributor') { identifier = nip; fieldName = 'NIP / ID'; }
+      else if (role === 'parent') { identifier = whatsappNumber; fieldName = 'Nomor WhatsApp'; }
+
+      // 2. Cek apakah data (NIP/NISN/Email) sudah ada di database
       const [existingUsers]: any = await pool.query(
-          `SELECT * FROM users WHERE email = ? OR (nisn IS NOT NULL AND nisn = ?) OR (nip IS NOT NULL AND nip = ?)`,
+          `SELECT id, full_name, email, role, personal_email, password 
+           FROM users 
+           WHERE (email = ?) OR (nisn IS NOT NULL AND nisn = ?) OR (nip IS NOT NULL AND nip = ?)`,
           [email, nisn || '', nip || '']
       );
 
       if (existingUsers.length > 0) {
           const existing = existingUsers[0];
-          if (!existing.deleted_at) {
-              return res.status(400).json({ message: 'Email, NISN, atau NIP sudah terdaftar dan aktif.' });
-          }
-          await pool.query("DELETE FROM users WHERE id = ?", [existing.id]);
+
+          // Jika user ditemukan tapi belum punya password (data import/draft) atau belum punya email pribadi
+          // Kita arahkan frontend untuk "Lengkapi Data" bukan menolak
+          return res.status(200).json({
+              status: 'ALREADY_EXISTS',
+              message: `Data dengan ${fieldName} tersebut sudah tersedia atas nama ${existing.full_name}.`,
+              userId: existing.id,
+              existingData: {
+                  fullName: existing.full_name,
+                  role: existing.role,
+                  hasPassword: !!existing.password,
+                  personalEmail: existing.personal_email
+              }
+          });
       }
 
-      // 2. Hash Password
+      // 3. Hash Password untuk User Baru
       let hashedPassword = null;
       if (password) {
           const salt = await bcrypt.genSalt(10);
           hashedPassword = await bcrypt.hash(password, salt);
       }
 
-      // 3. Insert User Baru
+      // 4. Insert User Baru (Entri Baru)
       const [result]: any = await pool.query(
           `INSERT INTO users (
               full_name, email, password, role, 
@@ -170,18 +200,15 @@ export const register = async (req: Request, res: Response) => {
 
       const newUserId = result.insertId;
 
-      // 4. Update Kelas jika Wali Kelas
+      // 5. Update Relasi Wali Kelas jika diperlukan
       if (role === 'teacher' && classId) {
-          const [classCheck]: any = await pool.query("SELECT teacher_id FROM classes WHERE id = ?", [classId]);
-          if (classCheck.length > 0 && !classCheck[0].teacher_id) {
-              await pool.query("UPDATE classes SET teacher_id = ? WHERE id = ?", [newUserId, classId]);
-          }
+          await pool.query("UPDATE classes SET teacher_id = ? WHERE id = ? AND teacher_id IS NULL", [newUserId, classId]);
       }
 
-      // 5. Response
-      const [newUser]: any = await pool.query("SELECT id, full_name, email, role, personal_email FROM users WHERE id = ?", [newUserId]);
+      const [newUser]: any = await pool.query("SELECT id, full_name, email, role FROM users WHERE id = ?", [newUserId]);
 
       res.status(201).json({
+          status: 'SUCCESS',
           message: 'Registrasi berhasil',
           user: newUser[0]
       });
@@ -189,6 +216,24 @@ export const register = async (req: Request, res: Response) => {
   } catch (error: any) {
       console.error("Register Error:", error);
       res.status(500).json({ message: 'Terjadi kesalahan server saat registrasi.' });
+  }
+};
+
+export const requestProfileSync = async (req: Request, res: Response) => {
+  const { userId, newPersonalEmail, newFullName } = req.body;
+
+  try {
+      // Simpan permintaan ke dalam kolom pending_data_update agar admin bisa verifikasi
+      const pendingData = JSON.stringify({ personal_email: newPersonalEmail, full_name: newFullName });
+      
+      await pool.query(
+          "UPDATE users SET is_sync_pending = 1, pending_data_update = ? WHERE id = ?",
+          [pendingData, userId]
+      );
+
+      res.json({ message: "Permintaan sinkronisasi telah dikirim. Menunggu konfirmasi admin." });
+  } catch (error) {
+      res.status(500).json({ message: "Gagal mengirim permintaan sinkronisasi." });
   }
 };
 

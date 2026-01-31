@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { useAuth, authApi } from '../../services/authService'; 
 import characterService from '../../services/characterService';
 import Spinner from './student/components/Spinner';
-import PersonalEmailAlert from '../../components/PersonalEmailAlert'; // Komponen Alert Email
+import PersonalEmailAlert from '../../components/PersonalEmailAlert'; 
 
 import { 
   Trophy, 
@@ -18,14 +18,14 @@ import {
   Edit3,
   AlertCircle,
   Save,
-  Filter // Icon Filter
+  Filter,
+  Sparkles // Ikon baru untuk Autofill
 } from 'lucide-react';
 
 const StudentDashboard: React.FC = () => {
   const { user } = useAuth();
   
   // --- STATE CORE ---
-  // Inisialisasi dengan data user dari context (localStorage), nanti di-update via API
   const [studentData, setStudentData] = useState<any>(user || {});
   const [className, setClassName] = useState<string>(user?.class_name || '-'); 
   
@@ -47,6 +47,7 @@ const StudentDashboard: React.FC = () => {
   // Logic Waktu
   const isFutureDate = date > todayStr;
   const isPastDate = date < todayStr;
+  const isToday = date === todayStr; // Cek apakah hari ini
 
   const [activeTab, setActiveTab] = useState<'plan' | 'execution'>('plan');
   const [loading, setLoading] = useState(false);
@@ -76,6 +77,10 @@ const StudentDashboard: React.FC = () => {
     sleep_time: '',
   });
 
+  // State Autofill Jadwal
+  const [autoFillText, setAutoFillText] = useState<string>('');
+  const [isAutoFillLoading, setIsAutoFillLoading] = useState(false);
+
   const [isPlanSubmitted, setIsPlanSubmitted] = useState(false);
   const [isExecutionSubmitted, setIsExecutionSubmitted] = useState(false);
 
@@ -87,7 +92,7 @@ const StudentDashboard: React.FC = () => {
       'Sepak Bola', 'Futsal', 'Voli', 'Basket', 
       'Badminton', 'Renang', 'Bela Diri'
   ];
-  const learningOptionsList = ['Mengerjakan PR', 'Membaca Buku', 'Les / Bimbel', 'Belajar Kelompok', 'Menonton Video Edukasi'];
+  const learningOptionsList = ['Mengerjakan PR', 'Membaca Buku', 'Les / Bimbel', 'Belajar Kelompok', 'Menonton Video Edukasi', 'Belajar di Kelas (Sekolah)'];
   const socialOptionsList = ['Membantu Orang Tua', 'Gotong Royong', 'Infaq / Sedekah', 'Menjenguk Teman', 'Membersihkan Lingkungan'];
 
   // --- 1. FETCH DATA DASHBOARD & KELAS ---
@@ -96,8 +101,6 @@ const StudentDashboard: React.FC = () => {
           const data = await characterService.getStudentDashboard();
           if (data) {
             setDashData(data);
-            
-            // [FIX] Update studentData dengan data terbaru dari API (termasuk start_period/end_period)
             if (data.student) {
                 setStudentData((prev: any) => ({ 
                     ...prev, 
@@ -105,14 +108,13 @@ const StudentDashboard: React.FC = () => {
                 }));
             }
             
-            // LOGIKA CARI NAMA KELAS (Robust)
+            // LOGIKA CARI NAMA KELAS
             let foundName = 
                 data.studentClass || 
                 data.class_name || 
                 data.student?.class_name || 
                 user?.class_name;
 
-            // Jika masih kosong/strip, cari manual via API list kelas
             if (!foundName || foundName === '-') {
                 const classId = data.student?.class_id || user?.class_id || user?.classId;
                 if (classId) {
@@ -124,7 +126,6 @@ const StudentDashboard: React.FC = () => {
                     } catch (e) { console.error("Gagal cari kelas:", e); }
                 }
             }
-            
             if (foundName) setClassName(foundName);
           }
       } catch (error) { console.error(error); }
@@ -143,13 +144,35 @@ const StudentDashboard: React.FC = () => {
     if (isFutureDate) {
         setActiveTab('plan');
     } else if (isPastDate) {
-        // Hari lalu: Langsung ke Eksekusi
         setActiveTab('execution');
     } else {
-        // Hari ini: Default Plan
         setActiveTab('plan');
     }
-  }, [date, statsFilter]); // Re-fetch jika filter berubah
+  }, [date, statsFilter]);
+
+  // --- 3. FETCH DATA JADWAL AUTOFILL (NEW FEATURE) ---
+  useEffect(() => {
+    // Hanya fetch autofill jika hari ini
+    if (isToday) {
+        const fetchAutoFill = async () => {
+            setIsAutoFillLoading(true);
+            try {
+                // Endpoint baru yang sudah dibuat di scheduleController
+                const res = await authApi.get('/student/journal/autofill'); 
+                if (res.data?.autoFillText) {
+                    setAutoFillText(res.data.autoFillText);
+                }
+            } catch (err) {
+                console.error("Gagal load autofill", err);
+            } finally {
+                setIsAutoFillLoading(false);
+            }
+        };
+        fetchAutoFill();
+    } else {
+        setAutoFillText('');
+    }
+  }, [isToday]);
 
   const fetchLog = async (currentDate: string) => {
     setLoading(true);
@@ -163,7 +186,6 @@ const StudentDashboard: React.FC = () => {
         setIsPlanSubmitted(planDone);
         setIsExecutionSubmitted(execDone);
 
-        // Auto-switch tab jika hari ini dan plan sudah selesai
         if (currentDate === todayStr && planDone && !execDone) {
             setActiveTab('execution');
         }
@@ -175,9 +197,22 @@ const StudentDashboard: React.FC = () => {
     finally { setLoading(false); }
   };
 
-  // --- 3. MAPPING DATA KE FORM ---
+  // --- 4. MAPPING DATA KE FORM ---
   useEffect(() => {
-    if (!apiData) { resetForm(); return; }
+    // Logika Reset Form jika data kosong
+    if (!apiData) { 
+        resetForm(); 
+        
+        // [AUTOFILL LOGIC] Jika Data Kosong & Hari Ini -> Isi Otomatis
+        if (isToday && autoFillText) {
+            setFormData((prev: any) => ({
+                ...prev,
+                study_activities: ['Belajar di Kelas (Sekolah)'], // Centang otomatis
+                study_detail: autoFillText // Isi text area
+            }));
+        }
+        return; 
+    }
     
     const parseList = (val: any) => {
         if (Array.isArray(val)) return val;
@@ -185,7 +220,6 @@ const StudentDashboard: React.FC = () => {
     };
 
     const getData = (key: string) => {
-        // Ambil data sesuai tab aktif (Plan vs Execution)
         const dbKey = activeTab === 'plan' ? `plan_${key}` : key;
         return apiData[dbKey];
     };
@@ -203,7 +237,7 @@ const StudentDashboard: React.FC = () => {
       social_detail: getData('social_detail') || '',
       sleep_time: getData('sleep_time') || '',
     });
-  }, [activeTab, apiData, isEditing]); 
+  }, [activeTab, apiData, isEditing, autoFillText, isToday]); 
 
   const resetForm = () => {
     setFormData({ 
@@ -216,15 +250,12 @@ const StudentDashboard: React.FC = () => {
   const handleSave = async () => {
     if (isAlumni) { toast.error("Alumni tidak dapat mengubah data."); return; }
     
-    // Validasi Hari Lalu: Tidak boleh simpan Plan
     if (activeTab === 'plan' && isPastDate) {
         toast.error("Tidak bisa mengisi Rencana untuk hari yang sudah lewat.");
         return;
     }
 
     const toastId = 'save-journal'; 
-    
-    // Validasi Hari Ini: Harus isi Rencana dulu
     if (!isPastDate && activeTab === 'execution' && !isPlanSubmitted) { 
         toast.error('Isi Rencana terlebih dahulu untuk hari ini!', { id: toastId }); 
         return; 
@@ -266,7 +297,6 @@ const StudentDashboard: React.FC = () => {
   
   const displayDateStr = new Date(date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-  // Academic Info
   const getAcademicInfo = () => {
       const now = new Date();
       if (now.getMonth() >= 6) return { semester: 'Ganjil', academicYear: `${now.getFullYear()}/${now.getFullYear() + 1}` };
@@ -275,11 +305,7 @@ const StudentDashboard: React.FC = () => {
   const autoAcademic = getAcademicInfo();
   const academicYear = dashData?.academic_year || autoAcademic.academicYear;
   
-  // Tampilkan Nama Lengkap (Tanpa Split)
   const fullName = studentData?.full_name || user?.full_name || user?.name || 'Siswa';
-
-  // [FIX] Ambil Masa Studi dari state studentData yang sudah di-merge dengan API
-  // Gunakan optional chaining (?.) untuk menghindari error jika null
   const userStartPeriod = studentData?.start_period || '-';
   const userEndPeriod = studentData?.end_period || 'Selesai';
 
@@ -307,7 +333,6 @@ const StudentDashboard: React.FC = () => {
   let statusMessage = "";
   let canEdit = true;
 
-  // Cek jika sudah divalidasi guru/ortu (Simulasi batas waktu edit)
   if (apiData?.status === 'Disahkan' || apiData?.status === 'Disetujui') {
       canEdit = false; 
   }
@@ -357,7 +382,6 @@ const StudentDashboard: React.FC = () => {
                         <CalendarDays size={16} className="text-violet-500"/> {displayDateStr}
                     </p>
                     
-                    {/* [FIX] INFO MASA STUDI - Muncul jika datanya ada */}
                     {(userStartPeriod !== '-' || userEndPeriod !== 'Selesai') && (
                         <div className="inline-flex items-center gap-2 mt-2 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-[10px] font-bold uppercase tracking-wider border border-indigo-100">
                             <span>Masa Studi: {userStartPeriod} — {userEndPeriod}</span>
@@ -365,7 +389,6 @@ const StudentDashboard: React.FC = () => {
                     )}
                 </div>
 
-                {/* FILTER STATISTIK KEBIASAAN */}
                 <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm self-start md:self-auto">
                     <Filter size={14} className="text-slate-400" />
                     <select 
@@ -393,7 +416,6 @@ const StudentDashboard: React.FC = () => {
             {/* STATS CARDS */}
             {!urlDate && dashData && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                    {/* KELAS SAYA */}
                     <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-4 text-white shadow-lg relative overflow-hidden group">
                         <div className="relative z-10">
                             <p className="text-blue-100 text-xs font-bold uppercase mb-1">Kelas Saya</p>
@@ -402,7 +424,6 @@ const StudentDashboard: React.FC = () => {
                         </div>
                         <BookOpen className="absolute right-[-10px] bottom-[-10px] text-white/20 w-20 h-20 group-hover:scale-110 transition-transform" />
                     </div>
-                    {/* POIN SIKAP */}
                     <div className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl p-4 text-white shadow-lg relative overflow-hidden group">
                         <div className="relative z-10">
                             <p className="text-orange-100 text-xs font-bold uppercase mb-1">Poin Sikap</p>
@@ -410,7 +431,6 @@ const StudentDashboard: React.FC = () => {
                         </div>
                         <Trophy className="absolute right-[-10px] bottom-[-10px] text-white/20 w-20 h-20 group-hover:scale-110 transition-transform" />
                     </div>
-                    {/* JURNAL SELESAI */}
                     <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-4 text-white shadow-lg relative overflow-hidden group">
                         <div className="relative z-10">
                             <p className="text-emerald-100 text-xs font-bold uppercase mb-1">Jurnal Selesai</p>
@@ -418,7 +438,6 @@ const StudentDashboard: React.FC = () => {
                         </div>
                         <Archive className="absolute right-[-10px] bottom-[-10px] text-white/20 w-20 h-20 group-hover:scale-110 transition-transform" />
                     </div>
-                    {/* MINGGU EFEKTIF */}
                     <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm relative overflow-hidden group">
                         <div className="relative z-10">
                             <p className="text-gray-400 text-xs font-bold uppercase mb-1">Minggu Efektif</p>
@@ -472,7 +491,6 @@ const StudentDashboard: React.FC = () => {
                     {statusMessage.includes('✅') ? <CheckCircle2 size={18}/> : <AlertCircle size={18}/>}
                     {statusMessage}
                 </div>
-                {/* TOMBOL EDIT */}
                 {canEdit && (isPlanSubmitted || isExecutionSubmitted) && !isEditing && (
                     <button 
                         onClick={() => setIsEditing(true)} 
@@ -497,7 +515,7 @@ const StudentDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* 2. BERIBADAH (AUTO OPTIONS 5 WAKTU) */}
+            {/* 2. BERIBADAH */}
             <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-emerald-400">
                 <h3 className="font-bold mb-4 flex items-center gap-2 text-gray-800"><span className="text-2xl">🙏</span> Beribadah</h3>
                 {renderPlanLabel('worship_activities', true)}
@@ -529,7 +547,7 @@ const StudentDashboard: React.FC = () => {
                 <textarea placeholder="Catatan ibadah (hafalan, dll)..." className="w-full border p-3 rounded-lg text-sm focus:ring-2 focus:ring-emerald-200 outline-none" rows={2} value={formData.worship_detail} onChange={(e) => handleChange('worship_detail', e.target.value)}/>
             </div>
 
-            {/* 3. OLAHRAGA (MULTI SELECT + VARIASI) */}
+            {/* 3. OLAHRAGA */}
             <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-400">
                 <h3 className="font-bold mb-4 flex items-center gap-2 text-gray-800"><span className="text-2xl">🏃</span> Berolahraga</h3>
                 {renderPlanLabel('sport_activities', true)}
@@ -552,9 +570,17 @@ const StudentDashboard: React.FC = () => {
                 <textarea placeholder="Menu sehat hari ini (Sayur, Buah, Lauk)..." className="w-full border p-3 rounded-lg text-sm focus:ring-2 focus:ring-green-200 outline-none" rows={2} value={formData.meal_text} onChange={(e) => handleChange('meal_text', e.target.value)}/>
             </div>
 
-            {/* 5. BELAJAR */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-purple-400">
-                <h3 className="font-bold mb-4 flex items-center gap-2 text-gray-800"><span className="text-2xl">📚</span> Gemar Belajar</h3>
+            {/* 5. BELAJAR (DENGAN AUTOFILL) */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-purple-400 relative overflow-hidden">
+                <div className="flex justify-between items-start">
+                    <h3 className="font-bold mb-4 flex items-center gap-2 text-gray-800"><span className="text-2xl">📚</span> Gemar Belajar</h3>
+                    {autoFillText && !isFormLocked && (
+                        <div className="bg-purple-100 text-purple-700 text-[10px] px-2 py-1 rounded-full flex items-center gap-1 font-bold animate-pulse">
+                            <Sparkles size={12} /> Auto-Jadwal Aktif
+                        </div>
+                    )}
+                </div>
+                
                 {renderPlanLabel('study_activities', true)}
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
                     {learningOptionsList.map(opt => (
@@ -564,7 +590,22 @@ const StudentDashboard: React.FC = () => {
                         </label>
                     ))}
                 </div>
-                <textarea placeholder="Materi yang dipelajari..." className="w-full border p-3 rounded-lg text-sm focus:ring-2 focus:ring-purple-200 outline-none" rows={2} value={formData.study_detail} onChange={(e) => handleChange('study_detail', e.target.value)}/>
+                
+                <div className="relative">
+                    <textarea 
+                        placeholder={isAutoFillLoading ? "Memuat jadwal..." : "Materi yang dipelajari..."}
+                        className="w-full border p-3 rounded-lg text-sm focus:ring-2 focus:ring-purple-200 outline-none" 
+                        rows={3} 
+                        value={formData.study_detail} 
+                        onChange={(e) => handleChange('study_detail', e.target.value)}
+                    />
+                    {/* INDIKATOR AUTOFILL */}
+                    {autoFillText && (
+                        <p className="text-[10px] text-purple-500 mt-1 italic flex items-center gap-1">
+                            <Sparkles size={10} /> Data diisi otomatis berdasarkan jadwal kelas hari ini. Anda dapat menambahkannya.
+                        </p>
+                    )}
+                </div>
             </div>
 
             {/* 6. BERMASYARAKAT */}

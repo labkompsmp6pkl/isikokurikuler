@@ -17,13 +17,18 @@ export interface User {
 
 export interface RegistrationData {
   fullName: string;
-  email: string; 
+  email: string; // Wajib
   role: string;
   password?: string;
   nisn?: string;
   nip?: string;
   classId?: string | number; 
   whatsappNumber?: string;
+  
+  // [TAMBAHAN] Properti Baru
+  personal_email?: string | null;
+  contributor_type?: string;
+  agency_name?: string;
 }
 
 export interface GoogleCompleteData {
